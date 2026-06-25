@@ -1,0 +1,88 @@
+/* 简体中文 — ported from android/.../res/values-zh/strings.xml */
+
+"app_name" = "Mirobody";
+
+"common_back" = "返回";
+"common_close" = "关闭";
+"common_cancel" = "取消";
+"common_done" = "完成";
+"common_save" = "保存";
+"common_retry" = "重试";
+"common_settings" = "设置";
+"common_delete" = "删除";
+
+"email_title" = "登录";
+"email_subtitle" = "我们会通过邮件发送一次性验证码。";
+"email_label" = "邮箱";
+"email_required" = "请输入邮箱";
+"email_send_code" = "发送验证码";
+"email_resend_in" = "%1$d 秒后重新发送";
+"auth_or" = "或";
+"auth_continue_with_google" = "使用 Google 继续";
+"auth_continue_with_apple" = "使用 Apple 继续";
+"auth_continue_with_wechat" = "使用微信继续";
+"auth_continue_with_github" = "使用 GitHub 继续";
+"auth_continue_with_x" = "使用 X 继续";
+"auth_google_failed" = "Google 登录失败";
+
+"verify_title" = "输入验证码";
+"verify_sent_to" = "已发送至 %1$@。";
+"verify_button" = "验证";
+"verify_resending" = "正在重发…";
+"verify_resend_code" = "重新发送";
+
+"chat_message_hint" = "输入消息";
+"chat_history_cd" = "历史";
+"chat_select_model" = "选择模型";
+"chat_no_providers" = "暂无可用模型";
+"chat_language" = "语言";
+"chat_font_size" = "字号";
+"chat_font_size_smaller" = "更小";
+"chat_font_size_small" = "小";
+"chat_font_size_normal" = "正常";
+"chat_font_size_large" = "大";
+"chat_font_size_larger" = "更大";
+"chat_backend" = "后端";
+"chat_about" = "关于";
+"about_version" = "版本 %1$@";
+"chat_sign_out" = "退出登录";
+"chat_sign_out_confirm_title" = "退出登录？";
+"chat_sign_out_confirm_message" = "下次需要重新登录。";
+"chat_empty_title" = "开始对话";
+"chat_empty_subtitle" = "选择上方模型，然后发送第一条消息。";
+
+"history_title" = "历史";
+"history_empty" = "暂无历史记录。";
+"history_untitled" = "未命名";
+"history_delete_confirm_title" = "删除该会话？";
+"history_delete_confirm_message" = "该会话将被永久删除。";
+"history_delete_cd" = "删除会话";
+
+"baseurl_title" = "后端地址";
+"baseurl_subtitle" = "将此应用指向一个 Mirobody 后端实例。";
+"baseurl_label" = "服务地址";
+"baseurl_hint" = "设置 Mirobody 后端地址，例如内置服务器 http://localhost:8080。";
+"baseurl_invalid" = "不是有效的 http(s) URL";
+
+"error_auth" = "登录已过期，请重新登录。";
+"error_network" = "网络异常，请检查网络后重试。";
+"error_http" = "服务器返回 %1$d。";
+"error_api" = "请求失败（错误码 %1$d）%2$@";
+"error_parse" = "服务器返回的数据格式异常。";
+"error_unknown" = "出错了，请稍后重试。";
+
+"chat_stats_cd" = "显示响应详情";
+"chat_stats_title" = "响应详情";
+"chat_stats_model" = "模型";
+"chat_stats_input_tokens" = "输入 Token";
+"chat_stats_output_tokens" = "输出 Token";
+"chat_stats_thought_tokens" = "推理 Token";
+"chat_stats_total_tokens" = "总 Token";
+"chat_stats_total_cost" = "总费用";
+
+"chat_tool" = "工具";
+"chat_tool_args" = "参数";
+"chat_tool_result" = "结果";
+"chat_image_saved" = "已保存到相册";
+"chat_image_save_failed" = "保存失败";
+"chat_image_save_permission_denied" = "存储权限被拒绝";

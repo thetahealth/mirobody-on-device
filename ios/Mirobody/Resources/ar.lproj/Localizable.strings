@@ -1,0 +1,98 @@
+/* Arabic. Ported from android/.../res/values-ar/strings.xml.
+   Format specifiers converted for iOS: %1$s -> %1$@, %1$d stays. RTL. */
+
+"app_name" = "Mirobody";
+
+/* Common */
+"common_back" = "رجوع";
+"common_close" = "إغلاق";
+"common_cancel" = "إلغاء";
+"common_done" = "تم";
+"common_save" = "حفظ";
+"common_retry" = "إعادة المحاولة";
+"common_settings" = "الإعدادات";
+"common_delete" = "حذف";
+
+/* Email login */
+"email_title" = "تسجيل الدخول";
+"email_subtitle" = "سنرسل إليك رمزًا لمرة واحدة عبر البريد الإلكتروني.";
+"email_label" = "البريد الإلكتروني";
+"email_required" = "البريد الإلكتروني مطلوب";
+"email_send_code" = "إرسال الرمز";
+"email_resend_in" = "إعادة الإرسال خلال %1$d ثانية";
+"auth_or" = "أو";
+"auth_continue_with_google" = "المتابعة باستخدام Google";
+"auth_continue_with_apple" = "المتابعة باستخدام Apple";
+"auth_continue_with_wechat" = "المتابعة باستخدام WeChat";
+"auth_continue_with_github" = "المتابعة باستخدام GitHub";
+"auth_continue_with_x" = "المتابعة باستخدام X";
+"auth_google_failed" = "فشل تسجيل الدخول عبر Google";
+
+/* Verify */
+"verify_title" = "أدخل الرمز";
+"verify_sent_to" = "تم الإرسال إلى %1$@.";
+"verify_button" = "تحقق";
+"verify_resending" = "جارٍ إعادة الإرسال…";
+"verify_resend_code" = "إعادة إرسال الرمز";
+
+/* Chat */
+"chat_message_hint" = "رسالة";
+"chat_history_cd" = "السجل";
+"chat_select_model" = "اختر النموذج";
+"chat_no_providers" = "لم يتم تحميل أي مزوّدين";
+"chat_language" = "اللغة";
+"chat_font_size" = "حجم الخط";
+"chat_font_size_smaller" = "أصغر";
+"chat_font_size_small" = "صغير";
+"chat_font_size_normal" = "عادي";
+"chat_font_size_large" = "كبير";
+"chat_font_size_larger" = "أكبر";
+"chat_backend" = "الخادم";
+"chat_about" = "حول";
+"about_version" = "الإصدار %1$@";
+"chat_sign_out" = "تسجيل الخروج";
+"chat_sign_out_confirm_title" = "تسجيل الخروج؟";
+"chat_sign_out_confirm_message" = "ستحتاج إلى تسجيل الدخول مرة أخرى.";
+"chat_empty_title" = "ابدأ محادثة";
+"chat_empty_subtitle" = "اختر نموذجًا بالأعلى ثم أرسل رسالتك الأولى.";
+
+/* History */
+"history_title" = "السجل";
+"history_empty" = "لا يوجد سجل بعد.";
+"history_untitled" = "بدون عنوان";
+"history_delete_confirm_title" = "حذف المحادثة؟";
+"history_delete_confirm_message" = "ستُحذف هذه المحادثة نهائيًا.";
+"history_delete_cd" = "حذف المحادثة";
+
+/* Backend URL */
+"baseurl_title" = "عنوان الخادم";
+"baseurl_subtitle" = "وجّه هذا التطبيق إلى خادم Mirobody.";
+"baseurl_label" = "العنوان الأساسي";
+"baseurl_hint" = "عيّن عنوان خادم Mirobody، مثل http://localhost:8080 للخادم المضمّن.";
+"baseurl_invalid" = "عنوان http(s) غير صالح";
+
+/* Errors */
+"error_auth" = "انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.";
+"error_network" = "خطأ في الشبكة. تحقق من اتصالك وحاول مرة أخرى.";
+"error_http" = "أعاد الخادم %1$d.";
+"error_api" = "فشل الطلب (الرمز %1$d)%2$@";
+"error_parse" = "استجابة غير متوقعة من الخادم.";
+"error_unknown" = "حدث خطأ ما.";
+
+/* Chat response stats */
+"chat_stats_cd" = "عرض تفاصيل الرد";
+"chat_stats_title" = "تفاصيل الرد";
+"chat_stats_model" = "النموذج";
+"chat_stats_input_tokens" = "رموز الإدخال";
+"chat_stats_output_tokens" = "رموز الإخراج";
+"chat_stats_thought_tokens" = "رموز التفكير";
+"chat_stats_total_tokens" = "إجمالي الرموز";
+"chat_stats_total_cost" = "التكلفة الإجمالية";
+
+/* Tool calls / image viewer */
+"chat_tool" = "أداة";
+"chat_tool_args" = "المعطيات";
+"chat_tool_result" = "النتيجة";
+"chat_image_saved" = "تم الحفظ في المعرض";
+"chat_image_save_failed" = "فشل الحفظ";
+"chat_image_save_permission_denied" = "تم رفض إذن التخزين";

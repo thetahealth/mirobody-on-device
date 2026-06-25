@@ -1,0 +1,88 @@
+/* Deutsch — ported from android/.../res/values-de/strings.xml */
+
+"app_name" = "Mirobody";
+
+"common_back" = "Zurück";
+"common_close" = "Schließen";
+"common_cancel" = "Abbrechen";
+"common_done" = "Fertig";
+"common_save" = "Speichern";
+"common_retry" = "Erneut versuchen";
+"common_settings" = "Einstellungen";
+"common_delete" = "Löschen";
+
+"email_title" = "Anmelden";
+"email_subtitle" = "Wir senden Ihnen einen Einmalcode per E-Mail.";
+"email_label" = "E-Mail";
+"email_required" = "E-Mail erforderlich";
+"email_send_code" = "Code senden";
+"email_resend_in" = "Erneut senden in %1$d s";
+"auth_or" = "oder";
+"auth_continue_with_google" = "Mit Google fortfahren";
+"auth_continue_with_apple" = "Mit Apple fortfahren";
+"auth_continue_with_wechat" = "Mit WeChat fortfahren";
+"auth_continue_with_github" = "Mit GitHub fortfahren";
+"auth_continue_with_x" = "Mit X fortfahren";
+"auth_google_failed" = "Google-Anmeldung fehlgeschlagen";
+
+"verify_title" = "Code eingeben";
+"verify_sent_to" = "Gesendet an %1$@.";
+"verify_button" = "Bestätigen";
+"verify_resending" = "Wird gesendet…";
+"verify_resend_code" = "Code erneut senden";
+
+"chat_message_hint" = "Nachricht";
+"chat_history_cd" = "Verlauf";
+"chat_select_model" = "Modell wählen";
+"chat_no_providers" = "Keine Modelle verfügbar";
+"chat_language" = "Sprache";
+"chat_font_size" = "Schriftgröße";
+"chat_font_size_smaller" = "Sehr klein";
+"chat_font_size_small" = "Klein";
+"chat_font_size_normal" = "Normal";
+"chat_font_size_large" = "Groß";
+"chat_font_size_larger" = "Sehr groß";
+"chat_backend" = "Backend";
+"chat_about" = "Über";
+"about_version" = "Version %1$@";
+"chat_sign_out" = "Abmelden";
+"chat_sign_out_confirm_title" = "Abmelden?";
+"chat_sign_out_confirm_message" = "Sie müssen sich erneut anmelden.";
+"chat_empty_title" = "Konversation beginnen";
+"chat_empty_subtitle" = "Wählen Sie oben ein Modell und senden Sie Ihre erste Nachricht.";
+
+"history_title" = "Verlauf";
+"history_empty" = "Noch kein Verlauf.";
+"history_untitled" = "Ohne Titel";
+"history_delete_confirm_title" = "Konversation löschen?";
+"history_delete_confirm_message" = "Diese Konversation wird endgültig entfernt.";
+"history_delete_cd" = "Konversation löschen";
+
+"baseurl_title" = "Backend-URL";
+"baseurl_subtitle" = "Verbinden Sie diese App mit einer Mirobody-Backend-Instanz.";
+"baseurl_label" = "Basis-URL";
+"baseurl_hint" = "Geben Sie die URL eines Mirobody-Backends an, z. B. http://localhost:8080 für den integrierten Server.";
+"baseurl_invalid" = "Keine gültige http(s)-URL";
+
+"error_auth" = "Sitzung abgelaufen. Bitte erneut anmelden.";
+"error_network" = "Netzwerkfehler. Verbindung prüfen und erneut versuchen.";
+"error_http" = "Server hat %1$d zurückgegeben.";
+"error_api" = "Anfrage fehlgeschlagen (Code %1$d) %2$@";
+"error_parse" = "Unerwartete Antwort vom Server.";
+"error_unknown" = "Etwas ist schiefgegangen.";
+
+"chat_stats_cd" = "Antwortdetails anzeigen";
+"chat_stats_title" = "Antwortdetails";
+"chat_stats_model" = "Modell";
+"chat_stats_input_tokens" = "Eingabe-Tokens";
+"chat_stats_output_tokens" = "Ausgabe-Tokens";
+"chat_stats_thought_tokens" = "Denk-Tokens";
+"chat_stats_total_tokens" = "Tokens insgesamt";
+"chat_stats_total_cost" = "Gesamtkosten";
+
+"chat_tool" = "Tool";
+"chat_tool_args" = "Args";
+"chat_tool_result" = "Ergebnis";
+"chat_image_saved" = "In Galerie gespeichert";
+"chat_image_save_failed" = "Speichern fehlgeschlagen";
+"chat_image_save_permission_denied" = "Speicherberechtigung verweigert";

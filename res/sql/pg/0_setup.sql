@@ -1,0 +1,6 @@
+-- Shared PostgreSQL setup (runs before the per-domain schema files).
+--
+-- No shared objects are needed: created_at / updated_at / deleted_at are unix
+-- milliseconds (BIGINT) that the application stamps at every write site (see
+-- platform::now_unix_ms), so there is no trigger function to define. Kept as a
+-- placeholder so the load order / file set stays stable.

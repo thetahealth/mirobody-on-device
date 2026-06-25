@@ -1,0 +1,90 @@
+<resources>
+    <string name="app_name">Mirobody</string>
+
+    <string name="common_back">戻る</string>
+    <string name="common_close">閉じる</string>
+    <string name="common_cancel">キャンセル</string>
+    <string name="common_done">完了</string>
+    <string name="common_save">保存</string>
+    <string name="common_retry">再試行</string>
+    <string name="common_settings">設定</string>
+    <string name="common_delete">削除</string>
+
+    <string name="email_title">ログイン</string>
+    <string name="email_subtitle">ワンタイムコードをメールで送信します。</string>
+    <string name="email_label">メールアドレス</string>
+    <string name="email_required">メールアドレスを入力してください</string>
+    <string name="email_send_code">コードを送信</string>
+    <string name="email_resend_in">%1$d 秒後に再送信</string>
+
+    <string name="verify_title">コードを入力</string>
+    <string name="verify_sent_to">%1$s に送信しました。</string>
+    <string name="verify_button">認証</string>
+    <string name="verify_resending">再送信中…</string>
+    <string name="verify_resend_code">コードを再送信</string>
+
+    <string name="chat_message_hint">メッセージ</string>
+    <string name="chat_history_cd">履歴</string>
+    <string name="chat_select_model">モデルを選択</string>
+    <string name="chat_no_providers">利用可能なモデルがありません</string>
+    <string name="chat_language">言語</string>
+    <string name="chat_font_size">文字サイズ</string>
+    <string name="chat_font_size_smaller">最小</string>
+    <string name="chat_font_size_small">小</string>
+    <string name="chat_font_size_normal">標準</string>
+    <string name="chat_font_size_large">大</string>
+    <string name="chat_font_size_larger">最大</string>
+    <string name="chat_backend">バックエンド</string>
+    <string name="chat_about">バージョン情報</string>
+    <string name="about_version">バージョン %1$s</string>
+    <string name="chat_sign_out">ログアウト</string>
+    <string name="chat_sign_out_confirm_title">ログアウトしますか？</string>
+    <string name="chat_sign_out_confirm_message">次回は再度ログインが必要です。</string>
+    <string name="chat_empty_title">会話を始めましょう</string>
+    <string name="chat_empty_subtitle">上でモデルを選んで、最初のメッセージを送信してください。</string>
+
+    <string name="history_title">履歴</string>
+    <string name="history_empty">履歴はまだありません。</string>
+    <string name="history_untitled">無題</string>
+    <string name="history_delete_confirm_title">この会話を削除しますか？</string>
+    <string name="history_delete_confirm_message">この会話は完全に削除されます。</string>
+    <string name="history_delete_cd">会話を削除</string>
+
+    <string name="baseurl_title">バックエンド URL</string>
+    <string name="baseurl_subtitle">このアプリを Mirobody バックエンドのインスタンスに接続します。</string>
+    <string name="baseurl_label">ベース URL</string>
+    <string name="baseurl_hint">Android エミュレータからホストマシンのバックエンドにアクセスするには http://10.0.2.2:18080 を使用してください。</string>
+    <string name="baseurl_invalid">有効な http(s) URL ではありません</string>
+
+    <string name="error_auth">セッションの有効期限が切れました。もう一度ログインしてください。</string>
+    <string name="error_network">ネットワークエラーです。接続を確認して再試行してください。</string>
+    <string name="error_http">サーバーが %1$d を返しました。</string>
+    <string name="error_api">リクエストに失敗しました（コード %1$d）%2$s</string>
+    <string name="error_parse">サーバーからの応答形式が予期しないものです。</string>
+    <string name="error_unknown">エラーが発生しました。</string>
+
+    <string name="auth_or">または</string>
+    <string name="auth_continue_with_google">Google で続行</string>
+    <string name="auth_continue_with_apple">Apple で続行</string>
+    <string name="auth_continue_with_wechat">WeChat で続行</string>
+    <string name="auth_continue_with_github">GitHub で続行</string>
+    <string name="auth_continue_with_x">X で続行</string>
+    <string name="auth_google_failed">Google サインインに失敗しました</string>
+
+    <string name="chat_stats_cd">応答の詳細を表示</string>
+    <string name="chat_copy_reply">返信をコピー</string>
+    <string name="chat_stats_title">応答の詳細</string>
+    <string name="chat_stats_model">モデル</string>
+    <string name="chat_stats_input_tokens">入力トークン</string>
+    <string name="chat_stats_output_tokens">出力トークン</string>
+    <string name="chat_stats_thought_tokens">思考トークン</string>
+    <string name="chat_stats_total_tokens">合計トークン</string>
+    <string name="chat_stats_total_cost">合計コスト</string>
+
+    <string name="chat_tool">ツール</string>
+    <string name="chat_tool_args">引数</string>
+    <string name="chat_tool_result">結果</string>
+    <string name="chat_image_saved">ギャラリーに保存しました</string>
+    <string name="chat_image_save_failed">保存に失敗しました</string>
+    <string name="chat_image_save_permission_denied">ストレージの権限が拒否されました</string>
+</resources>

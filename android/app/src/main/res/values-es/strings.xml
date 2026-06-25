@@ -1,0 +1,90 @@
+<resources>
+    <string name="app_name">Mirobody</string>
+
+    <string name="common_back">Atrás</string>
+    <string name="common_close">Cerrar</string>
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_done">Listo</string>
+    <string name="common_save">Guardar</string>
+    <string name="common_retry">Reintentar</string>
+    <string name="common_settings">Ajustes</string>
+    <string name="common_delete">Eliminar</string>
+
+    <string name="email_title">Iniciar sesión</string>
+    <string name="email_subtitle">Te enviaremos un código de un solo uso por correo.</string>
+    <string name="email_label">Correo</string>
+    <string name="email_required">Se requiere correo</string>
+    <string name="email_send_code">Enviar código</string>
+    <string name="email_resend_in">Reenviar en %1$d s</string>
+
+    <string name="verify_title">Introducir código</string>
+    <string name="verify_sent_to">Enviado a %1$s.</string>
+    <string name="verify_button">Verificar</string>
+    <string name="verify_resending">Reenviando…</string>
+    <string name="verify_resend_code">Reenviar código</string>
+
+    <string name="chat_message_hint">Mensaje</string>
+    <string name="chat_history_cd">Historial</string>
+    <string name="chat_select_model">Elegir modelo</string>
+    <string name="chat_no_providers">No hay modelos disponibles</string>
+    <string name="chat_language">Idioma</string>
+    <string name="chat_font_size">Tamaño de fuente</string>
+    <string name="chat_font_size_smaller">Muy pequeño</string>
+    <string name="chat_font_size_small">Pequeño</string>
+    <string name="chat_font_size_normal">Normal</string>
+    <string name="chat_font_size_large">Grande</string>
+    <string name="chat_font_size_larger">Muy grande</string>
+    <string name="chat_backend">Servidor</string>
+    <string name="chat_about">Acerca de</string>
+    <string name="about_version">Versión %1$s</string>
+    <string name="chat_sign_out">Cerrar sesión</string>
+    <string name="chat_sign_out_confirm_title">¿Cerrar sesión?</string>
+    <string name="chat_sign_out_confirm_message">Tendrás que iniciar sesión de nuevo.</string>
+    <string name="chat_empty_title">Iniciar una conversación</string>
+    <string name="chat_empty_subtitle">Elige un modelo arriba y envía tu primer mensaje.</string>
+
+    <string name="history_title">Historial</string>
+    <string name="history_empty">Sin historial todavía.</string>
+    <string name="history_untitled">Sin título</string>
+    <string name="history_delete_confirm_title">¿Eliminar esta conversación?</string>
+    <string name="history_delete_confirm_message">Esta conversación se eliminará permanentemente.</string>
+    <string name="history_delete_cd">Eliminar conversación</string>
+
+    <string name="baseurl_title">URL del servidor</string>
+    <string name="baseurl_subtitle">Apunta esta app a una instancia del servidor Mirobody.</string>
+    <string name="baseurl_label">URL base</string>
+    <string name="baseurl_hint">Usa http://10.0.2.2:18080 para alcanzar un servidor en el equipo anfitrión desde el emulador de Android.</string>
+    <string name="baseurl_invalid">URL http(s) no válida</string>
+
+    <string name="error_auth">La sesión ha expirado. Vuelve a iniciar sesión.</string>
+    <string name="error_network">Error de red. Verifica tu conexión e inténtalo de nuevo.</string>
+    <string name="error_http">El servidor devolvió %1$d.</string>
+    <string name="error_api">Petición fallida (código %1$d) %2$s</string>
+    <string name="error_parse">Respuesta inesperada del servidor.</string>
+    <string name="error_unknown">Algo salió mal.</string>
+
+    <string name="auth_or">o</string>
+    <string name="auth_continue_with_google">Continuar con Google</string>
+    <string name="auth_continue_with_apple">Continuar con Apple</string>
+    <string name="auth_continue_with_wechat">Continuar con WeChat</string>
+    <string name="auth_continue_with_github">Continuar con GitHub</string>
+    <string name="auth_continue_with_x">Continuar con X</string>
+    <string name="auth_google_failed">Error al iniciar sesión con Google</string>
+
+    <string name="chat_stats_cd">Mostrar detalles de la respuesta</string>
+    <string name="chat_copy_reply">Copiar respuesta</string>
+    <string name="chat_stats_title">Detalles de la respuesta</string>
+    <string name="chat_stats_model">Modelo</string>
+    <string name="chat_stats_input_tokens">Tokens de entrada</string>
+    <string name="chat_stats_output_tokens">Tokens de salida</string>
+    <string name="chat_stats_thought_tokens">Tokens de razonamiento</string>
+    <string name="chat_stats_total_tokens">Tokens totales</string>
+    <string name="chat_stats_total_cost">Coste total</string>
+
+    <string name="chat_tool">herramienta</string>
+    <string name="chat_tool_args">args</string>
+    <string name="chat_tool_result">resultado</string>
+    <string name="chat_image_saved">Guardado en la galería</string>
+    <string name="chat_image_save_failed">Error al guardar</string>
+    <string name="chat_image_save_permission_denied">Permiso de almacenamiento denegado</string>
+</resources>

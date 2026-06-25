@@ -1,0 +1,49 @@
+.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100vh;
+  padding: 0 48rpx;
+  box-sizing: border-box;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 30vh;
+  margin-bottom: 80rpx;
+}
+.logo {
+  width: 128rpx;
+  height: 128rpx;
+  line-height: 128rpx;
+  text-align: center;
+  font-size: 64rpx;
+  font-weight: 600;
+  color: #fff;
+  background: #07c160;
+  border-radius: 28rpx;
+}
+.title {
+  margin-top: 28rpx;
+  font-size: 44rpx;
+  font-weight: 600;
+}
+.subtitle {
+  margin-top: 12rpx;
+  font-size: 28rpx;
+  color: #888;
+}
+
+.wx-login {
+  width: 100%;
+  max-width: 560rpx;
+  margin-top: 40rpx;
+}
+
+.hint {
+  margin-top: 32rpx;
+  font-size: 24rpx;
+  color: #aaa;
+}

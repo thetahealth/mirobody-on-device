@@ -1,0 +1,57 @@
+# Keep the build context small and deterministic. The Dockerfile only needs
+# CMakeLists.txt, src/, res/, and config.example.yml — everything below is
+# either build output, host-specific, or unrelated to the server image.
+
+# Build directories
+build/
+build-*/
+out/
+cmake-build-*/
+_deps/
+
+# Python wheel build output
+dist/
+*.whl
+*.egg-info/
+__pycache__/
+
+# Web client toolchain (res/htdoc is the prebuilt output we DO ship)
+htdoc/node_modules/
+node_modules/
+
+# Other-language bindings and their build output
+target/
+Cargo.lock
+
+# vcpkg (Windows-only dependency manager)
+vcpkg_installed/
+.vcpkg-root
+
+# CMake scratch
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+install_manifest.txt
+Testing/
+
+# Mobile clients — not part of the server image
+android/
+ios/
+
+# Logs, IDE, OS cruft
+*.log
+.vs/
+.vscode/
+.idea/
+.git/
+.gitignore
+.gitattributes
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# The image bakes config.example.yml as the lowest-precedence defaults layer
+# (NOT as config.yml — that would override remote config). Don't rely on a local
+# config.yml (it's git-ignored and may hold secrets) — mount it at runtime, or
+# let remote config / env vars supply real settings.

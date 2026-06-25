@@ -1,0 +1,34 @@
+{
+  "name": "mirobody",
+  "version-string": "0.1.0",
+  "builtin-baseline": "d015e31e90838a4c9dfa3eed45979bc70d9357fc",
+  "dependencies": [
+    "libwebsockets",
+    {
+      "name": "curl",
+      "features": ["openssl"]
+    },
+    "openssl",
+    "rapidjson",
+    "yaml-cpp",
+    "sqlite3",
+    "libpq",
+    "libmysql",
+    {
+      "name": "hiredis",
+      "features": ["ssl"]
+    },
+    "openblas",
+    "catch2",
+    "sentry-native",
+    "libjpeg-turbo",
+    "libpng",
+    "libwebp",
+    "tiff",
+    "xlnt"
+  ],
+  "$dependencies": [
+    "duckdb",
+    "tesseract"
+  ]
+}

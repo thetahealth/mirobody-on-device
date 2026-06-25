@@ -1,0 +1,12 @@
+<!-- Build with the .NET SDK: `dotnet run --project bindings/csharp -- 18130`.
+     (This machine had only the .NET runtime, no SDK, so the demo here was built
+     directly with Roslyn csc against the shared framework — see bindings/README.md.) -->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>mirobody-demo</AssemblyName>
+  </PropertyGroup>
+</Project>

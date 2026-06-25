@@ -1,0 +1,16 @@
+# The Xcode project is committed (project.pbxproj + shared scheme). Only per-user
+# state and SwiftPM's resolved pins are ignored.
+Mirobody.xcodeproj/xcuserdata/
+Mirobody.xcodeproj/project.xcworkspace/xcuserdata/
+Mirobody.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/
+Mirobody.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# Xcode build output
+build/
+DerivedData/
+
+# Embedded native artifact — built per the iOS build docs, not checked in.
+Frameworks/mirobody.xcframework/
+
+# macOS
+.DS_Store

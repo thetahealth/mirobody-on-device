@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 430" width="960" height="430" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="960" height="430" fill="#ffffff"/>
+
+  <!-- ===== Title ===== -->
+  <text x="480" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#c0392b">one core, three forms (each works on its own)</text>
+
+  <!-- ===== Column 1a: Web (thin client) ===== -->
+  <rect x="40" y="46" width="230" height="70" rx="14" fill="#e8eef7" stroke="#4072b8"/>
+  <text x="155" y="78" text-anchor="middle" font-size="14" font-weight="bold" fill="#234">Web</text>
+  <text x="155" y="98" text-anchor="middle" font-size="10" fill="#456">HTML · Miniapp — UI only</text>
+
+  <!-- ===== Column 1b: Native apps (embedded) ===== -->
+  <rect x="40" y="148" width="230" height="212" rx="18" fill="#f5f7fa" stroke="#334" stroke-width="2"/>
+  <text x="155" y="170" text-anchor="middle" font-size="12" font-weight="bold" fill="#234">Android · iOS · Electron · Qt</text>
+  <!-- UI -->
+  <rect x="60" y="176" width="190" height="34" rx="8" fill="#e8eef7" stroke="#4072b8"/>
+  <text x="155" y="198" text-anchor="middle" font-size="12" font-weight="bold" fill="#234">App UI</text>
+  <line x1="155" y1="210" x2="155" y2="244" stroke="#555" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="163" y="231" font-size="12" fill="#456">FFI / C ABI</text>
+  <!-- mirobody form 1: embedded -->
+  <rect x="60" y="244" width="190" height="48" rx="8" fill="#dff0e4" stroke="#2f7d4a" stroke-width="2.5"/>
+  <rect x="121" y="250" width="68" height="16" rx="8" fill="#2f7d4a"/>
+  <text x="155" y="262" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#fff">embedded</text>
+  <text x="155" y="284" text-anchor="middle" font-size="14" font-weight="bold" fill="#234">mirobody</text>
+  <!-- on-device db -->
+  <rect x="60" y="300" width="190" height="48" rx="8" fill="#fff3e0" stroke="#c08a3e" stroke-dasharray="4 3"/>
+  <text x="155" y="322" text-anchor="middle" font-size="12" font-weight="bold" fill="#234">Your Health Data</text>
+  <text x="155" y="338" text-anchor="middle" font-size="9" fill="#456">on-device (optional)</text>
+
+  <!-- ===== Column 2: Server ===== -->
+  <rect x="365" y="46" width="230" height="222" rx="18" fill="#f5f7fa" stroke="#334" stroke-width="2"/>
+  <text x="480" y="66" text-anchor="middle" font-size="14" font-weight="bold" fill="#234">Server</text>
+  <text x="480" y="82" text-anchor="middle" font-size="10" fill="#456">local / cloud host</text>
+  <!-- mirobody form 2: standalone executable -->
+  <rect x="385" y="92" width="190" height="38" rx="8" fill="#dff0e4" stroke="#2f7d4a" stroke-width="2.5"/>
+  <rect x="443" y="96" width="74" height="16" rx="8" fill="#2f7d4a"/>
+  <text x="480" y="108" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#fff">executable</text>
+  <text x="480" y="125" text-anchor="middle" font-size="13" font-weight="bold" fill="#234">mirobody</text>
+  <!-- mirobody form 3: library embedded by language hosts -->
+  <rect x="378" y="138" width="204" height="68" rx="10" fill="#eef6f0" stroke="#3a8f57" stroke-dasharray="4 3"/>
+  <text x="480" y="152" text-anchor="middle" font-size="9" fill="#456">C# · Java · Go · Rust · Python</text>
+  <rect x="398" y="158" width="164" height="38" rx="8" fill="#dff0e4" stroke="#2f7d4a" stroke-width="2.5"/>
+  <rect x="450" y="162" width="60" height="16" rx="8" fill="#2f7d4a"/>
+  <text x="480" y="174" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#fff">library</text>
+  <text x="480" y="191" text-anchor="middle" font-size="13" font-weight="bold" fill="#234">mirobody</text>
+  <!-- server db -->
+  <rect x="385" y="214" width="190" height="42" rx="8" fill="#fff3e0" stroke="#c08a3e" stroke-dasharray="4 3"/>
+  <text x="480" y="234" text-anchor="middle" font-size="12" font-weight="bold" fill="#234">Your Health Data</text>
+  <text x="480" y="248" text-anchor="middle" font-size="9" fill="#456">beside the server (optional)</text>
+
+  <!-- ===== Column 3: LLM ===== -->
+  <rect x="700" y="150" width="220" height="80" rx="10" fill="#f3e8f7" stroke="#8a4fb0"/>
+  <text x="810" y="178" text-anchor="middle" font-size="15" font-weight="bold" fill="#234">LLM providers</text>
+  <text x="810" y="200" text-anchor="middle" font-size="10" fill="#456">OpenAI · Gemini · MiroThinker</text>
+  <text x="810" y="217" text-anchor="middle" font-size="10" fill="#456">Qwen · DeepSeek</text>
+
+  <!-- ===== Flows (bidirectional, horizontal curves on box edges) ===== -->
+  <!-- Web <-> Server -->
+  <path d="M270 81 C320 81 320 100 365 100" fill="none" stroke="#555" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="318" y="72" text-anchor="middle" font-size="12" fill="#456">HTTP / WS</text>
+  <!-- Native <-> Server -->
+  <path d="M270 200 C320 200 320 160 365 160" fill="none" stroke="#555" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="316" y="214" text-anchor="middle" font-size="12" fill="#456">HTTP / WS</text>
+  <!-- Server <-> LLM -->
+  <path d="M595 136 C650 136 650 185 700 185" fill="none" stroke="#555" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="648" y="127" text-anchor="middle" font-size="12" fill="#456">chat turn</text>
+  <!-- Native <-> LLM directly (dips below the server) -->
+  <path d="M270 320 C460 320 640 345 700 222" fill="none" stroke="#555" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="478" y="344" text-anchor="middle" font-size="12" fill="#c0392b">chat turn — native apps talk to the LLM directly</text>
+</svg>

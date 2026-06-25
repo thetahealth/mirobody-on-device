@@ -1,0 +1,99 @@
+/* Hebrew. Ported from android/.../res/values-iw/strings.xml (Android uses the
+   legacy "iw" code; iOS/Apple uses "he"). Format specifiers converted for iOS:
+   %1$s -> %1$@, %1$d stays. RTL. */
+
+"app_name" = "Mirobody";
+
+/* Common */
+"common_back" = "חזרה";
+"common_close" = "סגירה";
+"common_cancel" = "ביטול";
+"common_done" = "סיום";
+"common_save" = "שמירה";
+"common_retry" = "נסה שוב";
+"common_settings" = "הגדרות";
+"common_delete" = "מחיקה";
+
+/* Email login */
+"email_title" = "התחברות";
+"email_subtitle" = "נשלח לך קוד חד-פעמי באימייל.";
+"email_label" = "אימייל";
+"email_required" = "נדרש אימייל";
+"email_send_code" = "שליחת קוד";
+"email_resend_in" = "שליחה מחדש בעוד %1$d שניות";
+"auth_or" = "או";
+"auth_continue_with_google" = "המשך עם Google";
+"auth_continue_with_apple" = "המשך עם Apple";
+"auth_continue_with_wechat" = "המשך עם WeChat";
+"auth_continue_with_github" = "המשך עם GitHub";
+"auth_continue_with_x" = "המשך עם X";
+"auth_google_failed" = "ההתחברות עם Google נכשלה";
+
+/* Verify */
+"verify_title" = "הזן קוד";
+"verify_sent_to" = "נשלח אל %1$@.";
+"verify_button" = "אימות";
+"verify_resending" = "שולח מחדש…";
+"verify_resend_code" = "שליחת קוד מחדש";
+
+/* Chat */
+"chat_message_hint" = "הודעה";
+"chat_history_cd" = "היסטוריה";
+"chat_select_model" = "בחר מודל";
+"chat_no_providers" = "לא נטענו ספקים";
+"chat_language" = "שפה";
+"chat_font_size" = "גודל גופן";
+"chat_font_size_smaller" = "קטן מאוד";
+"chat_font_size_small" = "קטן";
+"chat_font_size_normal" = "רגיל";
+"chat_font_size_large" = "גדול";
+"chat_font_size_larger" = "גדול מאוד";
+"chat_backend" = "שרת";
+"chat_about" = "אודות";
+"about_version" = "גרסה %1$@";
+"chat_sign_out" = "התנתקות";
+"chat_sign_out_confirm_title" = "להתנתק?";
+"chat_sign_out_confirm_message" = "יהיה עליך להתחבר שוב.";
+"chat_empty_title" = "התחל שיחה";
+"chat_empty_subtitle" = "בחר מודל למעלה ושלח את ההודעה הראשונה שלך.";
+
+/* History */
+"history_title" = "היסטוריה";
+"history_empty" = "אין היסטוריה עדיין.";
+"history_untitled" = "ללא כותרת";
+"history_delete_confirm_title" = "למחוק את השיחה?";
+"history_delete_confirm_message" = "שיחה זו תימחק לצמיתות.";
+"history_delete_cd" = "מחיקת שיחה";
+
+/* Backend URL */
+"baseurl_title" = "כתובת השרת";
+"baseurl_subtitle" = "הפנה אפליקציה זו למופע שרת Mirobody.";
+"baseurl_label" = "כתובת בסיס";
+"baseurl_hint" = "הגדר את כתובת שרת ה-Mirobody, לדוגמה http://localhost:8080 עבור השרת המובנה.";
+"baseurl_invalid" = "כתובת http(s) לא תקינה";
+
+/* Errors */
+"error_auth" = "ההפעלה פגה. אנא התחבר שוב.";
+"error_network" = "שגיאת רשת. בדוק את החיבור ונסה שוב.";
+"error_http" = "השרת החזיר %1$d.";
+"error_api" = "הבקשה נכשלה (קוד %1$d)%2$@";
+"error_parse" = "תגובה לא צפויה מהשרת.";
+"error_unknown" = "משהו השתבש.";
+
+/* Chat response stats */
+"chat_stats_cd" = "הצג פרטי תשובה";
+"chat_stats_title" = "פרטי התשובה";
+"chat_stats_model" = "מודל";
+"chat_stats_input_tokens" = "אסימוני קלט";
+"chat_stats_output_tokens" = "אסימוני פלט";
+"chat_stats_thought_tokens" = "אסימוני חשיבה";
+"chat_stats_total_tokens" = "סך האסימונים";
+"chat_stats_total_cost" = "עלות כוללת";
+
+/* Tool calls / image viewer */
+"chat_tool" = "כלי";
+"chat_tool_args" = "ארגומנטים";
+"chat_tool_result" = "תוצאה";
+"chat_image_saved" = "נשמר לגלריה";
+"chat_image_save_failed" = "השמירה נכשלה";
+"chat_image_save_permission_denied" = "הרשאת אחסון נדחתה";

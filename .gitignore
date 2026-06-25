@@ -1,0 +1,104 @@
+# Build directories
+build/
+build-*/
+build_*/
+out/
+
+# Shared vcpkg dependency tree (VCPKG_INSTALLED_DIR), reused by all build dirs
+vcpkg_installed/
+cmake-build-*/
+
+# Python wheel build output
+dist/
+*.whl
+*.egg-info/
+__pycache__/
+
+# Node bindings
+node_modules/
+
+# Rust bindings
+target/
+Cargo.lock
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+Testing/
+CTestTestfile.cmake
+_deps/
+compile_commands.json
+
+# vcpkg
+vcpkg_installed/
+.vcpkg-root
+
+# Build logs
+*.log
+
+# Sentry
+.sentry-native
+
+# Compiled objects / binaries
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.app
+*.pdb
+*.ilk
+*.exp
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# Visual Studio
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vcxproj.filters
+
+# Gradle / Android
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.cxx/
+android/app/.cxx/
+*.iml
+.externalNativeBuild/
+
+# Android Studio captures
+captures/
+
+# Keystore
+*.jks
+*.keystore
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local dev scratch: standalone-server SQLite db, uploads, etc.
+/_local/
+*.yml
+# ...except the committed template, which is the source of defaults.
+!config.example.yml

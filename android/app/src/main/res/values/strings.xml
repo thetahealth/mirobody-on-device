@@ -1,0 +1,108 @@
+<resources>
+    <string name="app_name">Mirobody</string>
+
+    <!-- Common -->
+    <string name="common_back">Back</string>
+    <string name="common_close">Close</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_done">Done</string>
+    <string name="common_save">Save</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_settings">Settings</string>
+    <string name="common_delete">Delete</string>
+
+    <!-- Email login -->
+    <string name="email_title">Sign in</string>
+    <string name="email_subtitle">We\'ll email you a one-time code.</string>
+    <string name="email_label">Email</string>
+    <string name="email_required">Email is required</string>
+    <string name="email_send_code">Send code</string>
+    <string name="email_resend_in">Resend in %1$ds</string>
+    <string name="auth_or">or</string>
+    <string name="auth_continue_with_google">Continue with Google</string>
+    <string name="auth_google_failed">Google sign-in failed</string>
+    <string name="auth_continue_with_apple">Continue with Apple</string>
+    <string name="auth_apple_failed">Apple sign-in failed</string>
+    <string name="auth_continue_with_wechat">Continue with WeChat</string>
+    <string name="auth_wechat_failed">WeChat sign-in failed</string>
+    <string name="auth_continue_with_github">Continue with GitHub</string>
+    <string name="auth_continue_with_x">Continue with X</string>
+
+    <!-- Verify -->
+    <string name="verify_title">Enter code</string>
+    <string name="verify_sent_to">Sent to %1$s.</string>
+    <string name="verify_button">Verify</string>
+    <string name="verify_resending">Resending…</string>
+    <string name="verify_resend_code">Resend code</string>
+
+    <!-- Chat -->
+    <string name="chat_message_hint">Message</string>
+    <string name="chat_history_cd">History</string>
+    <string name="chat_select_model">Select model</string>
+    <string name="chat_no_providers">No providers loaded</string>
+    <string name="chat_language">Language</string>
+    <string name="chat_font_size">Font size</string>
+    <string name="chat_font_size_smaller">Smaller</string>
+    <string name="chat_font_size_small">Small</string>
+    <string name="chat_font_size_normal">Normal</string>
+    <string name="chat_font_size_large">Large</string>
+    <string name="chat_font_size_larger">Larger</string>
+    <string name="chat_backend">Backend</string>
+    <string name="chat_sync_health">Sync health data</string>
+    <string name="health_checking">Checking for an on-device health source…</string>
+    <string name="health_no_source">No on-device health source on this device.</string>
+    <string name="health_source">Source: %1$s</string>
+    <string name="health_sync_button">Sync last 7 days</string>
+    <string name="health_syncing">Syncing…</string>
+    <string name="health_result">Posted %1$d, failed %2$d.</string>
+    <string name="health_error">Error: %1$s</string>
+    <string name="chat_about">About</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="chat_sign_out">Sign out</string>
+    <string name="chat_sign_out_confirm_title">Sign out?</string>
+    <string name="chat_sign_out_confirm_message">You\'ll need to sign in again.</string>
+    <string name="chat_empty_title">Start a conversation</string>
+    <string name="chat_empty_subtitle">Pick a model above, then send your first message.</string>
+
+    <!-- History -->
+    <string name="history_title">History</string>
+    <string name="history_empty">No history yet.</string>
+    <string name="history_untitled">Untitled</string>
+    <string name="history_delete_confirm_title">Delete conversation?</string>
+    <string name="history_delete_confirm_message">This conversation will be permanently removed.</string>
+    <string name="history_delete_cd">Delete conversation</string>
+
+    <!-- Backend URL -->
+    <string name="baseurl_title">Backend URL</string>
+    <string name="baseurl_subtitle">Point this app at a Mirobody backend instance.</string>
+    <string name="baseurl_label">Base URL</string>
+    <string name="baseurl_hint">Use http://10.0.2.2:18080 to reach a backend on the host machine from the Android emulator.</string>
+    <string name="baseurl_invalid">Not a valid http(s) URL</string>
+
+    <!-- Errors -->
+    <string name="error_auth">Session expired. Please sign in again.</string>
+    <string name="error_network">Network error. Check your connection and try again.</string>
+    <string name="error_http">Server returned %1$d.</string>
+    <string name="error_api">Request failed (code %1$d)%2$s</string>
+    <string name="error_parse">Unexpected response from the server.</string>
+    <string name="error_unknown">Something went wrong.</string>
+
+    <!-- Chat response stats -->
+    <string name="chat_stats_cd">Show response details</string>
+    <string name="chat_copy_reply">Copy reply</string>
+    <string name="chat_stats_title">Response details</string>
+    <string name="chat_stats_model">Model</string>
+    <string name="chat_stats_input_tokens">Input tokens</string>
+    <string name="chat_stats_output_tokens">Output tokens</string>
+    <string name="chat_stats_thought_tokens">Thought tokens</string>
+    <string name="chat_stats_total_tokens">Total tokens</string>
+    <string name="chat_stats_total_cost">Total cost</string>
+
+    <!-- Tool calls / image viewer -->
+    <string name="chat_tool">tool</string>
+    <string name="chat_tool_args">args</string>
+    <string name="chat_tool_result">result</string>
+    <string name="chat_image_saved">Saved to gallery</string>
+    <string name="chat_image_save_failed">Save failed</string>
+    <string name="chat_image_save_permission_denied">Storage permission denied</string>
+</resources>

@@ -1,0 +1,98 @@
+<resources>
+    <string name="app_name">Mirobody</string>
+
+    <!-- Common -->
+    <string name="common_back">رجوع</string>
+    <string name="common_close">إغلاق</string>
+    <string name="common_cancel">إلغاء</string>
+    <string name="common_done">تم</string>
+    <string name="common_save">حفظ</string>
+    <string name="common_retry">إعادة المحاولة</string>
+    <string name="common_settings">الإعدادات</string>
+    <string name="common_delete">حذف</string>
+
+    <!-- Email login -->
+    <string name="email_title">تسجيل الدخول</string>
+    <string name="email_subtitle">سنرسل إليك رمزًا لمرة واحدة عبر البريد الإلكتروني.</string>
+    <string name="email_label">البريد الإلكتروني</string>
+    <string name="email_required">البريد الإلكتروني مطلوب</string>
+    <string name="email_send_code">إرسال الرمز</string>
+    <string name="email_resend_in">إعادة الإرسال خلال %1$d ثانية</string>
+    <string name="auth_or">أو</string>
+    <string name="auth_continue_with_google">المتابعة باستخدام Google</string>
+    <string name="auth_continue_with_apple">المتابعة باستخدام Apple</string>
+    <string name="auth_continue_with_wechat">المتابعة باستخدام WeChat</string>
+    <string name="auth_continue_with_github">المتابعة باستخدام GitHub</string>
+    <string name="auth_continue_with_x">المتابعة باستخدام X</string>
+    <string name="auth_google_failed">فشل تسجيل الدخول عبر Google</string>
+
+    <!-- Verify -->
+    <string name="verify_title">أدخل الرمز</string>
+    <string name="verify_sent_to">تم الإرسال إلى %1$s.</string>
+    <string name="verify_button">تحقق</string>
+    <string name="verify_resending">جارٍ إعادة الإرسال…</string>
+    <string name="verify_resend_code">إعادة إرسال الرمز</string>
+
+    <!-- Chat -->
+    <string name="chat_message_hint">رسالة</string>
+    <string name="chat_history_cd">السجل</string>
+    <string name="chat_select_model">اختر النموذج</string>
+    <string name="chat_no_providers">لم يتم تحميل أي مزوّدين</string>
+    <string name="chat_language">اللغة</string>
+    <string name="chat_font_size">حجم الخط</string>
+    <string name="chat_font_size_smaller">أصغر</string>
+    <string name="chat_font_size_small">صغير</string>
+    <string name="chat_font_size_normal">عادي</string>
+    <string name="chat_font_size_large">كبير</string>
+    <string name="chat_font_size_larger">أكبر</string>
+    <string name="chat_backend">الخادم</string>
+    <string name="chat_about">حول</string>
+    <string name="about_version">الإصدار %1$s</string>
+    <string name="chat_sign_out">تسجيل الخروج</string>
+    <string name="chat_sign_out_confirm_title">تسجيل الخروج؟</string>
+    <string name="chat_sign_out_confirm_message">ستحتاج إلى تسجيل الدخول مرة أخرى.</string>
+    <string name="chat_empty_title">ابدأ محادثة</string>
+    <string name="chat_empty_subtitle">اختر نموذجًا بالأعلى ثم أرسل رسالتك الأولى.</string>
+
+    <!-- History -->
+    <string name="history_title">السجل</string>
+    <string name="history_empty">لا يوجد سجل بعد.</string>
+    <string name="history_untitled">بدون عنوان</string>
+    <string name="history_delete_confirm_title">حذف المحادثة؟</string>
+    <string name="history_delete_confirm_message">ستُحذف هذه المحادثة نهائيًا.</string>
+    <string name="history_delete_cd">حذف المحادثة</string>
+
+    <!-- Backend URL -->
+    <string name="baseurl_title">عنوان الخادم</string>
+    <string name="baseurl_subtitle">وجّه هذا التطبيق إلى خادم Mirobody.</string>
+    <string name="baseurl_label">العنوان الأساسي</string>
+    <string name="baseurl_hint">استخدم http://10.0.2.2:18080 للوصول إلى خادم على الجهاز المضيف من محاكي Android.</string>
+    <string name="baseurl_invalid">عنوان http(s) غير صالح</string>
+
+    <!-- Errors -->
+    <string name="error_auth">انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.</string>
+    <string name="error_network">خطأ في الشبكة. تحقق من اتصالك وحاول مرة أخرى.</string>
+    <string name="error_http">أعاد الخادم %1$d.</string>
+    <string name="error_api">فشل الطلب (الرمز %1$d)%2$s</string>
+    <string name="error_parse">استجابة غير متوقعة من الخادم.</string>
+    <string name="error_unknown">حدث خطأ ما.</string>
+
+    <!-- Chat response stats -->
+    <string name="chat_stats_cd">عرض تفاصيل الرد</string>
+    <string name="chat_copy_reply">نسخ الرد</string>
+    <string name="chat_stats_title">تفاصيل الرد</string>
+    <string name="chat_stats_model">النموذج</string>
+    <string name="chat_stats_input_tokens">رموز الإدخال</string>
+    <string name="chat_stats_output_tokens">رموز الإخراج</string>
+    <string name="chat_stats_thought_tokens">رموز التفكير</string>
+    <string name="chat_stats_total_tokens">إجمالي الرموز</string>
+    <string name="chat_stats_total_cost">التكلفة الإجمالية</string>
+
+    <!-- Tool calls / image viewer -->
+    <string name="chat_tool">أداة</string>
+    <string name="chat_tool_args">المعطيات</string>
+    <string name="chat_tool_result">النتيجة</string>
+    <string name="chat_image_saved">تم الحفظ في المعرض</string>
+    <string name="chat_image_save_failed">فشل الحفظ</string>
+    <string name="chat_image_save_permission_denied">تم رفض إذن التخزين</string>
+</resources>

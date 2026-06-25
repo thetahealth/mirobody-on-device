@@ -1,0 +1,16 @@
+{
+  "description": "Mirobody WeChat Mini Program (native). See README.md.",
+  "miniprogramRoot": "./",
+  "appid": "REPLACE_WITH_YOUR_MINIPROGRAM_APPID",
+  "projectname": "mirobody-miniapp",
+  "compileType": "miniprogram",
+  "libVersion": "latest",
+  "setting": {
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "urlCheck": false
+  },
+  "condition": {}
+}

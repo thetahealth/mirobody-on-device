@@ -1,0 +1,469 @@
+#include "appcontroller.hpp"
+
+#include "apiclient.hpp"
+
+#include <QSettings>
+#include <QLocale>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QDateTime>
+#include <QByteArray>
+#include <QRegularExpression>
+
+namespace {
+
+// localStorage key names, kept identical to net.js / config.js so a future
+// shared store would line up; here they are QSettings keys.
+const char* kTokenKey    = "mirobody-x-token";
+const char* kBaseUrlKey  = "mirobody-base-url";
+const char* kProviderKey = "mirobody-provider";
+const char* kLanguageKey = "mirobody-language";
+const char* kFontKey     = "mirobody-font-offset";
+
+const char* kDefaultModel = "gemini-2.5-flash";
+
+// The ten languages the app offers (config.js LANGUAGES); the picker shows
+// these and the chosen code rides on each agent request.
+const QStringList kSupportedLanguages = {
+    "zh", "ja", "ko", "en", "fr", "de", "ru", "es", "ar", "he"
+};
+
+// Base64url-decode (no padding) -- used to read the JWT payload.
+QByteArray base64UrlDecode(QByteArray s) {
+    s.replace('-', '+').replace('_', '/');
+    while (s.size() % 4) s.append('=');
+    return QByteArray::fromBase64(s);
+}
+
+QString defaultLanguage() {
+    const QString sys = QLocale::system().name().left(2).toLower();
+    return kSupportedLanguages.contains(sys) ? sys : QStringLiteral("en");
+}
+
+// The `email` claim of a JWT, or "" when absent/unparseable. Used to restore the
+// signed-in address into the settings menu on a returning session.
+QString emailClaim(const QString& token) {
+    const QStringList parts = token.split('.');
+    if (parts.size() < 2) return {};
+    const QJsonDocument doc = QJsonDocument::fromJson(base64UrlDecode(parts.at(1).toUtf8()));
+    return doc.isObject() ? doc.object().value("email").toString() : QString();
+}
+
+} // namespace
+
+//------------------------------------------------------------------------------
+
+AppController::AppController(QObject* parent)
+    : QObject(parent),
+      api_(new ApiClient(this)),
+      chat_(new ChatModel(this)),
+      settings_(new QSettings(QStringLiteral("thetahealth"),
+                              QStringLiteral("mirobody-qt"))) {
+    // Restore persisted settings (the QSettings stand-in for localStorage).
+    const QString token = settings_->value(kTokenKey).toString();
+    baseUrl_    = settings_->value(kBaseUrlKey, baseUrlPresets().value(0)).toString();
+    language_   = settings_->value(kLanguageKey, defaultLanguage()).toString();
+    fontOffset_ = settings_->value(kFontKey, 0).toInt();
+    provider_   = settings_->value(kProviderKey).toString();
+
+    api_->setBaseUrl(baseUrl_);
+    api_->setToken(token);
+
+    if (!token.isEmpty()) {
+        loggedIn_ = true;
+        email_ = emailClaim(token);
+        loadConversation();
+        loadProviders();
+    }
+}
+
+AppController::~AppController() = default;
+
+QString AppController::appVersion() const {
+#ifdef MIROBODY_QT_VERSION
+    return QStringLiteral(MIROBODY_QT_VERSION);
+#else
+    return QStringLiteral("dev");
+#endif
+}
+
+QStringList AppController::baseUrlPresets() const {
+    // Local dev server first (config.yml's HTTP_PORT), then the hosted
+    // environments (config.js BASE_URL_PRESETS).
+    return {
+        QStringLiteral("http://127.0.0.1:8080"),
+        QStringLiteral("https://test.mirobody.ai"),
+        QStringLiteral("https://gray.mirobody.ai"),
+        QStringLiteral("https://mirobody.ai"),
+    };
+}
+
+//------------------------------------------------------------------------------
+// Login
+//------------------------------------------------------------------------------
+
+void AppController::sendCode(const QString& email) {
+    const QString e = email.trimmed();
+    if (e.isEmpty()) { emit loginError(QString()); return; }
+    QJsonObject body{{"email", e}};
+    api_->postEnvelope("/email/login", body,
+        [this](const QJsonValue&) { emit codeSent(); },
+        [this](const QString& msg, int) { emit loginError(msg); },
+        /*withAuth=*/false);
+}
+
+void AppController::verifyCode(const QString& email, const QString& code) {
+    const QString e = email.trimmed();
+    QJsonObject body{{"email", e}, {"code", code.trimmed()}};
+    api_->postEnvelope("/email/verify", body,
+        [this, e](const QJsonValue& data) {
+            const QString token = data.toObject().value("access_token").toString();
+            if (token.isEmpty()) { emit verifyError(QString()); return; }
+            setEmail(e);
+            completeLogin(token);
+        },
+        [this](const QString& msg, int) { emit verifyError(msg); },
+        /*withAuth=*/false);
+}
+
+void AppController::completeLogin(const QString& accessToken) {
+    api_->setToken(accessToken);
+    settings_->setValue(kTokenKey, accessToken);
+
+    chat_->clear();
+    loadConversation();      // restore THIS user's persisted conversation
+    loadProviders();
+
+    if (!loggedIn_) { loggedIn_ = true; emit loggedInChanged(); }
+    // The email the user just signed in with is shown in the settings menu.
+}
+
+void AppController::signOut() {
+    stopStreaming();
+    // Drop this user's local history while we still know who they are (the key
+    // is derived from the token), then clear the token -- mirrors app.signOut().
+    const QString path = conversationPath();
+    if (!path.isEmpty()) QFile::remove(path);
+
+    api_->setToken(QString());
+    settings_->remove(kTokenKey);
+    chat_->clear();
+    providers_.clear();
+    emit providersChanged();
+    setEmail(QString());
+
+    if (loggedIn_) { loggedIn_ = false; emit loggedInChanged(); }
+}
+
+//------------------------------------------------------------------------------
+// Settings
+//------------------------------------------------------------------------------
+
+void AppController::setBaseUrl(const QString& url) {
+    QString v = url.trimmed();
+    while (v.endsWith('/')) v.chop(1);
+    if (v == baseUrl_) return;
+    baseUrl_ = v;
+    api_->setBaseUrl(v);
+    settings_->setValue(kBaseUrlKey, v);
+    emit baseUrlChanged();
+    // Re-fetch providers from the new backend; an existing token rides along.
+    providers_.clear();
+    emit providersChanged();
+    if (loggedIn_) loadProviders();
+}
+
+void AppController::setLanguage(const QString& code) {
+    if (code == language_ || !kSupportedLanguages.contains(code)) return;
+    language_ = code;
+    settings_->setValue(kLanguageKey, code);
+    emit languageChanged();
+}
+
+void AppController::setFontOffset(int offset) {
+    if (offset == fontOffset_) return;
+    fontOffset_ = offset;
+    settings_->setValue(kFontKey, offset);
+    emit fontOffsetChanged();
+}
+
+void AppController::setProvider(const QString& provider) {
+    if (provider == provider_) return;
+    provider_ = provider;
+    if (provider.isEmpty()) settings_->remove(kProviderKey);
+    else                    settings_->setValue(kProviderKey, provider);
+    emit providerChanged();
+}
+
+void AppController::setEmail(const QString& email) {
+    if (email == email_) return;
+    email_ = email;
+    emit emailChanged();
+}
+
+void AppController::setStreaming(bool s) {
+    if (s == streaming_) return;
+    streaming_ = s;
+    emit streamingChanged();
+}
+
+//------------------------------------------------------------------------------
+// Providers
+//------------------------------------------------------------------------------
+
+void AppController::loadProviders() {
+    if (api_->token().isEmpty()) return;
+    api_->postEnvelope("/api/providers", QJsonObject(),
+        [this](const QJsonValue& data) {
+            providers_.clear();
+            const QJsonArray arr = data.toArray();
+            QStringList names;
+            for (const QJsonValue& v : arr) {
+                const QJsonObject o = v.toObject();
+                const QString name = o.value("name").toString();
+                if (name.isEmpty()) continue;
+                names << name;
+                QVariantMap m;
+                m.insert("code", o.value("code").toString());
+                m.insert("name", name);
+                providers_.push_back(m);
+            }
+            // Restore the cached selection if still on offer, else default to the
+            // first provider (config/chat.js setProviderOptions).
+            if (!names.isEmpty() && !names.contains(provider_)) {
+                setProvider(names.first());
+            }
+            emit providersChanged();
+        },
+        [this](const QString&, int code) {
+            if (code == 401) signOut();
+        });
+}
+
+//------------------------------------------------------------------------------
+// Chat streaming
+//------------------------------------------------------------------------------
+
+void AppController::sendMessage(const QString& text) {
+    const QString q = text.trimmed();
+    if (q.isEmpty() || streaming_) return;
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    const int userRow = chat_->appendMessage("user", q, now);
+    saveConversation();
+
+    const int assistantRow = chat_->appendMessage("assistant", QString(), now);
+    const QString turnProvider = provider_;
+
+    setStreaming(true);
+
+    // --- Agent mode: a provider ("Agent/provider") is selected ------------
+    if (!turnProvider.isEmpty()) {
+        const int slash = turnProvider.indexOf('/');
+        const QString agentName    = slash >= 0 ? turnProvider.left(slash) : turnProvider;
+        const QString providerName = slash >= 0 ? turnProvider.mid(slash + 1) : QString();
+
+        QJsonObject body{
+            {"agent", agentName},
+            {"provider", providerName},
+            {"question", q},
+            {"language", language_},
+        };
+        SseStream* s = api_->openStream("/api/chat", body);
+        stream_ = s;
+        auto acc = std::make_shared<QString>();
+
+        connect(s, &SseStream::message, this, [this, assistantRow, acc, turnProvider](const QString& chunk) {
+            QJsonParseError err{};
+            const QJsonDocument doc = QJsonDocument::fromJson(chunk.toUtf8(), &err);
+            if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
+            const QJsonObject o = doc.object();
+            const QString type = o.value("type").toString();
+            if (type == "reply") {
+                *acc += o.value("content").toString();
+                chat_->setContent(assistantRow, *acc);
+            } else if (type == "thinking") {
+                chat_->appendThinking(assistantRow, o.value("content").toString());
+            } else if (type == "costStatistics" && o.contains("cost")) {
+                chat_->setCost(assistantRow, o.value("cost").toObject().toVariantMap());
+                chat_->setProvider(assistantRow, turnProvider);
+            } else if (type == "error") {
+                if (stream_ == sender()) stream_ = nullptr;
+                failTurn(/*userRow=*/assistantRow - 1, assistantRow,
+                         QStringLiteral("Error: ") + o.value("content").toString());
+            }
+        });
+        connect(s, &SseStream::complete, this, [this, assistantRow, turnProvider]() {
+            stream_ = nullptr;
+            finishTurn(assistantRow, turnProvider);
+        });
+        connect(s, &SseStream::error, this, [this, assistantRow, acc](const QString& reason) {
+            stream_ = nullptr;
+            if (reason == QLatin1String("unauthorized")) { signOut(); return; }
+            failTurn(assistantRow - 1, assistantRow,
+                     acc->isEmpty() ? (QStringLiteral("Error: ") + reason) : *acc);
+        });
+        return;
+    }
+
+    // --- Proxy mode: no provider selected -> OpenAI-style chunks ----------
+    // The request carries the full conversation (all rows up to and including the
+    // new user turn -- i.e. everything except the empty assistant placeholder).
+    QJsonArray messages;
+    const QVariantList snap = chat_->snapshot();
+    for (int i = 0; i < assistantRow && i < snap.size(); ++i) {
+        const QVariantMap m = snap.at(i).toMap();
+        messages.push_back(QJsonObject{
+            {"role", m.value("role").toString()},
+            {"content", m.value("content").toString()},
+        });
+    }
+
+    QJsonObject body{
+        {"model", QString::fromLatin1(kDefaultModel)},
+        {"messages", messages},
+        {"stream", true},
+    };
+    SseStream* s = api_->openStream("/api/chat", body);
+    stream_ = s;
+    auto acc = std::make_shared<QString>();
+
+    connect(s, &SseStream::message, this, [this, assistantRow, acc](const QString& chunk) {
+        QJsonParseError err{};
+        const QJsonDocument doc = QJsonDocument::fromJson(chunk.toUtf8(), &err);
+        if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
+        const QJsonObject o = doc.object();
+        // A {"session_id":...} control chunk announces the resumable session; the
+        // OpenAI chunks then carry choices[0].delta.content.
+        if (o.contains("session_id")) {
+            *acc = QString();
+            chat_->setContent(assistantRow, QString());
+            return;
+        }
+        const QJsonArray choices = o.value("choices").toArray();
+        if (!choices.isEmpty()) {
+            const QString delta = choices.first().toObject()
+                .value("delta").toObject().value("content").toString();
+            if (!delta.isEmpty()) {
+                *acc += delta;
+                chat_->setContent(assistantRow, *acc);
+            }
+        }
+    });
+    connect(s, &SseStream::complete, this, [this, assistantRow]() {
+        stream_ = nullptr;
+        finishTurn(assistantRow, QString());
+    });
+    connect(s, &SseStream::error, this, [this, assistantRow, acc](const QString& reason) {
+        stream_ = nullptr;
+        if (reason == QLatin1String("unauthorized")) { signOut(); return; }
+        failTurn(assistantRow - 1, assistantRow,
+                 acc->isEmpty() ? (QStringLiteral("Error: ") + reason) : *acc);
+    });
+}
+
+void AppController::finishTurn(int assistantRow, const QString& provider) {
+    setStreaming(false);
+    if (!provider.isEmpty()) chat_->setProvider(assistantRow, provider);
+    saveConversation();
+}
+
+void AppController::failTurn(int userRow, int assistantRow, const QString& errorText) {
+    // Show the error in the assistant bubble; the failed exchange stays visible
+    // for the session but is dropped from persistence (the web client likewise
+    // does not persist a turn that errored before completing).
+    setStreaming(false);
+    chat_->setContent(assistantRow, errorText);
+    Q_UNUSED(userRow);
+    // Persist a snapshot that excludes the failed pair (the trailing user +
+    // assistant rows) by temporarily not saving them.
+    saveConversation();
+}
+
+void AppController::stopStreaming() {
+    if (stream_) {
+        stream_->abort();
+        stream_ = nullptr;
+    }
+    setStreaming(false);
+}
+
+//------------------------------------------------------------------------------
+// Local per-user conversation persistence (mirrors db.js)
+//------------------------------------------------------------------------------
+
+QString AppController::userId() const {
+    const QString token = api_->token();
+    if (token.isEmpty()) return {};
+    const QStringList parts = token.split('.');
+    if (parts.size() < 2) return {};
+    const QByteArray payload = base64UrlDecode(parts.at(1).toUtf8());
+    QJsonParseError err{};
+    const QJsonDocument doc = QJsonDocument::fromJson(payload, &err);
+    if (err.error != QJsonParseError::NoError || !doc.isObject()) return {};
+    const QJsonObject o = doc.object();
+    if (o.contains("sub"))   return QString::number(o.value("sub").toVariant().toLongLong());
+    if (o.contains("email")) return o.value("email").toString();
+    return {};
+}
+
+QString AppController::conversationPath() const {
+    const QString id = userId();
+    if (id.isEmpty()) return {};
+    QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (dir.isEmpty()) return {};
+    QDir().mkpath(dir);
+    // Sanitise the id for a filename (an email contains '@'/'.').
+    QString safe = id;
+    safe.replace(QRegularExpression("[^A-Za-z0-9_.-]"), "_");
+    return dir + QStringLiteral("/conversation-") + safe + QStringLiteral(".json");
+}
+
+void AppController::loadConversation() {
+    const QString path = conversationPath();
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly)) return;
+    const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    f.close();
+    if (!doc.isArray()) return;
+    // Also surface the signed-in email (decoded above) into the settings menu.
+    chat_->loadSnapshot(doc.array().toVariantList());
+}
+
+void AppController::saveConversation() {
+    const QString path = conversationPath();
+    if (path.isEmpty()) return;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
+    f.write(QJsonDocument(QJsonArray::fromVariantList(chat_->snapshot())).toJson(QJsonDocument::Compact));
+    f.close();
+}
+
+//------------------------------------------------------------------------------
+// Server-side history (the drawer)
+//------------------------------------------------------------------------------
+
+void AppController::loadHistory(int page, int pageSize) {
+    const QString path = QStringLiteral("/api/history?page=%1&page_size=%2")
+                             .arg(page).arg(pageSize);
+    api_->getEnvelope(path,
+        [this](const QJsonValue& data) {
+            emit historyLoaded(data.toObject().value("summaries").toArray().toVariantList());
+        },
+        [this](const QString& msg, int code) {
+            if (code == 401) { signOut(); return; }
+            emit historyError(msg);
+        });
+}
+
+void AppController::deleteHistory(const QString& sessionId) {
+    if (sessionId.isEmpty()) return;
+    QJsonObject body{{"session_id", sessionId}};
+    api_->postEnvelope("/api/history/delete", body, nullptr,
+        [](const QString&, int) {});
+}

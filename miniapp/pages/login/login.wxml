@@ -1,0 +1,17 @@
+<view class="login">
+  <view class="brand">
+    <view class="logo">M</view>
+    <view class="title">Mirobody</view>
+    <view class="subtitle">你的健康助手</view>
+  </view>
+
+  <button
+    class="btn-primary wx-login"
+    loading="{{loading}}"
+    disabled="{{loading}}"
+    bindtap="onWxLogin">
+    微信登录
+  </button>
+
+  <view class="hint">登录即表示同意用户协议与隐私政策</view>
+</view>

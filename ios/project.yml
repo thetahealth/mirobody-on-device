@@ -1,0 +1,133 @@
+# XcodeGen project spec for the Mirobody iOS host app.
+#
+# Mirobody.xcodeproj is committed, so you can just `open Mirobody.xcodeproj`.
+# This spec is kept in sync with it and is the reviewable source of truth: if the
+# project drifts or you'd rather regenerate it, run on macOS:
+#
+#     brew install xcodegen        # once
+#     cd ios && xcodegen generate  # rewrites Mirobody.xcodeproj
+#
+# Keep meaningful structural changes mirrored in both.
+#
+# Out of the box this builds as a PURE CLIENT: the app talks to a Mirobody
+# backend over HTTP (default http://localhost:8080, or any URL you set in-app).
+# No native artifacts are required to build and run it on the simulator/device.
+#
+# To embed the in-process C++ server (the iOS analogue of the Android JNI .so),
+# see the "Embedding mirobody_core" section in ios/README.md: build
+# mirobody.xcframework, drop it under ios/Frameworks/, and uncomment the
+# `dependencies` + `MIROBODY_EMBEDDED` lines below.
+
+name: Mirobody
+options:
+  bundleIdPrefix: ai.thetahealth
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    minVersion: 11.0.0
+    maxVersion: 12.0.0
+  # GFM markdown renderer for chat messages — the SwiftUI counterpart to Android's
+  # Markwon. (LaTeX math, which Markwon renders, is a known gap — see ios/README.md.)
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    minVersion: 2.3.0
+    maxVersion: 3.0.0
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""            # set to your Apple Developer Team ID for device builds
+    SWIFT_VERSION: "5.9"
+    # The bridging header pulls in the C API (src/mirobody.h). HEADER_SEARCH_PATHS
+    # lets it resolve even in pure-client builds (the symbols only link when the
+    # xcframework is added and MIROBODY_EMBEDDED is defined).
+    SWIFT_OBJC_BRIDGING_HEADER: Mirobody/Bridging/Mirobody-Bridging-Header.h
+    HEADER_SEARCH_PATHS:
+      - $(SRCROOT)/../src
+    # Uncomment to enable the embedded server (requires mirobody.xcframework):
+    # SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) MIROBODY_EMBEDDED
+
+targets:
+  Mirobody:
+    type: application
+    platform: iOS
+    sources:
+      - path: Mirobody
+        excludes:
+          - "Bridging/Mirobody-Bridging-Header.h"  # referenced via build setting, not compiled
+      - path: Mirobody/Bridging/Mirobody-Bridging-Header.h
+        buildPhase: none
+    info:
+      path: Mirobody/App/Info.plist
+      properties:
+        CFBundleDisplayName: Mirobody
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh, ja, ko, fr, de, ru, es]
+        # The app talks to user-configured HTTP backends (e.g. http://localhost:8080).
+        # ATS would block cleartext otherwise. Loopback is always allowed; arbitrary
+        # loads are enabled so self-hosted http:// backends work — tighten for the App
+        # Store if you only ship https backends.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
+        # Photo-library write is used by the chat image viewer's "save" action.
+        NSPhotoLibraryAddUsageDescription: Save chat images to your photo library.
+        # HealthKit on-device ingestion (Data/Health). Read-only; we never write
+        # back, so only the share-usage string is required.
+        NSHealthShareUsageDescription: Mirobody reads your activity, heart rate, sleep, and weight from Apple Health to add them to your health record.
+        # "Sign in with WeChat": let the OpenSDK detect/launch the WeChat app. Only
+        # meaningful once the WeChat SDK is bundled (see ios/README.md); harmless
+        # otherwise. When enabling WeChat, also add the WeChat appid URL scheme to
+        # CFBundleURLTypes below and set WechatAppID / WechatUniversalLink here.
+        LSApplicationQueriesSchemes:
+          - weixin
+          - weixinULAPI
+        # WechatAppID: wxXXXXXXXXXXXXXXXX
+        # WechatUniversalLink: https://your.domain/app/
+        # Google sign-in (Firebase web OAuth) redirects back via a custom URL scheme.
+        # Replace REVERSED_CLIENT_ID below with the value from GoogleService-Info.plist
+        # once an iOS app is registered in the Firebase console (see ios/README.md).
+        # When enabling WeChat, add its appid (e.g. wxXXXX...) as an extra scheme.
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - REVERSED_CLIENT_ID
+    # "Sign in with Apple" capability. XcodeGen writes the .entitlements file from
+    # these properties; re-run `xcodegen generate` after editing. Device builds
+    # also need a DEVELOPMENT_TEAM and the capability enabled on the App ID.
+    entitlements:
+      path: Mirobody/App/Mirobody.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
+        # HealthKit capability (Data/Health/HealthKitRepository). Device builds also
+        # need HealthKit enabled on the App ID in the Apple Developer portal.
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.thetahealth.mirobody
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseCore
+      - package: MarkdownUI
+        product: MarkdownUI
+      # --- Embedded server (uncomment after building mirobody.xcframework) ---
+      # - framework: Frameworks/mirobody.xcframework
+      #   embed: false

@@ -1,0 +1,88 @@
+/* 日本語 — ported from android/.../res/values-ja/strings.xml */
+
+"app_name" = "Mirobody";
+
+"common_back" = "戻る";
+"common_close" = "閉じる";
+"common_cancel" = "キャンセル";
+"common_done" = "完了";
+"common_save" = "保存";
+"common_retry" = "再試行";
+"common_settings" = "設定";
+"common_delete" = "削除";
+
+"email_title" = "ログイン";
+"email_subtitle" = "ワンタイムコードをメールで送信します。";
+"email_label" = "メールアドレス";
+"email_required" = "メールアドレスを入力してください";
+"email_send_code" = "コードを送信";
+"email_resend_in" = "%1$d 秒後に再送信";
+"auth_or" = "または";
+"auth_continue_with_google" = "Google で続行";
+"auth_continue_with_apple" = "Apple で続行";
+"auth_continue_with_wechat" = "WeChat で続行";
+"auth_continue_with_github" = "GitHub で続行";
+"auth_continue_with_x" = "X で続行";
+"auth_google_failed" = "Google サインインに失敗しました";
+
+"verify_title" = "コードを入力";
+"verify_sent_to" = "%1$@ に送信しました。";
+"verify_button" = "認証";
+"verify_resending" = "再送信中…";
+"verify_resend_code" = "コードを再送信";
+
+"chat_message_hint" = "メッセージ";
+"chat_history_cd" = "履歴";
+"chat_select_model" = "モデルを選択";
+"chat_no_providers" = "利用可能なモデルがありません";
+"chat_language" = "言語";
+"chat_font_size" = "文字サイズ";
+"chat_font_size_smaller" = "最小";
+"chat_font_size_small" = "小";
+"chat_font_size_normal" = "標準";
+"chat_font_size_large" = "大";
+"chat_font_size_larger" = "最大";
+"chat_backend" = "バックエンド";
+"chat_about" = "バージョン情報";
+"about_version" = "バージョン %1$@";
+"chat_sign_out" = "ログアウト";
+"chat_sign_out_confirm_title" = "ログアウトしますか？";
+"chat_sign_out_confirm_message" = "次回は再度ログインが必要です。";
+"chat_empty_title" = "会話を始めましょう";
+"chat_empty_subtitle" = "上でモデルを選んで、最初のメッセージを送信してください。";
+
+"history_title" = "履歴";
+"history_empty" = "履歴はまだありません。";
+"history_untitled" = "無題";
+"history_delete_confirm_title" = "この会話を削除しますか？";
+"history_delete_confirm_message" = "この会話は完全に削除されます。";
+"history_delete_cd" = "会話を削除";
+
+"baseurl_title" = "バックエンド URL";
+"baseurl_subtitle" = "このアプリを Mirobody バックエンドのインスタンスに接続します。";
+"baseurl_label" = "ベース URL";
+"baseurl_hint" = "Mirobody バックエンドの URL を設定します（内蔵サーバーは http://localhost:8080）。";
+"baseurl_invalid" = "有効な http(s) URL ではありません";
+
+"error_auth" = "セッションの有効期限が切れました。もう一度ログインしてください。";
+"error_network" = "ネットワークエラーです。接続を確認して再試行してください。";
+"error_http" = "サーバーが %1$d を返しました。";
+"error_api" = "リクエストに失敗しました（コード %1$d）%2$@";
+"error_parse" = "サーバーからの応答形式が予期しないものです。";
+"error_unknown" = "エラーが発生しました。";
+
+"chat_stats_cd" = "応答の詳細を表示";
+"chat_stats_title" = "応答の詳細";
+"chat_stats_model" = "モデル";
+"chat_stats_input_tokens" = "入力トークン";
+"chat_stats_output_tokens" = "出力トークン";
+"chat_stats_thought_tokens" = "思考トークン";
+"chat_stats_total_tokens" = "合計トークン";
+"chat_stats_total_cost" = "合計コスト";
+
+"chat_tool" = "ツール";
+"chat_tool_args" = "引数";
+"chat_tool_result" = "結果";
+"chat_image_saved" = "ギャラリーに保存しました";
+"chat_image_save_failed" = "保存に失敗しました";
+"chat_image_save_permission_denied" = "ストレージの権限が拒否されました";

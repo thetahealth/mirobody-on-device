@@ -1,0 +1,37 @@
+{
+  "name": "mirobody-electron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron desktop wrapper that embeds the mirobody C++ server in-process via koffi FFI and loads the web client.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "koffi": "^2.9.0"
+  },
+  "build": {
+    "appId": "ai.thetahealth.mirobody",
+    "productName": "Mirobody",
+    "files": [
+      "main.js",
+      "mirobody.js",
+      "preload.js"
+    ],
+    "extraResources": [
+      { "from": "../res/sql", "to": "res/sql" },
+      { "from": "../res/htdoc", "to": "res/htdoc" },
+      { "from": "../config.example.yml", "to": "config.example.yml" },
+      {
+        "from": "../build-shared",
+        "to": "native",
+        "filter": ["mirobody.dll", "libmirobody.so", "libmirobody.dylib"]
+      }
+    ]
+  }
+}

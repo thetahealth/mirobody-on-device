@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Q+ writes images via MediaStore without permission; only legacy devices need this. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <!-- The embedded C++ server runs in a foreground service (MirobodyService). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- On-device health (data/health, HealthConnectSource). Read-only access to
+         the four metrics we ingest; the user still grants each at runtime via the
+         Health Connect permission flow. HMS Health Kit (Huawei) uses OAuth scopes,
+         not these manifest permissions. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+
+    <!-- Android 11+ package visibility -->
+    <queries>
+        <!-- WeChat OpenSDK detect/launch for "Sign in with WeChat". -->
+        <package android:name="com.tencent.mm" />
+        <!-- Health Connect: lets HealthConnectClient resolve the provider app. -->
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
+
+    <application
+        android:name=".MirobodyApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Mirobody"
+        tools:targetApi="31">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.Mirobody">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".MirobodyService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Health Connect requires a permissions-rationale target before it will
+             grant access. Add ONE of these pointing at a screen that explains why
+             the app reads health data (required for Health Connect review):
+               * Android 14+: an <intent-filter> on an activity with
+                   action android.intent.action.VIEW_PERMISSION_USAGE
+                   category android.intent.category.HEALTH_PERMISSIONS
+               * Android 13-: an activity/alias with intent-filter
+                   action androidx.health.connect.action.SHOW_PERMISSIONS_RATIONALE
+             Left as a note rather than hijacking MainActivity's launch filter. -->
+
+        <!-- HMS Health Kit (Huawei): the agconnect plugin injects the app id from
+             agconnect-services.json. When wiring HMS, add:
+               <meta-data android:name="com.huawei.hms.client.appid"
+                          android:value="appid=YOUR_HUAWEI_APP_ID" /> -->
+
+
+        <!-- WeChat OpenSDK callback. Must be exported and located at
+             <applicationId>.wxapi.WXEntryActivity for WeChat to launch it. -->
+        <activity
+            android:name=".wxapi.WXEntryActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="ai.thetahealth.mirobody"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+    </application>
+
+</manifest>

@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "555773021699",
+    "project_id": "mirobody-81000",
+    "storage_bucket": "mirobody-81000.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:555773021699:android:17c4abde28d50fbec08836",
+        "android_client_info": {
+          "package_name": "ai.thetahealth.mirobody"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "555773021699-l3ch8fm22m50l09od6ubb61eisi8nbpp.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCGuHqukiVwiClH0b1HYpW4I1bGdK9O-1w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "555773021699-l3ch8fm22m50l09od6ubb61eisi8nbpp.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

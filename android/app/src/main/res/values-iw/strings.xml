@@ -1,0 +1,98 @@
+<resources>
+    <string name="app_name">Mirobody</string>
+
+    <!-- Common -->
+    <string name="common_back">חזרה</string>
+    <string name="common_close">סגירה</string>
+    <string name="common_cancel">ביטול</string>
+    <string name="common_done">סיום</string>
+    <string name="common_save">שמירה</string>
+    <string name="common_retry">נסה שוב</string>
+    <string name="common_settings">הגדרות</string>
+    <string name="common_delete">מחיקה</string>
+
+    <!-- Email login -->
+    <string name="email_title">התחברות</string>
+    <string name="email_subtitle">נשלח לך קוד חד-פעמי באימייל.</string>
+    <string name="email_label">אימייל</string>
+    <string name="email_required">נדרש אימייל</string>
+    <string name="email_send_code">שליחת קוד</string>
+    <string name="email_resend_in">שליחה מחדש בעוד %1$d שניות</string>
+    <string name="auth_or">או</string>
+    <string name="auth_continue_with_google">המשך עם Google</string>
+    <string name="auth_continue_with_apple">המשך עם Apple</string>
+    <string name="auth_continue_with_wechat">המשך עם WeChat</string>
+    <string name="auth_continue_with_github">המשך עם GitHub</string>
+    <string name="auth_continue_with_x">המשך עם X</string>
+    <string name="auth_google_failed">ההתחברות עם Google נכשלה</string>
+
+    <!-- Verify -->
+    <string name="verify_title">הזן קוד</string>
+    <string name="verify_sent_to">נשלח אל %1$s.</string>
+    <string name="verify_button">אימות</string>
+    <string name="verify_resending">שולח מחדש…</string>
+    <string name="verify_resend_code">שליחת קוד מחדש</string>
+
+    <!-- Chat -->
+    <string name="chat_message_hint">הודעה</string>
+    <string name="chat_history_cd">היסטוריה</string>
+    <string name="chat_select_model">בחר מודל</string>
+    <string name="chat_no_providers">לא נטענו ספקים</string>
+    <string name="chat_language">שפה</string>
+    <string name="chat_font_size">גודל גופן</string>
+    <string name="chat_font_size_smaller">קטן מאוד</string>
+    <string name="chat_font_size_small">קטן</string>
+    <string name="chat_font_size_normal">רגיל</string>
+    <string name="chat_font_size_large">גדול</string>
+    <string name="chat_font_size_larger">גדול מאוד</string>
+    <string name="chat_backend">שרת</string>
+    <string name="chat_about">אודות</string>
+    <string name="about_version">גרסה %1$s</string>
+    <string name="chat_sign_out">התנתקות</string>
+    <string name="chat_sign_out_confirm_title">להתנתק?</string>
+    <string name="chat_sign_out_confirm_message">יהיה עליך להתחבר שוב.</string>
+    <string name="chat_empty_title">התחל שיחה</string>
+    <string name="chat_empty_subtitle">בחר מודל למעלה ושלח את ההודעה הראשונה שלך.</string>
+
+    <!-- History -->
+    <string name="history_title">היסטוריה</string>
+    <string name="history_empty">אין היסטוריה עדיין.</string>
+    <string name="history_untitled">ללא כותרת</string>
+    <string name="history_delete_confirm_title">למחוק את השיחה?</string>
+    <string name="history_delete_confirm_message">שיחה זו תימחק לצמיתות.</string>
+    <string name="history_delete_cd">מחיקת שיחה</string>
+
+    <!-- Backend URL -->
+    <string name="baseurl_title">כתובת השרת</string>
+    <string name="baseurl_subtitle">הפנה אפליקציה זו למופע שרת Mirobody.</string>
+    <string name="baseurl_label">כתובת בסיס</string>
+    <string name="baseurl_hint">השתמש ב-http://10.0.2.2:18080 כדי להגיע לשרת במחשב המארח מתוך אמולטור Android.</string>
+    <string name="baseurl_invalid">כתובת http(s) לא תקינה</string>
+
+    <!-- Errors -->
+    <string name="error_auth">ההפעלה פגה. אנא התחבר שוב.</string>
+    <string name="error_network">שגיאת רשת. בדוק את החיבור ונסה שוב.</string>
+    <string name="error_http">השרת החזיר %1$d.</string>
+    <string name="error_api">הבקשה נכשלה (קוד %1$d)%2$s</string>
+    <string name="error_parse">תגובה לא צפויה מהשרת.</string>
+    <string name="error_unknown">משהו השתבש.</string>
+
+    <!-- Chat response stats -->
+    <string name="chat_stats_cd">הצג פרטי תשובה</string>
+    <string name="chat_copy_reply">העתק תשובה</string>
+    <string name="chat_stats_title">פרטי התשובה</string>
+    <string name="chat_stats_model">מודל</string>
+    <string name="chat_stats_input_tokens">אסימוני קלט</string>
+    <string name="chat_stats_output_tokens">אסימוני פלט</string>
+    <string name="chat_stats_thought_tokens">אסימוני חשיבה</string>
+    <string name="chat_stats_total_tokens">סך האסימונים</string>
+    <string name="chat_stats_total_cost">עלות כוללת</string>
+
+    <!-- Tool calls / image viewer -->
+    <string name="chat_tool">כלי</string>
+    <string name="chat_tool_args">ארגומנטים</string>
+    <string name="chat_tool_result">תוצאה</string>
+    <string name="chat_image_saved">נשמר לגלריה</string>
+    <string name="chat_image_save_failed">השמירה נכשלה</string>
+    <string name="chat_image_save_permission_denied">הרשאת אחסון נדחתה</string>
+</resources>

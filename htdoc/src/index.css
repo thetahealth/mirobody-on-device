@@ -1,0 +1,78 @@
+/* Global bits the client can't express through inline element styles: the body
+   reset/font, input placeholder color, and the streaming-cursor keyframes.
+   Bundled (served from same origin) so a strict style-src 'self' CSP allows it;
+   a runtime-injected <style> would be blocked. The rest of the UI is styled
+   with inline element.style, which the CSP does not restrict. */
+
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: #f2efe9;           /* warm cream background (Theta Health) */
+    color: #1a1c1e;                /* onSurface */
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: #6b6e74;                /* readable medium gray on the cream background */
+    opacity: 1;                    /* Firefox dims placeholders by default; undo it */
+}
+
+@keyframes mb-blink {
+    to {
+        visibility: hidden;
+    }
+}
+
+/* Upload-progress spinner in the chat status block (see chat.js). */
+@keyframes mb-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Rendered Markdown in assistant chat bubbles (see markdown.js). Colors track
+   the M3 palette used inline elsewhere. Bundled so it's allowed under a strict
+   style-src 'self'. */
+.md > :first-child { margin-top: 0; }
+.md > :last-child  { margin-bottom: 0; }
+.md p              { margin: 0.5em 0; }
+.md h1, .md h2, .md h3, .md h4 { margin: 0.6em 0 0.3em; line-height: 1.3; }
+.md ul, .md ol     { margin: 0.5em 0; padding-inline-start: 1.4em; }
+.md li             { margin: 0.15em 0; }
+.md a              { color: #1e3a6b; }
+.md img            { max-width: 100%; }
+/* SVG the assistant emits (inline or via a ```svg fence): never overflow the
+   bubble; keep KaTeX's own SVG (rule lines, etc.) untouched. */
+.md > svg, .md p > svg, .md svg.mb-svg { max-width: 100%; height: auto; }
+.md hr             { border: none; border-top: 1px solid #ddd6c9; margin: 0.8em 0; }
+.md blockquote {
+    margin: 0.5em 0;
+    padding-inline-start: 12px;
+    border-inline-start: 3px solid #ddd6c9;
+    color: #44474a;
+}
+.md code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+}
+.md :not(pre) > code {
+    background: #efe9dd;
+    padding: 1px 5px;
+    border-radius: 4px;
+}
+.md pre {
+    background: #efe9dd;
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 0.6em 0;
+    /* Code is LTR even when the UI is RTL: keep blocks left-aligned and ordered. */
+    direction: ltr;
+    text-align: left;
+}
+.md pre code { background: none; padding: 0; }
+.md table { border-collapse: collapse; margin: 0.5em 0; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid #ddd6c9; padding: 4px 8px; }
+.md th { background: #efe9dd; }
+.md .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }

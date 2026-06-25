@@ -1,0 +1,90 @@
+<resources>
+    <string name="app_name">Mirobody</string>
+
+    <string name="common_back">뒤로</string>
+    <string name="common_close">닫기</string>
+    <string name="common_cancel">취소</string>
+    <string name="common_done">완료</string>
+    <string name="common_save">저장</string>
+    <string name="common_retry">다시 시도</string>
+    <string name="common_settings">설정</string>
+    <string name="common_delete">삭제</string>
+
+    <string name="email_title">로그인</string>
+    <string name="email_subtitle">일회용 코드를 이메일로 보내드립니다.</string>
+    <string name="email_label">이메일</string>
+    <string name="email_required">이메일을 입력하세요</string>
+    <string name="email_send_code">코드 보내기</string>
+    <string name="email_resend_in">%1$d초 후 다시 보내기</string>
+
+    <string name="verify_title">코드 입력</string>
+    <string name="verify_sent_to">%1$s 로 보냈습니다.</string>
+    <string name="verify_button">확인</string>
+    <string name="verify_resending">재전송 중…</string>
+    <string name="verify_resend_code">코드 다시 보내기</string>
+
+    <string name="chat_message_hint">메시지</string>
+    <string name="chat_history_cd">기록</string>
+    <string name="chat_select_model">모델 선택</string>
+    <string name="chat_no_providers">사용 가능한 모델이 없습니다</string>
+    <string name="chat_language">언어</string>
+    <string name="chat_font_size">글자 크기</string>
+    <string name="chat_font_size_smaller">아주 작게</string>
+    <string name="chat_font_size_small">작게</string>
+    <string name="chat_font_size_normal">보통</string>
+    <string name="chat_font_size_large">크게</string>
+    <string name="chat_font_size_larger">아주 크게</string>
+    <string name="chat_backend">백엔드</string>
+    <string name="chat_about">정보</string>
+    <string name="about_version">버전 %1$s</string>
+    <string name="chat_sign_out">로그아웃</string>
+    <string name="chat_sign_out_confirm_title">로그아웃하시겠습니까?</string>
+    <string name="chat_sign_out_confirm_message">다음에 다시 로그인해야 합니다.</string>
+    <string name="chat_empty_title">대화 시작하기</string>
+    <string name="chat_empty_subtitle">위에서 모델을 선택한 후 첫 메시지를 보내세요.</string>
+
+    <string name="history_title">기록</string>
+    <string name="history_empty">기록이 없습니다.</string>
+    <string name="history_untitled">제목 없음</string>
+    <string name="history_delete_confirm_title">이 대화를 삭제하시겠습니까?</string>
+    <string name="history_delete_confirm_message">이 대화는 영구적으로 삭제됩니다.</string>
+    <string name="history_delete_cd">대화 삭제</string>
+
+    <string name="baseurl_title">백엔드 URL</string>
+    <string name="baseurl_subtitle">이 앱을 Mirobody 백엔드 인스턴스로 연결하세요.</string>
+    <string name="baseurl_label">기본 URL</string>
+    <string name="baseurl_hint">Android 에뮬레이터에서 호스트 머신의 백엔드에 접근하려면 http://10.0.2.2:18080 을 사용하세요.</string>
+    <string name="baseurl_invalid">유효한 http(s) URL이 아닙니다</string>
+
+    <string name="error_auth">세션이 만료되었습니다. 다시 로그인해 주세요.</string>
+    <string name="error_network">네트워크 오류입니다. 연결을 확인하고 다시 시도하세요.</string>
+    <string name="error_http">서버가 %1$d을(를) 반환했습니다.</string>
+    <string name="error_api">요청 실패 (코드 %1$d) %2$s</string>
+    <string name="error_parse">서버 응답 형식이 올바르지 않습니다.</string>
+    <string name="error_unknown">문제가 발생했습니다.</string>
+
+    <string name="auth_or">또는</string>
+    <string name="auth_continue_with_google">Google로 계속</string>
+    <string name="auth_continue_with_apple">Apple로 계속</string>
+    <string name="auth_continue_with_wechat">WeChat로 계속</string>
+    <string name="auth_continue_with_github">GitHub로 계속</string>
+    <string name="auth_continue_with_x">X로 계속</string>
+    <string name="auth_google_failed">Google 로그인 실패</string>
+
+    <string name="chat_stats_cd">응답 세부정보 보기</string>
+    <string name="chat_copy_reply">답변 복사</string>
+    <string name="chat_stats_title">응답 세부정보</string>
+    <string name="chat_stats_model">모델</string>
+    <string name="chat_stats_input_tokens">입력 토큰</string>
+    <string name="chat_stats_output_tokens">출력 토큰</string>
+    <string name="chat_stats_thought_tokens">사고 토큰</string>
+    <string name="chat_stats_total_tokens">전체 토큰</string>
+    <string name="chat_stats_total_cost">총 비용</string>
+
+    <string name="chat_tool">도구</string>
+    <string name="chat_tool_args">인수</string>
+    <string name="chat_tool_result">결과</string>
+    <string name="chat_image_saved">갤러리에 저장됨</string>
+    <string name="chat_image_save_failed">저장 실패</string>
+    <string name="chat_image_save_permission_denied">저장소 권한이 거부되었습니다</string>
+</resources>

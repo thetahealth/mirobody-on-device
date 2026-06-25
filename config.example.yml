@@ -1,0 +1,916 @@
+#-----------------------------------------------------------------------------
+# Logging Configuration.
+
+# Log level (case insensitive):
+#   'debug', 'info', 'warning', 'error', or 'critical/fatal'.
+LOG_LEVEL: 'DEBUG'
+
+#-----------------------------------------------------------------------------
+# HTTP Server Configuration.
+
+HTTP_HOST: '0.0.0.0'
+HTTP_PORT: 8080
+# HTTP_URI_PREFIX: ''
+
+# Extra headers added to every HTTP response, and used to answer CORS preflight
+# OPTIONS requests. Uncomment the HTTP_HEADERS block below to enable CORS for
+# browser clients.
+#
+# Notes:
+#   - Allow-Origin '*' permits any origin. Auth here is a bearer token in the
+#     Authorization header (not cookies), so credentials mode is not needed and
+#     '*' is fine. Do NOT add Access-Control-Allow-Credentials: 'true' together
+#     with '*' — browsers reject that combo; for credentials use a fixed origin.
+#   - Allow-Headers lists the request headers the browser may send: Authorization
+#     plus the custom X-Timezone header the frontend sets.
+#   - Max-Age is how long (seconds) the browser may cache the preflight result.
+
+# HTTP_HEADERS:
+#   Access-Control-Allow-Origin: '*'
+#   Access-Control-Allow-Methods: 'GET, POST, PUT, DELETE, OPTIONS'
+#   Access-Control-Allow-Headers: 'Authorization, Content-Type, X-Timezone'
+#   Access-Control-Max-Age: '86400'
+
+# Static files served for GET requests that match no API route. Two forms:
+#   - a bare string mounts ONE frontend at '/' (the common case):
+#       HTTP_ROOT: 'res/htdoc'
+#   - a {mount-path: directory} map serves SEVERAL frontends, each at its own
+#     URL prefix. Mount paths are matched most-specific-first, so a deeper mount
+#     wins over the '/' catch-all, and API routes always win over both. Useful
+#     for hosting a second app (admin panel, dashboard, …) beside the main one:
+#       HTTP_ROOT:
+#         '/':          'res/htdoc'
+#         '/dashboard': 'res/dashboard'
+# A request for a mount root (or any path ending in '/') serves its index.html;
+# the bare mount path ('/dashboard') 302-redirects to the slashed form so the
+# frontend's relative asset URLs resolve correctly. Relative directories are
+# resolved against the working directory. Setting HTTP_ROOT via an env var uses
+# the bare-string form; pass the map as a JSON object string for several mounts.
+# Empty disables static serving (unmatched GETs 404).
+HTTP_ROOT: 'res/htdoc'
+
+#-----------------------------------------------------------------------------
+# Redis Configuration.
+#
+# Backs the cache layer (src/cache). OPTIONAL: leave REDIS_HOST empty and the
+# server falls back to an in-process in-memory cache (no Redis needed for local
+# / single-instance runs). Set REDIS_HOST and the server connects to Redis
+# instead — required when multiple instances must share cache state. A bad
+# host/port/password/TLS setting fails startup rather than silently degrading.
+
+# Redis server hostname or IP. EMPTY (the default) selects the in-memory
+# backend; any non-empty value switches to the Redis backend.
+# REDIS_HOST: ''
+
+# Redis server port. Default 6379.
+# REDIS_PORT: 6379
+
+# Logical database number, passed to SELECT. 0 (the default) issues no SELECT.
+# REDIS_DB: 0
+
+# Password for AUTH. Empty (the default) skips AUTH; set it for a Redis that
+# requires a password (sent over TLS first when REDIS_SSL is on).
+# REDIS_PASSWORD: ''
+
+# Connect over TLS. Requires a build linked against hiredis_ssl
+# (MIROBODY_HAS_HIREDIS_SSL); with TLS=true on a build without it, startup
+# fails. CA trust uses OpenSSL's default verify paths (the system CA bundle);
+# no custom CA / client-cert key is exposed here.
+# REDIS_SSL: false
+
+# Verify the server certificate's hostname (drives SNI + CN/SAN matching).
+# false (the default) skips the hostname check but still validates the chain
+# per REDIS_SSL_CERT_REQS. Only meaningful when REDIS_SSL is true.
+# REDIS_SSL_CHECK_HOSTNAME: false
+
+# Certificate verification mode (redis-py style): 'none', 'optional', or
+# 'required'. Unset/empty defaults to 'required' (full verification — secure by
+# default). Only meaningful when REDIS_SSL is true.
+# REDIS_SSL_CERT_REQS: ''
+
+
+#-----------------------------------------------------------------------------
+# Object Storage Configuration.
+#
+# Four backends are available (src/storage/*); all compile into every build and
+# are selected at runtime by which keys are set. Used to store generated assets
+# (e.g. chart images) and user uploads, and hand back a URL. Access at runtime
+# via cfg.s3() / cfg.oss() / cfg.azure_blob() / cfg.local_storage(); call
+# .configured() before .open(). Precedence: S3 > OSS > Azure Blob > local.
+#
+# A cloud backend takes precedence; the local filesystem is the FALLBACK. When a
+# cloud backend is configured, the LocalStorage HTTP mount stands down (the
+# objects live in the cloud, not on this server's disk), so the LOCAL_STORAGE_*
+# keys below apply only when no cloud backend is set.
+#
+# Most non-AWS clouds are S3-compatible -- use the S3 block with S3_ENDPOINT, no
+# separate backend needed: Cloudflare R2, Backblaze B2, MinIO / Ceph, DO Spaces,
+# Wasabi, Tencent COS, Huawei OBS, Oracle OCI, and Google Cloud Storage (XML API
+# + HMAC interop keys, S3_ENDPOINT: 'https://storage.googleapis.com'). Only Azure
+# Blob is not S3-compatible and has its own block (AZURE_BLOB_*).
+
+# AWS S3 (or any S3-compatible store, e.g. MinIO / Cloudflare R2). Signed with
+# AWS Signature Version 4. With no S3_ENDPOINT, requests go to the real AWS
+# virtual-hosted host "<S3_BUCKET>.s3.<S3_REGION>.amazonaws.com"; set S3_ENDPOINT
+# to target an S3-compatible service instead (path-style: bucket in the path).
+# S3_KEY:      ''        # AWS access key id
+# S3_TOKEN:    ''        # AWS secret access key
+# S3_REGION:   ''        # e.g. us-east-1
+# S3_BUCKET:   ''
+# S3_PREFIX:   ''        # key prefix prepended to every object (empty => 'mirobody')
+# S3_CDN:      ''        # CDN host for public_url() (optional)
+# S3_ENDPOINT: ''        # S3-compatible host override (optional; empty => AWS)
+
+# Alibaba Cloud OSS. Signed with the classic HMAC-SHA1 scheme. Multiple OSS
+# instances are supported by appending an upper-case "_<NAME>" suffix to every
+# key (mirroring the PostgreSQL suffix pattern below) and reading them via
+# cfg.oss("name"); the unsuffixed keys below are cfg.oss().
+# ALI_OSS_ACCESS_KEY:  ''                              # access key id
+# ALI_OSS_SECRET_KEY:  ''                              # access key secret
+# ALI_OSS_ENDPOINT:    'oss-cn-hangzhou.aliyuncs.com'  # region host
+# ALI_OSS_BUCKET_NAME: ''
+# ALI_OSS_PREFIX:      ''                              # key prefix (empty => 'mirobody')
+# ALI_OSS_DOMAIN:      ''                              # custom domain for public_url() (optional)
+
+# Azure Blob Storage. Signed with Shared Key (HMAC-SHA256); presigned reads use a
+# service SAS. AZURE_BLOB_KEY is the account key as the portal shows it (base64).
+# The blob host is "<account>.blob.<endpoint_suffix>".
+# AZURE_BLOB_ACCOUNT:         ''                   # storage account name
+# AZURE_BLOB_KEY:             ''                   # account key (base64)
+# AZURE_BLOB_CONTAINER:       ''
+# AZURE_BLOB_PREFIX:          ''                   # key prefix (empty => 'mirobody')
+# AZURE_BLOB_ENDPOINT_SUFFIX: 'core.windows.net'   # override for sovereign clouds
+# AZURE_BLOB_CDN:             ''                   # custom domain for public_url() (optional)
+
+# Local filesystem — the no-credentials backend for self-hosted / on-device
+# runs. Objects are written as files under LOCAL_STORAGE_DIR (which need NOT
+# live under HTTP_ROOT — keeping uploads out of the web root avoids exposing
+# them as ordinary static assets).
+#
+#   - LOCAL_STORAGE_PREFIX is the object-key prefix, same contract as S3_PREFIX /
+#     ALI_OSS_PREFIX: prepended to every key internally, so callers pass
+#     prefix-agnostic keys and objects land under LOCAL_STORAGE_DIR/<prefix>/.
+#   - LOCAL_STORAGE_URL_PREFIX is the URL path THIS server serves objects at — a
+#     URL concern only, NOT part of the stored path. With '/files',
+#     put_object("chart.png") stores LOCAL_STORAGE_DIR/chart.png (flat under the
+#     dir, or under the key prefix when one is set) and serves it at
+#     /files/chart.png (the mount strips /files to find the file). Leave it empty
+#     and this server does not serve the objects (public_url() returns a file://
+#     URL unless a base URL is set).
+#   - LOCAL_STORAGE_BASE_URL is the scheme://host the public URL is built on.
+#     Leave it empty for a relative same-origin URL (/files/chart.png). Set it to
+#     an absolute origin for absolute URLs. URL_PREFIX is appended automatically,
+#     so give the HOST ONLY here — do NOT repeat the prefix: with URL_PREFIX
+#     '/files', BASE_URL 'https://host' yields https://host/files/<key>. (A
+#     trailing '/files' would double it to /files/files.)
+#
+# Set LOCAL_STORAGE_SECRET and presigned_url() appends a time-limited
+# "?expires=<unix>&sig=<hmac>" the mount verifies before serving — a missing /
+# expired / forged signature gets 403. The signature is over the object key, so
+# it survives a CDN forwarding the query to origin. With no secret, objects under
+# the mount are served unconditionally and presigned_url() equals public_url().
+#
+# Same-origin example: URL_PREFIX '/files', BASE_URL '' -> /files/<key>
+# Absolute example:    URL_PREFIX '/files', BASE_URL 'https://cdn.example.com'
+#                      -> https://cdn.example.com/files/<key>, origin serves /files/<key>
+LOCAL_STORAGE_DIR:        '_local/storage'
+# LOCAL_STORAGE_PREFIX:   ''                                  # key prefix prepended to every object (empty => 'mirobody')
+LOCAL_STORAGE_URL_PREFIX: '/files'                            # URL serve path (optional; not on disk)
+LOCAL_STORAGE_SECRET:     'REPLACE_THIS_VALUE_IN_PRODUCTION'  # HMAC key (optional; >=16 non-blank chars when URL_PREFIX set)
+# LOCAL_STORAGE_BASE_URL: ''                                  # public prefix; absolute for CDN (optional)
+
+# Encryption at rest for user uploads (optional). Set FILE_ENCRYPTION_KEY to one
+# or more 44-char URL-safe-base64 Fernet keys and every chat upload and its
+# .meta / .trans sidecars are stored Fernet-encrypted: a leaked S3/OSS/local
+# credential then yields ciphertext, not file contents, because the keys live
+# here — not with the storage secret. With encryption on, file bytes are served
+# only THROUGH this server (decrypted in memory) at FILE_URL_PREFIX — a client
+# can't decrypt bucket bytes itself, so bucket-direct / LocalStorage-disk URLs
+# would be useless, and the disk mount stands down. FILE_URL_BASE is an optional
+# absolute origin for those URLs (empty => relative same-origin). Empty =>
+# disabled: uploads stored in the clear, exactly as before. Generate keys with
+# the Fernet helper (same format as CONFIG_ENCRYPTION_KEY / Fernet.generate_key()).
+#
+# Key rotation (zero downtime): FILE_ENCRYPTION_KEY is a LIST — the LAST key
+# encrypts new writes, ALL keys are tried on read. Rotate by APPENDING a new key
+# (old objects keep decrypting under their key); once nothing is still encrypted
+# under an old key, drop it. Accepts a YAML sequence or a comma-separated scalar.
+#
+# FILE_KEY_SEED is REQUIRED when encryption is on: a stable, separate secret that
+# seeds object-KEY paths, kept apart from the rotatable encryption keys so
+# rotating them leaves every path unchanged. It must NEVER change once uploads
+# exist (changing it re-paths and orphans them). The server refuses to start on a
+# changed seed, or on a key list that shares nothing with what existing uploads
+# used (a non-secret fingerprint is recorded in a '.file-encryption-check' marker).
+# FILE_ENCRYPTION_KEY:                                        # list; last encrypts, all decrypt
+#   - ''                                                      # newest key
+# FILE_KEY_SEED:       ''                                     # stable seed; required when encryption on; never change
+# FILE_URL_PREFIX:     '/files'                               # app serve path for decrypted bytes
+# FILE_URL_BASE:       ''                                     # absolute origin for read URLs (optional)
+
+#-----------------------------------------------------------------------------
+# Database Configuration.
+#
+# Exactly one backend is linked per build, chosen at compile time via the
+# MIROBODY_DATABASE_BACKEND CMake option (SQLITE / DUCKDB / POSTGRESQL /
+# POSTGRESQL_LEGACY / MYSQL / CLICKHOUSE). Only the keys for the backend you
+# built are read; the rest are ignored. PostgreSQL is configured above; the
+# blocks below cover the others. Uncomment the one matching your build.
+#
+# Configuring a backend is TWO steps: (1) pick it when you BUILD (CMake,
+# compile-time — baked into build/CMakeCache.txt), then (2) set that backend's
+# connection keys HERE (runtime). Switching the build choice later needs a
+# reconfigure, not just editing this file.
+#
+# Build with the build.cmd / build.sh wrappers — they set up the compiler env,
+# the vcpkg toolchain and Ninja (a bare `cmake -B build` does not). The wrapper
+# reads MIROBODY_DATABASE_BACKEND and forwards it to CMake only on a FRESH
+# configure, so use `clean` when CHANGING an already-built tree (the first build
+# needs no `clean`).
+#
+#   Example A — PostgreSQL (the desktop default):
+#     1. build:  MIROBODY_DATABASE_BACKEND=POSTGRESQL_LEGACY ./build.sh clean          (Linux/macOS)
+#                set "MIROBODY_DATABASE_BACKEND=POSTGRESQL_LEGACY" && build.cmd clean   (Windows)
+#     2. config: set PG_HOST / PG_PORT / PG_USER / PG_PASSWORD / PG_DBNAME below.
+#
+#   Example B — SQLite (zero-dependency local / tests):
+#     1. build:  MIROBODY_DATABASE_BACKEND=SQLITE ./build.sh clean                     (Linux/macOS)
+#                set "MIROBODY_DATABASE_BACKEND=SQLITE" && build.cmd clean              (Windows)
+#     2. config: SQLITE_PATH: mirobody.sqlite      # a real file (not :memory:)
+#
+# (Advanced: reconfigure an existing build/ in place, no full rebuild, with
+#  `cmake -B build -DMIROBODY_DATABASE_BACKEND=…` && `cmake --build build` — reuses
+#  the cached toolchain; on Windows run it from a VS Developer shell.)
+#
+# Check what a binary was actually built with:
+#     findstr MIROBODY_DATABASE_BACKEND build\CMakeCache.txt    (Windows)
+#     grep    MIROBODY_DATABASE_BACKEND build/CMakeCache.txt    (Linux/macOS)
+#
+# Tables are created on first boot by the schema migration — but that step is
+# SKIPPED unless the ENV var is set to a NON-managed value (anything other than
+# test / gray / prod; note an UNSET ENV also skips). For a fresh local DB run
+# e.g. `ENV=local`. See src/database/README.md for the full backend guide.
+
+
+# The keys below configure the default (unsuffixed) PostgreSQL instance,
+# returned by `cfg.postgresql()` with no argument.
+#
+# Additional instances (e.g. a separate reporting / analytics DB) use a
+# suffix: append `_<NAME>` to each key. The suffix is upper-cased on
+# lookup, so the YAML key must already be upper case. Access at runtime
+# via `cfg.postgresql("name")`.
+#
+#   PG_HOST_REPORTING:           'reports.example.com'
+#   PG_PORT_REPORTING:           5432
+#   PG_USER_REPORTING:           'readonly'
+#   PG_PASSWORD_REPORTING:       '...'
+#   PG_DBNAME_REPORTING:         'metrics'
+#   PG_SCHEMA_REPORTING:         'public' 
+#   PG_MIN_CONNECTION_REPORTING: 1
+#   PG_MAX_CONNECTION_REPORTING: 5
+#
+# `PG_ENCRYPTION_KEY` is intentionally NOT suffixed - one key encrypts
+# every PG instance's column-level secrets across the deployment.
+
+# Prefer the IPv4 literal 127.0.0.1 over the name `localhost` for a local
+# Postgres. On Windows, `localhost` resolves to IPv6 `::1` first and only then
+# IPv4; when Postgres is reached over IPv4 only (Docker Desktop / WSL2 port
+# forwarding, which silently drops `::1` SYNs rather than refusing them), each
+# connection wastes the ~21s Windows TCP connect timeout on the dead `::1`
+# before falling back. The pool opens PG_MIN_CONNECTION connections serially at
+# startup, so that delay is multiplied (e.g. 5 x ~21s ≈ 100s of startup hang).
+# Using 127.0.0.1 skips IPv6 resolution entirely. Use a hostname only when the
+# server genuinely listens on IPv6 or is remote.
+PG_HOST: '127.0.0.1'
+PG_PORT: 5432
+PG_USER: 'postgres'
+PG_PASSWORD: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+PG_DBNAME: 'mirobody'
+PG_SCHEMA: 'public'
+PG_ENCRYPTION_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+PG_MIN_CONNECTION: 5
+PG_MAX_CONNECTION: 20
+
+
+# SQLite (MIROBODY_DATABASE_BACKEND=SQLITE). File path for the database; empty
+# opens an in-memory DB, but migration and the server use separate connections,
+# so a real file is required for them to share schema/data.
+# SQLITE_PATH: 'mirobody.sqlite'
+
+
+# DuckDB (MIROBODY_DATABASE_BACKEND=DUCKDB). Same in-memory caveat as SQLite.
+# DUCKDB_PATH: 'mirobody.duckdb'
+
+
+# MySQL (MIROBODY_DATABASE_BACKEND=MYSQL).
+# MYSQL_HOST: '127.0.0.1'
+# MYSQL_PORT: 3306
+# MYSQL_USER: 'mirobody'
+# MYSQL_PASSWORD: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+# MYSQL_DBNAME: 'mirobody'
+# MYSQL_ENCRYPTION_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+# MYSQL_MIN_CONNECTION: 5
+# MYSQL_MAX_CONNECTION: 20
+
+
+# ClickHouse (MIROBODY_DATABASE_BACKEND=CLICKHOUSE). Stub backend today — these
+# keys are parsed but the client is not implemented yet.
+# CLICKHOUSE_HOST: '127.0.0.1'
+# CLICKHOUSE_PORT: 9000
+# CLICKHOUSE_USER: 'default'
+# CLICKHOUSE_PASSWORD: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+# CLICKHOUSE_DBNAME: 'mirobody'
+# CLICKHOUSE_ENCRYPTION_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+# CLICKHOUSE_MIN_CONNECTION: 5
+# CLICKHOUSE_MAX_CONNECTION: 20
+
+#-----------------------------------------------------------------------------
+# User login.
+
+# Predefined email addresses and verification codes for testing/demo
+# purposes. Uncomment the block to enable instant demo login: each entry
+# maps an email to the verification code that acts as its password.
+EMAIL_PREDEFINE_CODES:
+  demo1@mirobody.ai: '777777'
+  demo2@mirobody.ai: '777777'
+  demo3@mirobody.ai: '777777'
+
+# Predefined verification codes by *domain* (the part after '@'), for when a
+# whole example.com domain should share one code instead of listing every address.
+# Any address whose domain matches a key — and that isn't already listed in
+# EMAIL_PREDEFINE_CODES above — logs in with the mapped code. Exact addresses
+# take precedence over domain matches. Example: "example.com" lets demo0@example.com,
+# demo1@example.com, ... all log in with 777777.
+# EMAIL_PREDEFINE_DOMAIN_CODES:
+#   example.com: '777777'
+
+
+# Verification-code email delivery (see src/user/email.*). When configured, the
+# server emails a 6-digit code to an address and checks what the user sends back;
+# without these keys only the EMAIL_PREDEFINE_CODES above can log in.
+#
+# The transport is auto-selected from what you set:
+#   - Direct SMTP:  EMAIL_SMTP_HOST + EMAIL_SMTP_USER + EMAIL_SMTP_PASS + EMAIL_FROM.
+#   - Mandrill API: point EMAIL_SMTP_HOST at an *.mandrillapp.com host and put the
+#                   Mandrill API key in EMAIL_SMTP_PASS, plus EMAIL_TEMPLATE + EMAIL_FROM.
+# Addresses listed in EMAIL_PREDEFINE_CODES skip delivery entirely.
+
+# SMTP server hostname, e.g. smtp.example.com (or smtp.mandrillapp.com to send
+# through the Mandrill HTTP API instead of raw SMTP).
+# EMAIL_SMTP_HOST: ''
+
+# SMTP port. 465 => implicit TLS (SMTPS); 587 or any other => STARTTLS. Default 465.
+# EMAIL_SMTP_PORT: 465
+
+# SMTP login user (often identical to EMAIL_FROM).
+# EMAIL_SMTP_USER: ''
+
+# SMTP password. In Mandrill mode this is the Mandrill API key, not a password.
+# EMAIL_SMTP_PASS: ''
+
+# Address the code is sent from. Required for any real delivery.
+# EMAIL_FROM: ''
+
+# Display name shown on the From header. Defaults to "Theta Wellness" when empty.
+# EMAIL_FROM_NAME: ''
+
+# Mandrill template name that renders the code (its CODE merge var). Only used in
+# Mandrill mode; ignored for direct SMTP, which sends a built-in HTML email.
+# EMAIL_TEMPLATE: ''
+
+#-----------------------------------------------------------------------------
+# OAuth.
+
+# Default claim values that JwtHs256 / JwtRs256.generate() mint into the
+# `iss` / `aud` / `client_id` / `scope` fields of tokens this mirobody
+# instance signs itself. Distinct from FIREBASE_PROJECT_ID below, which
+# governs verification of tokens signed elsewhere.
+#
+# The strings are arbitrary identifiers - mirobody doesn't validate them
+# against any external registry. The only requirement is that whatever
+# verifier consumes these tokens (another service, an MCP server, etc.)
+# expects the same values. Keep them in sync across deployments that
+# share an audience.
+# JWT_ISS: ''
+# JWT_AUD: ''
+# JWT_CLIENT_ID: ''
+# JWT_SCOPE: ''
+JWT_SALT: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+
+# JWT secret key used for the HS256 (symmetric) algorithm.
+#
+# NOTE: JWT_KEY is used ONLY in HS256 mode. If JWT_PRIVATE_KEY is set (RS256
+# mode, below) the server signs and verifies with the RSA keys and JWT_KEY is
+# IGNORED. Set exactly one: JWT_KEY for HS256, or JWT_PRIVATE_KEY for RS256.
+JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+
+# JWT signing key for the RS256 (asymmetric) algorithm. When set, it TAKES
+# PRECEDENCE over JWT_KEY: the server signs tokens with RS256 (not HS256, so
+# JWT_KEY is ignored) and publishes the matching public key as a JWKS at
+# /.well-known/jwks.json (advertised as `jwks_uri` in the OAuth discovery
+# metadata), so third-party resource servers can verify mirobody-issued tokens
+# without sharing a secret. PEM (PKCS#1 or PKCS#8).
+# JWT_PRIVATE_KEY: |
+#   -----BEGIN PRIVATE KEY-----
+#   ...
+#   -----END PRIVATE KEY-----
+#
+# Public key (SubjectPublicKeyInfo PEM). Optional: when omitted it is derived
+# from JWT_PRIVATE_KEY, so configuring the private key alone is enough. Set it
+# explicitly only for a verify-only deployment that has no private key.
+# JWT_PUBLIC_KEY: |
+#   -----BEGIN PUBLIC KEY-----
+#   ...
+#   -----END PUBLIC KEY-----
+#
+# Key rotation: additional verify-only public keys, numbered from _2 and scanned
+# contiguously (JWT_PUBLIC_KEY_2, JWT_PUBLIC_KEY_3, ...). They are published in
+# the JWKS and accepted when verifying, but never used to sign — the active
+# signer stays the single JWT_PRIVATE_KEY. To rotate with no downtime: promote
+# the new key to JWT_PRIVATE_KEY and move the previous public key to
+# JWT_PUBLIC_KEY_2; once tokens signed by it have expired, drop it.
+# JWT_PUBLIC_KEY_2: |
+#   -----BEGIN PUBLIC KEY-----
+#   ...
+#   -----END PUBLIC KEY-----
+
+
+# -- OAuth 2.0 authorization server -----------------------------------------
+#
+# Turns this server into an OAuth 2.0 authorization server so MCP clients (and
+# any standard OAuth client) can obtain access tokens for the /mcp endpoint via
+# the browser authorization-code + PKCE flow. It issues the same mb_oauth JWTs
+# configured above; these keys only tune the protocol surface and all have
+# working defaults, so OAuth works out of the box once JWT_KEY is set. Discovery
+# is served at the host root: /.well-known/oauth-authorization-server and
+# /.well-known/oauth-protected-resource.
+#
+# Public base URL advertised as the discovery `issuer` and used to build the
+# absolute endpoint URLs. Leave unset to derive it per-request from the Host
+# header (http for localhost/127.0.0.1, https otherwise) -- correct for
+# single-origin deployments and dev. Set it when behind a proxy whose external
+# origin differs from the Host it forwards.
+# OAUTH_ISSUER: 'https://api.example.com'
+#
+# SPA path the authorize endpoint redirects to so the user signs in (reusing the
+# existing web login UI) and approves; the request handle is appended as
+# ?oauth_consent=<id>. HTTP_URI_PREFIX is prepended automatically.
+# OAUTH_CONSENT_PATH: '/'
+#
+# Lifetimes in seconds. Codes and pending requests are short-lived by design;
+# registered clients are long-lived.
+# OAUTH_CODE_TTL: 600          # authorization code (single-use)
+# OAUTH_AUTHZ_TTL: 600         # pending authorize request (until consent)
+# OAUTH_CLIENT_TTL: 31536000   # dynamically-registered client record (1 year)
+#
+# Space-delimited scopes advertised in discovery and granted by default.
+# OAUTH_SCOPES: 'mcp:read mcp:write'
+#
+# Path of the protected resource clients are sent to (the MCP endpoint). Used to
+# build the protected-resource metadata and the WWW-Authenticate challenge.
+# OAUTH_RESOURCE_PATH: '/mcp'
+#
+# Optional host allowlist for https redirect URIs (space/comma-separated). Empty
+# accepts any https host, plus loopback http and custom-scheme URIs (RFC 8252
+# native-app redirects). Set it to lock https redirects to known hosts.
+# OAUTH_ALLOWED_REDIRECT_HOSTS: 'claude.ai chatgpt.com'
+
+
+# -- EHR connect (SMART on FHIR) --------------------------------------------
+#
+# Lets a user link their hospital/clinic EHR (Epic, Oracle Health/Cerner,
+# athenahealth, …) and pull their records, driven by health::EhrConnectService
+# and the web client's Settings -> "Connect EHR". Here mirobody is an OAuth
+# *client* of the EHR (distinct from the OAuth server block above). You register
+# this app once with each EHR vendor (e.g. Epic on FHIR at https://fhir.epic.com)
+# to get a client_id; the redirect_uri must match the registration and point at
+# this server's callback. Empty client_id/redirect_uri disables the flow.
+#
+#   - SMART_FHIR_CLIENT_ID:     the SMART app client id from the EHR vendor.
+#   - SMART_FHIR_REDIRECT_URI:  absolute URL of this server's callback, i.e.
+#                               https://<your-host><HTTP_URI_PREFIX>/health/ehr/callback
+#   - SMART_FHIR_CLIENT_SECRET: only for a confidential client; public clients
+#                               (browser/native) use PKCE alone — leave empty.
+#   - SMART_FHIR_SCOPE:         requested scopes; the default covers patient-context
+#                               launch + reading the Observations we ingest.
+# SMART_FHIR_CLIENT_ID: ''
+# SMART_FHIR_REDIRECT_URI: 'https://api.example.com/health/ehr/callback'
+# SMART_FHIR_CLIENT_SECRET: ''
+# SMART_FHIR_SCOPE: 'launch/patient openid fhirUser offline_access patient/Observation.read'
+
+
+# -- How to configure Firebase ----------------------------------------------
+#
+# Firebase Authentication brokers the federated ("social") sign-ins and lets the
+# server trust them through a single verifier. mirobody uses it two ways:
+#
+#   - Token verification (server): jwt::FirebaseTokenValidator accepts any
+#     Firebase ID token by its iss/aud (FIREBASE_PROJECT_ID) and reads the email.
+#     POST /firebase/verify runs this path, so EVERY Firebase-brokered provider --
+#     Google, GitHub, and X (Twitter) -- lands there regardless of which one the
+#     user picked. There is no per-provider server route for these.
+#   - Web sign-in buttons (client): GET /firebase/verify hands the browser the web
+#     app config (the two FIREBASE_WEB_* keys below). The web client shows
+#     "Continue with Google" and "Continue with X" only when that config is
+#     present; clicking opens a Firebase popup and POSTs the resulting ID token to
+#     /firebase/verify. The native Android / iOS apps do the same via the Firebase
+#     SDK (Google, GitHub, X), so they need no per-provider secret on the device.
+#
+# (GitHub on the WEB is the exception: it has its own server-side OAuth route --
+# see GITHUB_CLIENT_* below -- and does NOT go through Firebase. GitHub on mobile
+# still uses Firebase. X has no server keys at all; it is configured entirely in
+# the Firebase console + the FIREBASE_WEB_* keys here.)
+#
+# Console setup (the free Spark tier is enough for development):
+#   1. Create a project at https://console.firebase.google.com/ -- see
+#      FIREBASE_PROJECT_ID below for the walkthrough and where to read the id.
+#   2. Build -> Authentication -> Sign-in method: enable each provider you want,
+#      pasting that provider's OAuth credentials into Firebase:
+#        - Google: no extra credentials needed.
+#        - GitHub: a GitHub OAuth App's client id + secret.
+#        - Twitter (this IS X): the X app's API key + secret. ALSO turn on
+#          "Request email address from users" in the X developer portal -- X only
+#          releases an email then, and mirobody keys accounts by email, so without
+#          it X sign-in fails with "no verified email".
+#   3. Authentication -> Settings -> Authorized domains: add the web client's
+#      origin (Firebase pre-adds localhost and <projectId>.firebaseapp.com).
+#   4. Project settings -> General -> Your apps: register a Web app to get the
+#      browser apiKey + project number for FIREBASE_WEB_* below; for the native
+#      apps download google-services.json (Android) / GoogleService-Info.plist
+#      (iOS) and drop them into the respective app projects.
+# ----------------------------------------------------------------------------
+
+# Firebase project ID. Used by jwt::FirebaseTokenValidator (and the firebase_jwt
+# CLI) to verify the `aud` claim on incoming ID tokens, and returned to the web
+# client as `projectId` for Google / X sign-in.
+#
+# To get one of your own (free):
+#   1. Sign in at https://console.firebase.google.com/ with any Google
+#      account; click "Add project" and pick a name (e.g. my-app-dev).
+#      Disable Google Analytics if you don't want the GA-linked account.
+#   2. Once the project is created, the project ID is shown at the top of the
+#      project's General Settings page (it may differ from the display name;
+#      Firebase auto-suffixes when the name is taken).
+#   3. Enable Google under Build -> Authentication -> Sign-in method, and add the
+#      web client's origin under Authentication -> Settings -> Authorized domains.
+#   4. The Spark (free) tier is enough for development.
+FIREBASE_PROJECT_ID: 'mirobody-81000'
+
+# Firebase *web app* config for the web client's "Continue with Google" and
+# "Continue with X" buttons (both go through Firebase -- see the Firebase setup
+# notes above). GET /firebase/verify returns {apiKey, projectId, messagingSenderId}
+# ONLY when both keys below are set, and the client shows those buttons only then.
+# The client derives the rest itself: authDomain is "<projectId>.firebaseapp.com"
+# (Firebase hosts the /__/auth/handler there) and appId isn't needed for Auth.
+#
+#   - FIREBASE_WEB_API_KEY:         the web app's browser `apiKey`, from Firebase
+#                                   Project settings -> General -> Your apps. The
+#                                   Android key in google-services.json (below)
+#                                   also works unless it is platform-restricted,
+#                                   in which case sign-in fails with
+#                                   auth/api-key-not-valid -- then use the Web
+#                                   app's key.
+#   - FIREBASE_MESSAGING_SENDER_ID: the project number.
+FIREBASE_WEB_API_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+FIREBASE_MESSAGING_SENDER_ID: '555773021699'
+
+# Sign in with Apple (web). The Apple *Services ID* (NOT the app's bundle ID),
+# e.g. 'ai.thetahealth.mirobody.web'. GET /apple/verify returns {clientId} (code
+# 0) only when this is set, so the web login shows an Apple button; the button
+# opens Apple's JS popup, and the returned id_token is POSTed to /apple/verify
+# and verified against Apple's JWKS (jwt::AppleTokenValidator) with this value as
+# the expected `aud`. Set up under developer.apple.com -> Certificates,
+# Identifiers & Profiles -> Identifiers -> Services IDs: enable "Sign In with
+# Apple", and register the web origin + the return URL (this page's URL). Apple
+# rejects localhost return URLs, so test from a real HTTPS domain.
+# APPLE_CLIENT_ID: ''
+
+# WeChat Mini Program sign-in. POST /wechat/verify takes the code from the
+# client's wx.login() and exchanges it via WeChat's jscode2session for the
+# user's openid/unionid, then mints the same app tokens as /email/verify. Both
+# keys are required to enable the route; with either unset it returns "not
+# configured". Find them in the Mini Program admin console (mp.weixin.qq.com)
+# under Development -> Development management -> Development settings (AppID +
+# AppSecret). WeChat users have no email, so a synthetic "<openid>@wechat"
+# address is stored to satisfy the email column; the real id lives in
+# health_app_user.wechat_openid.
+# WECHAT_APPID: ''
+# WECHAT_SECRET: ''
+# WECHAT_API_BASE: 'https://api.weixin.qq.com'   # override only to point tests at a mock
+#
+# WeChat *web* sign-in for the browser client. GET /wechat/verify returns the
+# appid (code 0) when configured, so the web login shows a WeChat button; the
+# button redirects to WeChat's qrconnect (desktop QR, scope snsapi_login) or, in
+# WeChat's in-app browser, oauth2/authorize (scope snsapi_userinfo). The returned
+# code is POSTed to /wechat/verify with {"flow":"web"} and exchanged via
+# sns/oauth2/access_token. These are Open Platform / Official Account
+# credentials, generally distinct from the Mini Program AppID above; when unset
+# they fall back to WECHAT_APPID / WECHAT_SECRET.
+# WECHAT_WEB_APPID: ''
+# WECHAT_WEB_SECRET: ''
+#
+# WeChat *mobile app* sign-in for the native Android / iOS apps. The WeChat
+# OpenSDK returns an OAuth code that the app POSTs to /wechat/verify with
+# {"flow":"app"}, exchanged via sns/oauth2/access_token. An Open Platform
+# "Mobile Application" is a separate registration (its own AppID/AppSecret) from
+# the Mini Program and the website app; the AppID here MUST match the one the
+# apps initialize the SDK with. When unset, falls back to WECHAT_WEB_* then
+# WECHAT_APPID / WECHAT_SECRET.
+# WECHAT_OPEN_APPID: ''
+# WECHAT_OPEN_SECRET: ''
+
+# -- How to configure GitHub sign-in ----------------------------------------
+#
+# GitHub sign-in reaches mirobody two different ways, but BOTH are driven by a
+# single GitHub OAuth App's client id + secret:
+#
+#   - Web: a native server-side flow owned by mirobody (the GITHUB_* keys below,
+#     NOT Firebase). The web login shows a GitHub button only when both keys are
+#     set; it redirects to GitHub's authorize page (scope read:user user:email),
+#     GitHub bounces back with an OAuth code POSTed to /github/verify, and the
+#     server exchanges it via github.com/login/oauth/access_token (the secret
+#     never leaves the server) and reads the account's primary verified email
+#     from api.github.com/user/emails to identify the user.
+#   - Mobile (Android / iOS): brokered through Firebase like Google/X -- you
+#     paste the SAME client id + secret into the Firebase console (see the
+#     Firebase setup notes above), and the apps need no GitHub secret on-device.
+#
+# Setup:
+#   1. Create an OAuth App at github.com -> Settings -> Developer settings ->
+#      OAuth Apps -> New OAuth App. (An "OAuth App", not a "GitHub App".)
+#   2. Set "Authorization callback URL" to the web client's URL -- the login page
+#      itself (e.g. https://app.example.com/). GitHub allows only one callback
+#      URL per OAuth App, so use a separate app per environment if localhost and
+#      prod differ.
+#   3. Copy the Client ID, then "Generate a new client secret" and copy it.
+#   4. Put both into GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET below for web; and,
+#      for the mobile apps, paste the same pair into Firebase console -> Build ->
+#      Authentication -> Sign-in method -> GitHub.
+#
+# Both keys are required to enable the web route; with either unset /github/verify
+# reports "not configured" and the web button stays hidden.
+# GITHUB_CLIENT_ID: ''
+# GITHUB_CLIENT_SECRET: ''
+# GITHUB_OAUTH_BASE: 'https://github.com'      # override only to point tests at a mock
+# GITHUB_API_BASE: 'https://api.github.com'    # override only to point tests at a mock
+
+# -- Tanka QR-code sign-in (web) --------------------------------------------
+#
+# Tanka login needs NONE of our own credentials: the browser runs Tanka's own
+# WASM request-signer and signs the create-QR / poll calls; the server merely
+# PROXIES the already-signed requests to Tanka's gateway (gw-q.tanka.ai) -- the
+# browser can't reach it directly (CORS). On a confirmed scan the server reads
+# the email straight from Tanka's TLS response and mints the usual app tokens.
+# ON by default -- GET /tanka/verify advertises it so the web login shows a
+# "Continue with Tanka" button; the button opens a QR the user scans with the
+# Tanka app. Set TANKA_LOGIN_ENABLED: false to disable it (the button then hides
+# and the /tanka/* + signer routes 404). Note: while on, the signer auto-discovery
+# below runs `node` at boot + on a timer -- set TANKA_WASM_AUTODISCOVER: false (or
+# disable Tanka) if you don't want that.
+# TANKA_LOGIN_ENABLED: true
+#
+# Tanka's signing WASM is bridged, not vendored: the server fetches it from
+# Tanka's CDN (server-side -- the CDN only allows Origin g.tanka.ai), caches it
+# under <tempdir>, and serves it at /tanka-sign.wasm + the matching wasm-bindgen
+# glue at /tanka-signer.js, which the browser loads.
+#
+# Self-healing (auto-discovery): at boot and every TANKA_WASM_REFRESH_INTERVAL
+# seconds, the server runs the Node discovery engine res/tanka/discover.cjs, which
+# finds Tanka's live signer build and VERIFIES it (signs a real create-QR; Tanka
+# must answer code:0), then adopts it in memory -- swapping the served glue + WASM
+# in lockstep. This needs `node` on PATH (installed in the runtime image). If node
+# or Tanka is unavailable, or nothing verifies, the server logs and keeps the
+# PINNED fallback build (the committed htdoc/static/tanka-signer.js + the
+# kTankaWasmPath constant in src/user/tanka.cpp), so login still works. An ABI
+# change (different get_http_header arg count) is NOT auto-adopted -- it needs
+# htdoc/src/tanka.js updated + rebuilt; the server logs and keeps the pin.
+# TANKA_WASM_AUTODISCOVER: true
+# TANKA_WASM_REFRESH_INTERVAL: 604800           # 7 days, in seconds
+# TANKA_NODE_BIN: 'node'                         # node executable (PATH name or absolute)
+#
+# To refresh the committed PINNED fallback yourself (e.g. before disabling
+# auto-discovery), run `node res/tanka/discover.cjs --write` -- it verifies the live
+# build and writes the glue + kTankaWasmPath to disk; then `npm run build` in htdoc/
+# and rebuild the server.
+#
+# Tanka's web-client origin: pinned as the Origin header on every gateway call
+# (Tanka only accepts it), used as the host the signing WASM is fetched from, and
+# the base auto-discovery scrapes. The gateway base and the forward paths are
+# likewise overridable. Override these only to point tests at a mock.
+# TANKA_WEB_ORIGIN: 'https://g.tanka.ai'
+# TANKA_API_BASE: 'https://gw-q.tanka.ai'
+
+#-----------------------------------------------------------------------------
+# LLM Configuration.
+
+
+# >>> [RECOMMENDED for getting started] <<<
+#
+# Google AI Studio API key, used by the Gemini client (and the gemini CLI)
+# to call streamGenerateContent on the AI Studio path. Best free tier of
+# all the LLM keys in this file: no card or billing setup, no time-limited
+# credit window, just a Google account and a key.
+#
+# To get one of your own (free):
+#   1. Sign in at https://aistudio.google.com/ with any Google account.
+#   2. Click "Get API key" in the left sidebar, then "Create API key".
+#      AI Studio auto-creates a Google Cloud project on first use; you can
+#      also attach the key to an existing project.
+#   3. Copy the key it shows (it's only shown once in full).
+#   4. The free tier covers light dev use - roughly 15 RPM and 1500
+#      requests/day on Gemini Flash; rate limits change over time so
+#      check https://ai.google.dev/pricing for the current numbers. No
+#      card or billing setup is required for the free tier.
+#
+# Drop the resulting key below.
+# GOOGLE_API_KEY: ''
+
+
+# Vertex AI — the OAuth alternative to the AI Studio key above for Google
+# models. The embedding module (src/llm/embedding.cpp) routes the 'gemini'
+# provider through Vertex when GOOGLE_GENAI_USE_VERTEXAI is truthy; otherwise it
+# uses the AI Studio key above. Vertex authenticates with a Bearer access token
+# rather than an API key.
+#
+#   - GOOGLE_GENAI_USE_VERTEXAI: '1' / 'true' to use Vertex AI; default off.
+#   - VERTEX_ACCESS_TOKEN:       a pre-fetched OAuth access token, e.g. the
+#                                output of `gcloud auth print-access-token`.
+#                                There is no in-process ADC/refresh, so rotate
+#                                this before it expires (tokens last ~1h).
+#   - GCP_PROJECT:               Google Cloud project id (required; also read
+#                                from GOOGLE_CLOUD_PROJECT).
+#   - VERTEX_LOCATION:           region; default us-central1.
+#   - VERTEX_BASE_URL:           optional host override; defaults to
+#                                https://<VERTEX_LOCATION>-aiplatform.googleapis.com.
+# GOOGLE_GENAI_USE_VERTEXAI: '0'
+# VERTEX_ACCESS_TOKEN: ''
+# GCP_PROJECT: ''
+# VERTEX_LOCATION: 'us-central1'
+# VERTEX_BASE_URL: ''
+
+
+# OpenAI API key. Used by the openai_chat / openai_responses clients
+# (and the matching CLIs) for direct OpenAI calls; also re-used as a
+# generic key slot for any OpenAI-compatible third-party endpoint when
+# you flip OPENAI_BASE_URL.
+#
+# No true free tier: unlike Gemini (AI Studio) and DashScope, OpenAI
+# requires a payment method on the account before it issues an API key.
+# The historical $5 trial credit is no longer handed out to new accounts.
+# Three closest paths if you want to keep development costs at zero:
+#   1. GitHub Models - https://github.com/marketplace/models gives free
+#      rate-limited access to GPT-4o / 4.1 / o-mini and many others. Sign
+#      in with a GitHub account; daily request/token caps apply. Most
+#      "real free GPT" path today.
+#   2. Azure OpenAI - run GPT inside an Azure resource under the $200 new-
+#      account credit. See the AZURE_OPENAI_* block right below for how
+#      to set up the resource and switch this client into Azure mode.
+#   3. OpenAI-compatible third-party endpoints - DashScope (configured
+#      above), OpenRouter, DeepSeek, Together, Groq, Volcengine Ark, etc.
+#      all speak the OpenAI /chat/completions protocol; point
+#      OPENAI_BASE_URL at the right host and put their key in
+#      OPENAI_API_KEY. Each has its own free quota.
+#
+# Drop the resulting key below.
+# OPENAI_API_KEY: ''
+
+
+# Azure OpenAI - set these instead of OPENAI_API_KEY when calling OpenAI
+# models hosted in your own Azure resource. The openai_chat client auto-
+# flips into Azure mode whenever AZURE_OPENAI_ENDPOINT is non-empty.
+#
+# Differs from OpenAI direct in three places (all handled by the client):
+#   - URL is {AZURE_OPENAI_ENDPOINT}/openai/deployments/{AZURE_OPENAI_DEPLOYMENT}
+#     /chat/completions?api-version={AZURE_OPENAI_API_VERSION}
+#   - Auth header is `api-key:` not `Authorization: Bearer`
+#   - `model` in the request body is ignored; the deployment in the URL wins
+#
+# How to get one (free for the credit window only):
+#   1. Sign in to https://portal.azure.com/ . New accounts get $200 of
+#      credits over 30 days. After that you pay per token like OpenAI.
+#   2. Create an "Azure OpenAI" resource in a supported region (East US,
+#      Sweden Central, etc.). Note the resource name; the endpoint is
+#      https://{resource}.openai.azure.com.
+#   3. Apply for model access under the resource - "Model deployments".
+#      Microsoft has tightened approvals; expect a short use-case form.
+#   4. Deploy the approved model under a chosen deployment name (it can
+#      differ from the model name).
+#   5. Copy a key from "Keys and Endpoint" and the deployment name from
+#      "Deployments". The api-version pins the request schema; pick the
+#      newest GA from https://learn.microsoft.com/azure/ai-services/openai/api-version-deprecation .
+#
+# Drop the resulting values below.
+# AZURE_OPENAI_KEY: ''
+# AZURE_OPENAI_ENDPOINT: 'https://my-resource.openai.azure.com'
+# AZURE_OPENAI_DEPLOYMENT: 'gpt-4o-mini'
+# AZURE_OPENAI_API_VERSION: '2024-10-21'
+
+
+# DashScope (Alibaba Cloud) API key, used for ASR / Qwen LLM calls.
+# Leave empty if not using audio transcription or Qwen models.
+#
+# To get one of your own (free):
+#   1. Create an Alibaba Cloud account. Mainland China users need
+#      real-name verification (ID card or business license); international
+#      users sign up at https://www.alibabacloud.com/ with a passport.
+#   2. Open https://bailian.console.aliyun.com/ (the new Bailian console
+#      that has absorbed the standalone DashScope page) and accept the
+#      service agreement.
+#   3. Each new account gets a free quota per model under "Model Square"
+#      ("Mo Xing Guang Chang"). Common picks: Qwen-Turbo / Qwen-Plus
+#      ship with several million free input tokens; Qwen-Max is smaller.
+#      Quotas change often, check the model's page for the current number.
+#   4. Create the key under "API-KEY Management" ("API-KEY Guan Li").
+#      It looks like `sk-...`, same shape as an OpenAI key.
+#
+# Drop the resulting key below.
+# DASHSCOPE_API_KEY: ''
+
+
+# Anthropic Claude API key. Required only if you call Claude through this
+# config.
+#
+# No true free tier: unlike Gemini (AI Studio) and DashScope above, Claude
+# has no stable free quota. The closest paths are all account-credit-based:
+#   1. Anthropic direct - https://console.anthropic.com/ gives a one-time
+#      $5 trial credit at signup. Once it runs out you have to add a
+#      payment method to keep using the key.
+#   2. OpenRouter - https://openrouter.ai/ occasionally promotes free
+#      Claude routes (usually older models or community-sponsored
+#      endpoints). The mainstream `anthropic/claude-sonnet-4.x` routes are
+#      pay-per-token. Useful if you want to try Claude without an
+#      Anthropic account.
+#   3. AWS Bedrock - run Claude under the AWS new-account free credits.
+#      Setup is heavier (IAM + Bedrock model access request) and the API
+#      shape is AWS-flavored, not the Anthropic Messages API.
+#   4. Google Cloud Vertex AI - same idea using the $300 GCP signup
+#      credit. Vertex requires you to enable the Claude publisher model
+#      in your project first.
+#
+# Drop the resulting key below.
+# ANTHROPIC_API_KEY: ''
+
+
+# Embedding provider used to populate the th_series_dim vector recall
+# column. Pick one based on which API key you have configured above:
+#   - 'gemini' -> Google's text-embedding-001 (free via the GOOGLE_API_KEY
+#     block above; recommended for getting started).
+#   - 'qwen'   -> Qwen3 embedding via DashScope (needs DASHSCOPE_API_KEY).
+# Default: gemini.
+EMBEDDING_PROVIDER: 'gemini'
+
+#-----------------------------------------------------------------------------
+# Sentry (crash / error reporting).
+#
+# Brought up at startup by init_sentry() in src/main.cpp, mirroring the Python
+# MCP server's bootstrap. Disabled by default: with no SENTRY_DSN the SDK is
+# left uninitialised, so self-hosted / on-device runs report nothing unless you
+# explicitly opt in here. The deployment environment is taken from the ENV
+# environment variable (not this file), normalised to upper case; ENV=TEST-INLOCAL
+# opts out entirely. Sentry's own debug logging follows LOG_LEVEL (on at DEBUG).
+#
+# The DSN that routes events to your Sentry project. This is the one key that
+# turns reporting on; leave it unset (or empty) to keep Sentry off. Treat it as
+# a secret — the server logs only that it is present and its length, never the
+# value. Found in Sentry under Settings -> Projects -> <project> -> Client Keys (DSN).
+# SENTRY_DSN: ''
+
+# Release identifier stamped on events. When unset, the server falls back to
+# "local-<short_sha>" from the git SHA captured at build time. In k8s this is
+# usually baked into the image (e.g. "test-abc1234"). The literal 'unknown' is
+# treated as unset.
+# SENTRY_RELEASE: ''
+
+# On-disk directory the crashpad backend uses for its run state and pending
+# crash reports. Relative to the working directory. Default '.sentry-native'.
+# SENTRY_DATABASE_PATH: '.sentry-native'
+
+# Path to the crashpad_handler executable. The crashpad backend launches it as a
+# separate process and sentry_init FAILS if it can't be found, so the SDK needs
+# a valid path. Leave unset to use the handler CMake copies next to this binary;
+# set it explicitly only when the handler lives elsewhere.
+# SENTRY_HANDLER_PATH: ''
+
+#-----------------------------------------------------------------------------
+# MCP (Model Context Protocol).
+#
+# This server exposes its registered tools (src/mcp) over MCP at the /mcp
+# endpoint, protected by the OAuth 2.0 authorization server configured above
+# (see OAUTH_RESOURCE_PATH, default '/mcp'). Standard MCP clients obtain a token
+# via the browser authorization-code + PKCE flow and then call /mcp directly —
+# nothing extra is needed here for that path.
+#
+# The one key below is required only for the MiroThinker agent. Unlike the
+# OpenAI / Gemini clients (which run the registered tools locally, in-process),
+# MiroThinker executes tools PROVIDER-SIDE: MiroMind's endpoint reaches back over
+# the public internet to call this server's MCP endpoint. So it needs the
+# absolute, externally-reachable URL of /mcp — a localhost or private address
+# won't work, because the call originates from MiroMind, not from this process.
+# Without it, the MiroThinker client fails the turn with an explicit error.
+#
+# Public URL of this server's MCP endpoint, handed to MiroMind as the
+# `mcp_servers[].url`. Point it at the externally-reachable /mcp (or a
+# per-user /mcp/{secret} personal-MCP URL), e.g. 'https://api.example.com/mcp'.
+# MCP_PUBLIC_URL: ''
+
+#-----------------------------------------------------------------------------

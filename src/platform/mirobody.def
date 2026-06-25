@@ -1,0 +1,11 @@
+; Module-definition file for libmirobody on Windows. Restricts the DLL's export
+; table to the public C ABI in src/mirobody.h, instead of dumping every C++
+; symbol (which WINDOWS_EXPORT_ALL_SYMBOLS would). Keeps mirobody.h free of
+; __declspec(dllexport) annotations and gives FFI hosts a clean, stable surface.
+EXPORTS
+    mirobody_start
+    mirobody_stop
+    mirobody_is_running
+    mirobody_listen_port
+    mirobody_chat
+    mirobody_get_providers

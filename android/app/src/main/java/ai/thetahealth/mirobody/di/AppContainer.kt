@@ -1,0 +1,124 @@
+package ai.thetahealth.mirobody.di
+
+import ai.thetahealth.mirobody.data.auth.AppleAuthRepository
+import ai.thetahealth.mirobody.data.auth.AuthApi
+import ai.thetahealth.mirobody.data.auth.AuthRepository
+import ai.thetahealth.mirobody.data.auth.FirebaseInitializer
+import ai.thetahealth.mirobody.data.auth.GithubAuthRepository
+import ai.thetahealth.mirobody.data.auth.GoogleAuthRepository
+import ai.thetahealth.mirobody.data.auth.WechatAuthRepository
+import ai.thetahealth.mirobody.data.auth.XAuthRepository
+import ai.thetahealth.mirobody.data.chat.ChatApi
+import ai.thetahealth.mirobody.data.chat.ChatHistoryStore
+import ai.thetahealth.mirobody.data.chat.ChatRepository
+import ai.thetahealth.mirobody.data.chat.ChatStreamClient
+import ai.thetahealth.mirobody.data.config.ServerConfigApi
+import ai.thetahealth.mirobody.data.config.ServerConfigStore
+import ai.thetahealth.mirobody.data.health.HealthApi
+import ai.thetahealth.mirobody.data.health.HealthRepository
+import ai.thetahealth.mirobody.data.health.HealthSourceFactory
+import ai.thetahealth.mirobody.data.net.AuthInterceptor
+import ai.thetahealth.mirobody.data.net.BaseUrlInterceptor
+import ai.thetahealth.mirobody.data.net.ErrorBus
+import ai.thetahealth.mirobody.data.net.NetworkFactory
+import ai.thetahealth.mirobody.data.net.UnauthorizedInterceptor
+import ai.thetahealth.mirobody.data.settings.SettingsStore
+import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import retrofit2.create
+
+class AppContainer(context: Context) {
+
+    private val appContext: Context = context.applicationContext
+
+    init {
+        // Initialize the default FirebaseApp from assets/google-services.json before any
+        // FirebaseAuth.getInstance() call (currently only used by GoogleAuthRepository).
+        FirebaseInitializer.ensureInitialized(appContext)
+    }
+
+    val applicationScope: CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    val settings: SettingsStore = SettingsStore(appContext)
+
+    val errorBus: ErrorBus = ErrorBus()
+
+    private val baseUrlFlow = settings.baseUrl.stateIn(
+        scope = applicationScope,
+        started = SharingStarted.Eagerly,
+        initialValue = SettingsStore.DEFAULT_BASE_URL,
+    )
+
+    val tokenFlow = settings.accessToken.stateIn(
+        scope = applicationScope,
+        started = SharingStarted.Eagerly,
+        initialValue = null,
+    )
+
+    private val okHttp = NetworkFactory.okHttp(
+        baseUrlInterceptor = BaseUrlInterceptor(baseUrlFlow),
+        authInterceptor = AuthInterceptor(tokenFlow),
+        unauthorizedInterceptor = UnauthorizedInterceptor(settings, applicationScope),
+    )
+
+    private val retrofit = NetworkFactory.retrofit(okHttp)
+
+    private val authApi: AuthApi = retrofit.create()
+    private val chatApi: ChatApi = retrofit.create()
+    private val serverConfigApi: ServerConfigApi = retrofit.create()
+    private val healthApi: HealthApi = retrofit.create()
+
+    val authRepository: AuthRepository = AuthRepository(authApi, settings)
+
+    val chatRepository: ChatRepository = ChatRepository(
+        api = chatApi,
+        streamClient = ChatStreamClient(okHttp, NetworkFactory.json),
+    )
+
+    val chatHistoryStore: ChatHistoryStore = ChatHistoryStore(appContext, NetworkFactory.json)
+
+    val serverConfigStore: ServerConfigStore = ServerConfigStore(
+        api = serverConfigApi,
+        settings = settings,
+        json = NetworkFactory.json,
+        scope = applicationScope,
+    )
+
+    val googleAuthRepository: GoogleAuthRepository = GoogleAuthRepository(
+        api = authApi,
+        settings = settings,
+    )
+
+    val appleAuthRepository: AppleAuthRepository = AppleAuthRepository(
+        api = authApi,
+        settings = settings,
+    )
+
+    val wechatAuthRepository: WechatAuthRepository = WechatAuthRepository(
+        context = appContext,
+        api = authApi,
+        settings = settings,
+    )
+
+    val githubAuthRepository: GithubAuthRepository = GithubAuthRepository(
+        api = authApi,
+        settings = settings,
+    )
+
+    val xAuthRepository: XAuthRepository = XAuthRepository(
+        api = authApi,
+        settings = settings,
+    )
+
+    // On-device health ingestion: reads Health Connect (GMS) or HMS Health Kit
+    // (Huawei) and POSTs FHIR Observations to the embedded server's /fhir endpoint.
+    val healthRepository: HealthRepository = HealthRepository(
+        api = healthApi,
+        sourceFactory = HealthSourceFactory(appContext),
+    )
+}
