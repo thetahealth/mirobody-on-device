@@ -7,7 +7,13 @@
 
 **Live demo:** [dev-mcp.thetahealth.ai](https://dev-mcp.thetahealth.ai)
 
-![Mirobody v2 deployment topology — one core, three forms](docs/deploy.svg)
+<p align="center">
+  <img src="docs/what-is-mirobody.svg" alt="What is Mirobody? One health AI — runs anywhere, your data stays yours. On a server (self-hosted, the whole family), on your phone (just you, works offline), or peer-to-peer (no server)." width="920">
+</p>
+
+<p align="center">
+  <img src="docs/where-your-data-comes-from.svg" alt="Where your data comes from — wearables, phone health, lab results, clinic records, and everyday photo/voice logging all flow into mirobody, which normalizes everything to FHIR R4, then an AI model (OpenAI, Gemini, …) answers your questions in plain language." width="920">
+</p>
 
 A lightweight C++ server that links personal health data to LLMs - it pulls
 wearable, lab, and clinical records from health-data platforms and feeds them to
@@ -55,6 +61,8 @@ up the core:
 
 Agents and tools both self-register at compile time: drop a `.cpp` in the
 matching `res/` directory and rebuild.
+
+![Mirobody v2 deployment topology — one core, three forms](docs/deploy.svg)
 
 On desktop/embedded it runs as a standalone binary serving HTTP + WebSocket over
 the network. On Android and iOS the same core ships inside the host app - as a

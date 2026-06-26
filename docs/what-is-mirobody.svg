@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -32 960 452" width="960" height="452" font-family="Helvetica, Arial, sans-serif">
+  <rect x="0" y="-32" width="960" height="452" fill="#ffffff"/>
+  <defs>
+    <marker id="dot" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5">
+      <circle cx="5" cy="5" r="4" fill="#555"/>
+    </marker>
+  </defs>
+  <text x="480" y="-8" text-anchor="middle" font-size="16" fill="#456">One health AI — runs anywhere, <tspan font-weight="bold" fill="#2f7d4a">your data stays yours.</tspan></text>
+  <!-- column dividers -->
+  <line x1="320" y1="62" x2="320" y2="378" stroke="#ccc" stroke-width="1.5" stroke-dasharray="5 6"/>
+  <line x1="640" y1="62" x2="640" y2="378" stroke="#ccc" stroke-width="1.5" stroke-dasharray="5 6"/>
+  <!-- ============ COLUMN 1: on a server ============ -->
+  <text x="160" y="42" text-anchor="middle" font-size="18" font-weight="bold" fill="#4072b8">On a server</text>
+  <text x="160" y="60" text-anchor="middle" font-size="11" fill="#456">Self-hosted — the whole family</text>
+  <!-- stick person -->
+  <g stroke="#234" stroke-width="2.5" fill="none" stroke-linecap="round">
+    <circle cx="52" cy="180" r="14" fill="#fff"/>
+    <line x1="52" y1="194" x2="52" y2="236"/>
+    <line x1="52" y1="205" x2="36" y2="222"/>
+    <line x1="52" y1="205" x2="76" y2="218"/>
+    <line x1="52" y1="236" x2="40" y2="266"/>
+    <line x1="52" y1="236" x2="64" y2="266"/>
+  </g>
+  <path d="M45 184 Q52 190 59 184" stroke="#234" stroke-width="1.8" fill="none"/>
+  <!-- speech bubble -->
+  <g>
+    <path d="M18 98 H90 A10 10 0 0 1 100 108 V128 A10 10 0 0 1 90 138 H66 L54 155 L46 138 H18 A10 10 0 0 1 8 128 V108 A10 10 0 0 1 18 98 Z" fill="#e8eef7" stroke="#4072b8"/>
+    <text x="54" y="116" text-anchor="middle" font-size="10.5" fill="#274b73">“How is my</text>
+    <text x="54" y="131" text-anchor="middle" font-size="10.5" fill="#274b73">family?”</text>
+  </g>
+  <!-- arrow person -> server -->
+  <line x1="78" y1="212" x2="112" y2="205" stroke="#4072b8" stroke-width="2.5" marker-end="url(#dot)"/>
+  <!-- server -->
+  <rect x="116" y="120" width="96" height="128" rx="9" fill="#fff" stroke="#234" stroke-width="3"/>
+  <line x1="116" y1="148" x2="212" y2="148" stroke="#234" stroke-width="1.5"/>
+  <circle cx="130" cy="134" r="3" fill="#2f7d4a"/>
+  <circle cx="141" cy="134" r="3" fill="#cfd8e3"/>
+  <rect x="126" y="162" width="76" height="30" rx="8" fill="#dff0e4" stroke="#2f7d4a" stroke-width="2.5"/>
+  <text x="164" y="182" text-anchor="middle" font-size="12" font-weight="bold" fill="#1c5233">mirobody</text>
+  <text x="164" y="216" text-anchor="middle" font-size="10" font-weight="bold" fill="#c08a3e">family's</text>
+  <text x="164" y="229" text-anchor="middle" font-size="10" font-weight="bold" fill="#c08a3e">health data</text>
+  <!-- family members' devices feeding the server -->
+  <g>
+    <rect x="247" y="123" width="30" height="44" rx="6" fill="#fff" stroke="#234" stroke-width="2"/>
+    <rect x="251" y="129" width="22" height="30" rx="2" fill="#eef3fa"/>
+    <text x="262" y="179" text-anchor="middle" font-size="9" fill="#456">mom</text>
+  </g>
+  <g>
+    <rect x="248" y="186" width="28" height="28" rx="7" fill="#fff" stroke="#234" stroke-width="2"/>
+    <rect x="252" y="190" width="20" height="20" rx="3" fill="#eef3fa"/>
+    <text x="262" y="226" text-anchor="middle" font-size="9" fill="#456">dad</text>
+  </g>
+  <g>
+    <rect x="240" y="242" width="44" height="26" rx="3" fill="#fff" stroke="#234" stroke-width="2"/>
+    <rect x="245" y="247" width="34" height="16" rx="2" fill="#eef3fa"/>
+    <rect x="234" y="268" width="56" height="5" rx="2" fill="#fff" stroke="#234" stroke-width="1.6"/>
+    <text x="262" y="285" text-anchor="middle" font-size="9" fill="#456">kid</text>
+  </g>
+  <!-- data into the server: dad horizontal; mom & kid mirror about it -->
+  <line x1="214" y1="200" x2="244" y2="145" stroke="#4072b8" stroke-width="2.5" stroke-dasharray="4 4" marker-end="url(#dot)"/>
+  <line x1="214" y1="200" x2="244" y2="200" stroke="#4072b8" stroke-width="2.5" stroke-dasharray="4 4" marker-end="url(#dot)"/>
+  <line x1="214" y1="200" x2="240" y2="248" stroke="#4072b8" stroke-width="2.5" stroke-dasharray="4 4" marker-end="url(#dot)"/>
+  <text x="160" y="400" text-anchor="middle" font-size="13" fill="#234">One brain for the family. <tspan fill="#4072b8" font-weight="bold">Shared.</tspan></text>
+  <!-- ============ COLUMN 2: on your phone ============ -->
+  <text x="485" y="42" text-anchor="middle" font-size="18" font-weight="bold" fill="#2f7d4a">On your phone</text>
+  <text x="485" y="60" text-anchor="middle" font-size="11" fill="#456">Just you — works offline</text>
+  <!-- stick person -->
+  <g stroke="#234" stroke-width="2.5" fill="none" stroke-linecap="round">
+    <circle cx="395" cy="180" r="14" fill="#fff"/>
+    <line x1="395" y1="194" x2="395" y2="238"/>
+    <line x1="395" y1="206" x2="377" y2="224"/>
+    <line x1="395" y1="206" x2="420" y2="220"/>
+    <line x1="395" y1="238" x2="382" y2="270"/>
+    <line x1="395" y1="238" x2="408" y2="270"/>
+  </g>
+  <path d="M388 184 Q395 190 402 184" stroke="#234" stroke-width="1.8" fill="none"/>
+  <!-- speech bubble -->
+  <g>
+    <path d="M356 98 H434 A10 10 0 0 1 444 108 V128 A10 10 0 0 1 434 138 H400 L386 155 L378 138 H356 A10 10 0 0 1 346 128 V108 A10 10 0 0 1 356 98 Z" fill="#eef6f0" stroke="#2f7d4a"/>
+    <text x="395" y="116" text-anchor="middle" font-size="10.5" fill="#1c5233">“How did I</text>
+    <text x="395" y="131" text-anchor="middle" font-size="10.5" fill="#1c5233">sleep?”</text>
+  </g>
+  <!-- arrow person -> phone -->
+  <line x1="424" y1="202" x2="464" y2="200" stroke="#2f7d4a" stroke-width="2.5" marker-end="url(#dot)"/>
+  <!-- phone -->
+  <rect x="468" y="108" width="104" height="184" rx="16" fill="#fff" stroke="#234" stroke-width="3"/>
+  <rect x="478" y="126" width="84" height="150" rx="6" fill="#f7faf8"/>
+  <circle cx="520" cy="284" r="4" fill="#fff" stroke="#234" stroke-width="2"/>
+  <rect x="486" y="146" width="68" height="30" rx="8" fill="#dff0e4" stroke="#2f7d4a" stroke-width="2.5"/>
+  <text x="520" y="166" text-anchor="middle" font-size="13" font-weight="bold" fill="#1c5233">mirobody</text>
+  <g transform="translate(504,196)">
+    <rect x="0" y="8" width="32" height="24" rx="4" fill="#fff3e0" stroke="#c08a3e" stroke-width="2"/>
+    <path d="M6 8 V3 a10 10 0 0 1 20 0 V8" fill="none" stroke="#c08a3e" stroke-width="2.2"/>
+    <circle cx="16" cy="19" r="3" fill="#c08a3e"/>
+  </g>
+  <text x="520" y="252" text-anchor="middle" font-size="10" font-weight="bold" fill="#c08a3e">your data stays</text>
+  <text x="520" y="265" text-anchor="middle" font-size="10" font-weight="bold" fill="#c08a3e">on the phone</text>
+  <text x="485" y="400" text-anchor="middle" font-size="13" fill="#234">Runs on the phone. <tspan fill="#c0392b" font-weight="bold">Private.</tspan></text>
+  <!-- ============ COLUMN 3: peer-to-peer (planned) ============ -->
+  <text x="800" y="42" text-anchor="middle" font-size="18" font-weight="bold" fill="#8a4fb0">Peer-to-peer</text>
+  <text x="800" y="60" text-anchor="middle" font-size="11" fill="#456">No server — free, optional ICE/STUN</text>
+  <!-- the user, asking across their own devices -->
+  <g stroke="#234" stroke-width="2.5" fill="none" stroke-linecap="round">
+    <circle cx="680" cy="215" r="13" fill="#fff"/>
+    <line x1="680" y1="228" x2="680" y2="266"/>
+    <line x1="680" y1="238" x2="666" y2="253"/>
+    <line x1="680" y1="238" x2="700" y2="250"/>
+    <line x1="680" y1="266" x2="669" y2="292"/>
+    <line x1="680" y1="266" x2="691" y2="292"/>
+  </g>
+  <path d="M674 219 Q680 224 686 219" stroke="#234" stroke-width="1.8" fill="none"/>
+  <g>
+    <path d="M670 142 H740 A10 10 0 0 1 750 152 V168 A10 10 0 0 1 740 178 H700 L686 194 L678 178 H670 A10 10 0 0 1 660 168 V152 A10 10 0 0 1 670 142 Z" fill="#f3e8f7" stroke="#8a4fb0"/>
+    <text x="705" y="158" text-anchor="middle" font-size="10" fill="#5e2e80">“How is</text>
+    <text x="705" y="171" text-anchor="middle" font-size="10" fill="#5e2e80">everyone?”</text>
+  </g>
+  <line x1="702" y1="253" x2="730" y2="266" stroke="#8a4fb0" stroke-width="2.5" marker-end="url(#dot)"/>
+  <!-- mesh links (dashed = not built yet) — equilateral triangle -->
+  <line x1="824" y1="158" x2="770" y2="252" stroke="#8a4fb0" stroke-width="2.5" stroke-dasharray="4 4" marker-start="url(#dot)" marker-end="url(#dot)"/>
+  <line x1="856" y1="158" x2="908" y2="252" stroke="#8a4fb0" stroke-width="2.5" stroke-dasharray="4 4" marker-start="url(#dot)" marker-end="url(#dot)"/>
+  <line x1="790" y1="270" x2="895" y2="270" stroke="#8a4fb0" stroke-width="2.5" stroke-dasharray="4 4" marker-start="url(#dot)" marker-end="url(#dot)"/>
+  <!-- node: your phone (top) -->
+  <g>
+    <text x="840" y="94" text-anchor="middle" font-size="9" fill="#456">your phone</text>
+    <rect x="819" y="101" width="42" height="60" rx="9" fill="#fff" stroke="#8a4fb0" stroke-width="2.5" stroke-dasharray="5 4"/>
+    <rect x="825" y="111" width="30" height="40" rx="3" fill="#f3e8f7"/>
+    <circle cx="840" cy="131" r="5" fill="#2f7d4a"/>
+  </g>
+  <!-- node: your laptop (bottom-left) -->
+  <g>
+    <rect x="734" y="255" width="52" height="30" rx="3" fill="#fff" stroke="#8a4fb0" stroke-width="2.5" stroke-dasharray="5 4"/>
+    <rect x="739" y="260" width="42" height="20" rx="2" fill="#f3e8f7"/>
+    <rect x="726" y="285" width="68" height="5" rx="2" fill="#fff" stroke="#8a4fb0" stroke-width="2" stroke-dasharray="5 4"/>
+    <circle cx="760" cy="270" r="5" fill="#2f7d4a"/>
+    <text x="760" y="304" text-anchor="middle" font-size="9" fill="#456">your laptop</text>
+  </g>
+  <!-- node: family (bottom-right) -->
+  <g>
+    <rect x="899" y="240" width="42" height="60" rx="9" fill="#fff" stroke="#8a4fb0" stroke-width="2.5" stroke-dasharray="5 4"/>
+    <rect x="905" y="250" width="30" height="40" rx="3" fill="#f3e8f7"/>
+    <circle cx="920" cy="270" r="5" fill="#2f7d4a"/>
+    <text x="920" y="316" text-anchor="middle" font-size="9" fill="#456">family</text>
+  </g>
+  <!-- end-to-end note -->
+  <g transform="translate(742,320)">
+    <rect x="0" y="5" width="16" height="13" rx="3" fill="#f3e8f7" stroke="#8a4fb0" stroke-width="1.6"/>
+    <path d="M4 5 V2 a4 4 0 0 1 8 0 V5" fill="none" stroke="#8a4fb0" stroke-width="1.6"/>
+  </g>
+  <text x="838" y="332" text-anchor="middle" font-size="10" fill="#5e2e80">end-to-end encrypted</text>
+  <text x="800" y="400" text-anchor="middle" font-size="13" fill="#234">Devices link directly. <tspan fill="#8a4fb0" font-weight="bold">No server.</tspan></text>
+</svg>
