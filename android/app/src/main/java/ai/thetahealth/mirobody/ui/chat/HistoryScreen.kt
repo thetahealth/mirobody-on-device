@@ -44,10 +44,7 @@ import ai.thetahealth.mirobody.R
 import ai.thetahealth.mirobody.data.chat.dto.SessionSummary
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.OffsetDateTime
 import java.time.ZoneId
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -163,7 +160,7 @@ private fun HistoryRow(item: SessionSummary, onDelete: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
             )
-            if (item.timestamp.isNotBlank()) {
+            if (item.timestamp > 0L) {
                 Text(
                     text = formatTimestamp(item.timestamp),
                     style = MaterialTheme.typography.labelSmall,
@@ -211,16 +208,14 @@ private fun HistoryRow(item: SessionSummary, onDelete: () -> Unit) {
 private val HISTORY_FORMATTER: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
-private fun formatTimestamp(raw: String): String {
-    // Backend returns ISO-8601 in UTC, sometimes naive (no offset) like
-    // "2026-05-26T14:14:47.123456", sometimes with "Z" or "+00:00".
+private fun formatTimestamp(millis: Long): String {
+    // Backend returns the timestamp as epoch milliseconds (UTC).
     // Convert to the device's local zone for display.
     return try {
-        val instant = runCatching { OffsetDateTime.parse(raw).toInstant() }
-            .recoverCatching { Instant.parse(raw) }
-            .getOrElse { LocalDateTime.parse(raw).toInstant(ZoneOffset.UTC) }
-        instant.atZone(ZoneId.systemDefault()).format(HISTORY_FORMATTER)
+        Instant.ofEpochMilli(millis)
+            .atZone(ZoneId.systemDefault())
+            .format(HISTORY_FORMATTER)
     } catch (_: Exception) {
-        raw
+        millis.toString()
     }
 }

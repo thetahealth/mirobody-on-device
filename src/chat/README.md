@@ -40,7 +40,11 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
 - **`transport/mqtt.{hpp,cpp}`** — `MqttTransport`. Placeholder; `start()` is inert
   until a broker client is built. Documents the integration points.
 - **`dispatcher.{hpp,cpp}`** — `Dispatcher`. The seam between transports and
-  `Chat`. First runs an **upload preprocess** (`store_attachments`): offloads each
+  `Chat`. First applies the **per-user rate limit** (`CHAT_RATE_MAX` /
+  `CHAT_RATE_WINDOW_SEC`, via the cache) and rejects an over-limit caller before
+  any work — covering both the SSE and WebSocket paths since both arrive here;
+  `0` disables it (the shipped `config.example.yml` caps it at 5 turns / 60s).
+  Then runs an **upload preprocess** (`store_attachments`): offloads each
   of the Packet's binary attachments to object storage and records a reference in
   `params.files`, so bytes never enter the JSON — emitting a `UploadEvent`
   per file (and a `TranscriptEvent` begin/done pair around each text extraction)
@@ -118,3 +122,16 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
 Lives in **`src/mcp/`** (`tool.*` = the registry/contract, `service.*` = the
 JSON-RPC `/mcp` endpoint). Concrete tools live in `res/mcp_tools/*.cpp`. Agents
 invoke these tools; the MCP service also exposes them over JSON-RPC.
+
+### The "currently for" subject and tools
+
+Tools always execute as the **caller** (`UserInfo::user_id`), never as another
+user — this keeps writes (`remember`, `summarize_conversation`) and other-user
+data (`list_files`, `recall_memory`) scoped to the authenticated caller. The one
+exception is **read-only health delegation**: when a turn carries a care-circle
+`subject` (the chat composer's "currently for" picker), the dispatcher resolves
++ access-checks it (`resolve_health_subject`, read-only) and threads it as
+`UserInfo::subject_user_id` alongside the caller. Only `family_health` acts on
+it (defaulting to that member when no `member` arg is given, still re-gated by
+`can_read_health`); `whoami` merely flags `acting_for_member`. No tool ever
+swaps its identity to the subject.

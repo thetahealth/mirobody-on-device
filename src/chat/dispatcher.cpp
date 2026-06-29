@@ -5,6 +5,8 @@
 #include "chat/packet.hpp"
 #include "chat/params.hpp"
 #include "chat/transport/responder.hpp"
+#include "cache/cache.hpp"       // per-user chat rate limit
+#include "circle/access.hpp"     // resolve_health_subject (validate the "currently for" subject)
 #include "database/database.hpp"
 #include "platform/log.hpp"
 #include "storage/sign.hpp"      // sha256_hex (th_files.content_hash)
@@ -15,6 +17,7 @@
 
 #include <rapidjson/document.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -48,8 +51,21 @@ bool is_text_mime(const std::string& mime) {
 }   // namespace
 
 Dispatcher::Dispatcher(Chat& chat, storage::Storage* storage, cache::Cache* cache,
-                       file::Parser* parser, database::Database* db, memory::Memory* memory)
-    : chat_(chat), storage_(storage), cache_(cache), parser_(parser), db_(db), memory_(memory) {}
+                       file::Parser* parser, database::Database* db, memory::Memory* memory,
+                       int rate_max, int rate_window_seconds)
+    : chat_(chat), storage_(storage), cache_(cache), parser_(parser), db_(db), memory_(memory),
+      rate_max_(rate_max), rate_window_seconds_(rate_window_seconds > 0 ? rate_window_seconds : 60) {}
+
+bool Dispatcher::allow_turn(std::int64_t user_id) const {
+    if (rate_max_ <= 0 || cache_ == nullptr || user_id <= 0) return true;   // limit off / can't key
+    // Fixed window per user: incr() returns the post-increment count; stamp the
+    // window TTL on the first hit. Fail open if the cache backend errors.
+    const std::string key = "chat:rate:" + std::to_string(user_id);
+    mirobody::optional<std::int64_t> n = cache_->incr(key);
+    if (!n) return true;
+    if (*n == 1) cache_->set(key, "1", std::chrono::seconds(rate_window_seconds_));
+    return *n <= rate_max_;
+}
 
 //------------------------------------------------------------------------------
 // Upload preprocess
@@ -268,6 +284,14 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
 //------------------------------------------------------------------------------
 
 void Dispatcher::dispatch(Packet& pkt, std::int64_t user_id, Responder& out) {
+    // Per-user rate limit: reject early (before any upload/LLM work) when the
+    // caller has exceeded their window. Disabled by default (CHAT_RATE_MAX=0).
+    if (!allow_turn(user_id)) {
+        emit_error(out, "rate limit exceeded; please slow down and try again shortly");
+        out.finish();
+        return;
+    }
+
     // Preprocess: offload any uploaded bytes to object storage, recording
     // references in params.files for the command params to read. Emits
     // Upload / Transcript events into `out` so the client sees per-file
@@ -303,7 +327,20 @@ void Dispatcher::dispatch(Packet& pkt, std::int64_t user_id, Responder& out) {
             cp.request.storage = storage_;
             cp.request.memory  = memory_;
             cp.request.db      = db_;
-            chat_.persist_history(cp.request);   // best-effort, before streaming
+            // The "currently for" subject arrives as an opaque care-circle member
+            // handle (not a users PK). Resolve + authorize it to the real target
+            // user id for downstream use; fall back to self (0) when invalid or
+            // not permitted.
+            if (cp.request.subject_user_id > 0) {
+                const std::int64_t tgt = (db_ == nullptr) ? 0
+                    : circle::resolve_health_subject(*db_, user_id, cp.request.subject_user_id, false);
+                cp.request.subject_user_id = (tgt > 0 && tgt != user_id) ? tgt : 0;
+            }
+            // Persist this turn's question (best-effort, before streaming) and
+            // tell the client which thread it landed in, so it can continue or
+            // share that conversation. The answer is persisted once the turn ends.
+            const std::int64_t cid = chat_.persist_history(cp.request);
+            if (cid > 0) out.send(ConversationEvent(cid));
             chat_.response(cp.agent, cp.request, sink);
             break;
         }

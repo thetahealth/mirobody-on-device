@@ -48,6 +48,8 @@
 "chat_font_size_large" = "Large";
 "chat_font_size_larger" = "Larger";
 "chat_backend" = "Backend";
+"chat_attach_file" = "Attach file";
+"chat_attach_remove" = "Remove attachment";
 "chat_about" = "About";
 "about_version" = "Version %1$@";
 "chat_sign_out" = "Sign out";

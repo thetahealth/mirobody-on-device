@@ -12,6 +12,8 @@ import ai.thetahealth.mirobody.data.chat.ChatApi
 import ai.thetahealth.mirobody.data.chat.ChatHistoryStore
 import ai.thetahealth.mirobody.data.chat.ChatRepository
 import ai.thetahealth.mirobody.data.chat.ChatStreamClient
+import ai.thetahealth.mirobody.data.circle.CircleApi
+import ai.thetahealth.mirobody.data.circle.CircleRepository
 import ai.thetahealth.mirobody.data.config.ServerConfigApi
 import ai.thetahealth.mirobody.data.config.ServerConfigStore
 import ai.thetahealth.mirobody.data.health.HealthApi
@@ -70,6 +72,7 @@ class AppContainer(context: Context) {
 
     private val authApi: AuthApi = retrofit.create()
     private val chatApi: ChatApi = retrofit.create()
+    private val circleApi: CircleApi = retrofit.create()
     private val serverConfigApi: ServerConfigApi = retrofit.create()
     private val healthApi: HealthApi = retrofit.create()
 
@@ -81,6 +84,8 @@ class AppContainer(context: Context) {
     )
 
     val chatHistoryStore: ChatHistoryStore = ChatHistoryStore(appContext, NetworkFactory.json)
+
+    val circleRepository: CircleRepository = CircleRepository(circleApi)
 
     val serverConfigStore: ServerConfigStore = ServerConfigStore(
         api = serverConfigApi,

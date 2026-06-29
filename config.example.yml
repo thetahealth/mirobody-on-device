@@ -499,6 +499,36 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 # SMART_FHIR_SCOPE: 'launch/patient openid fhirUser offline_access patient/Observation.read'
 
 
+# -- Chat rate limit --------------------------------------------------------
+#
+# Each /api/chat turn (SSE or WebSocket) drives an upstream LLM call, so a
+# per-user rolling-window cap guards against runaway loops and abuse. The
+# compiled default is 0 = unlimited; this template enables a conservative cap
+# below. Set CHAT_RATE_MAX back to 0 to disable, or raise it for heavier use.
+#
+CHAT_RATE_MAX: 5              # max agent/live turns per user per window (0 = off)
+CHAT_RATE_WINDOW_SEC: 60      # window length in seconds
+
+
+# -- Care-circle limits -----------------------------------------------------
+#
+# Bound care-circle growth and curb abuse. The compiled default for every cap is
+# 0 = unlimited; this template enables conservative caps below. Set any back to 0
+# to disable it.
+#
+#   - CIRCLE_MAX_PER_USER:      max active circles a single user may own.
+#   - CIRCLE_MAX_MEMBERS:       max members per circle (pending invites count,
+#                               so a circle can't be filled with open invites).
+#   - CIRCLE_INVITE_MAX:        invitations one user may send per rolling window
+#                               (each also creates a shell account + sends mail).
+#   - CIRCLE_INVITE_WINDOW_SEC: length of that window, in seconds (default 3600).
+#
+CIRCLE_MAX_PER_USER: 5
+CIRCLE_MAX_MEMBERS: 5
+CIRCLE_INVITE_MAX: 10
+CIRCLE_INVITE_WINDOW_SEC: 1800
+
+
 # -- How to configure Firebase ----------------------------------------------
 #
 # Firebase Authentication brokers the federated ("social") sign-ins and lets the
@@ -571,7 +601,7 @@ FIREBASE_PROJECT_ID: 'mirobody-81000'
 #                                   auth/api-key-not-valid -- then use the Web
 #                                   app's key.
 #   - FIREBASE_MESSAGING_SENDER_ID: the project number.
-FIREBASE_WEB_API_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
+FIREBASE_WEB_API_KEY: 'AIzaSyCGuHqukiVwiClH0b1HYpW4I1bGdK9O-1w'
 FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 
 # Sign in with Apple (web). The Apple *Services ID* (NOT the app's bundle ID),

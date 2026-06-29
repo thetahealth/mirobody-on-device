@@ -73,7 +73,7 @@ struct VerifyView: View {
                 Button { dismiss() } label: { Image(systemName: "chevron.backward") }
                     .tint(colors.onSurfaceVariant)
             }
-            ToolbarItem(placement: .navigationBarTrailing) { BackendMenu() }
+            ToolbarItem(placement: .navigationBarTrailing) { LoginSettingsMenu() }
         }
         .onChange(of: vm.code) { newValue in
             if newValue.count == codeLength && !vm.verifying {

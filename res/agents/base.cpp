@@ -53,7 +53,7 @@ trim_to_recent_user_turns(const std::vector<mirobody::llm::ChatMessage>& message
 }
 
 std::string build_system_prompt(const std::string& language, const std::string& timezone,
-                                bool file_tools) {
+                                bool file_tools, std::int64_t subject_user_id) {
     std::time_t now = std::time(nullptr);
     char when[64] = {0};
     std::tm tmv;
@@ -95,6 +95,24 @@ std::string build_system_prompt(const std::string& language, const std::string& 
             "see the uploads, then call read_file with a file_key to get "
             "that file's text content. Do this instead of replying that you "
             "cannot process an image or file.\n";
+
+        // Health records (own + shared care-circle members) are reachable through
+        // the family_health tool. Always advertise it for signed-in users so the
+        // model fetches data instead of guessing.
+        prompt +=
+            "To answer questions about health records -- the user's own or a "
+            "care-circle member's who shared theirs -- call the family_health "
+            "tool (omit `member` or use \"me\" for the user; pass a name or "
+            "numeric id for a member). Only members who shared their data are "
+            "reachable.\n";
+        if (subject_user_id > 0) {
+            const std::string id = std::to_string(subject_user_id);
+            prompt +=
+                "The user is currently focused on care-circle member id " + id +
+                " (a member who shared their health data); for health questions "
+                "call family_health with member=\"" + id + "\" unless they clearly "
+                "mean someone else.\n";
+        }
     }
 
     return prompt;
@@ -189,7 +207,7 @@ public:
         // The list_files / read_file tools require an authenticated caller, so
         // only a signed-in user's prompt advertises them.
         const std::string prompt =
-            build_system_prompt(language, req.timezone, req.user_id > 0);
+            build_system_prompt(language, req.timezone, req.user_id > 0, req.subject_user_id);
         mirobody::platform::log_debug("chat[4/agent]: system prompt:\n%s", prompt.c_str());
 
         // Resolve the client: requested provider, then the agent default.
@@ -211,8 +229,9 @@ public:
         // authenticated user (the gpt/gemini clients forward it to their tool
         // executor; MiroThinker ignores it — it runs tools provider-side).
         mirobody::llm::UserContext user;
-        user.user_id    = req.user_id;
-        user.session_id = req.session_id;
+        user.user_id         = req.user_id;
+        user.session_id      = req.session_id;
+        user.subject_user_id = req.subject_user_id;   // authorized "currently for" member (read-only)
         user.cache      = req.cache;     // forwarded to the tool executor below
         user.storage    = req.storage;
         user.memory     = req.memory;
@@ -236,8 +255,9 @@ private:
 std::string run_tool_for_user(const std::string& name, const std::string& args_json,
                               const mirobody::llm::UserContext& uc) {
     mirobody::mcp::UserInfo user;
-    user.user_id    = uc.user_id;   // both are the raw row id as int64
-    user.session_id = uc.session_id;
+    user.user_id         = uc.user_id;   // both are the raw row id as int64
+    user.session_id      = uc.session_id;
+    user.subject_user_id = uc.subject_user_id;   // read-only care-circle subject, if any
     // Map the request's borrowed services onto the tool context so file-backed
     // tools reach the per-user index + object store, the memory tools reach the
     // long-term store, and the chat-history tools reach the relational store.

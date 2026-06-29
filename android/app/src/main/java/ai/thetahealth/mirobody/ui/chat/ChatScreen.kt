@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -31,8 +33,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
@@ -48,12 +53,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -71,9 +76,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -86,20 +93,31 @@ import ai.thetahealth.mirobody.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import ai.thetahealth.mirobody.data.chat.dto.ChatAttachment
 import ai.thetahealth.mirobody.data.chat.dto.CostStatistics
 import ai.thetahealth.mirobody.data.chat.dto.ProviderInfo
+import ai.thetahealth.mirobody.data.circle.dto.HealthSharer
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import ai.thetahealth.mirobody.ui.LocalLayoutInfo
 import ai.thetahealth.mirobody.ui.LocalFontSizePreview
 import ai.thetahealth.mirobody.ui.ProvideLocale
+import ai.thetahealth.mirobody.ui.circle.CareCircleDialog
+import ai.thetahealth.mirobody.ui.circle.ShareConversationDialog
 import ai.thetahealth.mirobody.ui.health.HealthSyncDialog
 import ai.thetahealth.mirobody.ui.settings.BaseUrlDialog
+import ai.thetahealth.mirobody.ui.settings.FontSizeDialog
 import ai.thetahealth.mirobody.ui.settings.LanguageDialog
 import ai.thetahealth.mirobody.ui.theme.BrandBlue
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import kotlin.math.roundToInt
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +130,7 @@ fun ChatScreen(
             initializer {
                 ChatViewModel(
                     container.chatRepository,
+                    container.circleRepository,
                     container.settings,
                     container.errorBus,
                     container.chatHistoryStore,
@@ -125,6 +144,19 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val context = LocalContext.current
+
+    // System file picker → read each pick into a ChatAttachment off the main thread,
+    // then stage it in the composer (mirrors the web client's paperclip upload).
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetMultipleContents(),
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        scope.launch {
+            val atts = withContext(Dispatchers.IO) { uris.mapNotNull { readChatAttachment(context, it) } }
+            atts.forEach(vm::addAttachment)
+        }
+    }
 
     LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
         if (state.messages.isNotEmpty()) {
@@ -164,6 +196,7 @@ fun ChatScreen(
                     SettingsMenu(
                         currentLanguage = state.language,
                         currentFontOffset = fontOffset,
+                        conversationId = state.conversationId,
                         onSelectLanguage = { code ->
                             scope.launch { container.settings.setLanguage(code) }
                         },
@@ -193,13 +226,47 @@ fun ChatScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(modifier = Modifier.widthIn(max = layout.contentMaxWidth)) {
-                        ChatInputField(
-                            value = state.input,
-                            onValueChange = vm::onInputChange,
-                            enabled = !state.sending,
-                            canSend = !state.sending && state.input.isNotBlank() && state.selected != null,
-                            onSend = vm::send,
-                        )
+                        // "Currently for" subject picker — shown only when care-circle
+                        // members have shared their health data with this user. Picking
+                        // one sends `subject` so the AI's family_health tool defaults to
+                        // that member ("how is Mom doing?").
+                        if (state.sharers.isNotEmpty()) {
+                            SubjectPicker(
+                                sharers = state.sharers,
+                                subject = state.subject,
+                                onSelect = vm::onSubjectSelected,
+                            )
+                        }
+                        // Staged attachments, removable until the turn is sent.
+                        if (state.attachments.isNotEmpty()) {
+                            AttachmentChips(
+                                attachments = state.attachments,
+                                onRemove = vm::removeAttachment,
+                            )
+                        }
+                        // Single-line composer, so center the paperclip against the field.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { filePicker.launch("*/*") },
+                                enabled = !state.sending,
+                                modifier = Modifier.padding(start = 4.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.AttachFile,
+                                    contentDescription = stringResource(R.string.chat_attach_file),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            ChatInputField(
+                                value = state.input,
+                                onValueChange = vm::onInputChange,
+                                enabled = !state.sending,
+                                canSend = !state.sending && state.selected != null &&
+                                    (state.input.isNotBlank() || state.attachments.isNotEmpty()),
+                                onSend = vm::send,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }
@@ -293,6 +360,7 @@ private fun ChatInputField(
     enabled: Boolean,
     canSend: Boolean,
     onSend: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val shape = RoundedCornerShape(16.dp)
@@ -310,7 +378,7 @@ private fun ChatInputField(
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 10.dp),
         enabled = enabled,
@@ -346,10 +414,135 @@ private fun ChatInputField(
     )
 }
 
+/** Label for a sharer in the subject picker: nickname, else email, else "#handle". */
+private fun HealthSharer.displayLabel(): String =
+    nickname.ifBlank { email }.ifBlank { "#$member" }
+
+@Composable
+private fun SubjectPicker(
+    sharers: List<HealthSharer>,
+    subject: Long,
+    onSelect: (Long) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val meLabel = stringResource(R.string.chat_subject_me)
+    val selectedLabel = if (subject == 0L) meLabel
+        else sharers.firstOrNull { it.member == subject }?.displayLabel() ?: meLabel
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.chat_currently_for),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Box {
+            TextButton(
+                onClick = { expanded = true },
+                shape = RoundedCornerShape(10.dp),
+            ) {
+                Text(
+                    text = selectedLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Icon(
+                    Icons.Outlined.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(
+                    text = { Text(meLabel) },
+                    onClick = {
+                        onSelect(0)
+                        expanded = false
+                    },
+                )
+                sharers.forEach { sharer ->
+                    DropdownMenuItem(
+                        text = { Text(sharer.displayLabel()) },
+                        onClick = {
+                            onSelect(sharer.member)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Read a picked content Uri into an in-memory attachment (display name, mime, bytes). */
+private fun readChatAttachment(context: Context, uri: Uri): ChatAttachment? = runCatching {
+    val resolver = context.contentResolver
+    val mime = resolver.getType(uri) ?: "application/octet-stream"
+    val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+        ?.use { c -> if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null }
+        ?: uri.lastPathSegment ?: "file"
+    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+    if (bytes == null) null else ChatAttachment(fileName = name, mimeType = mime, bytes = bytes)
+}.getOrNull()
+
+@Composable
+private fun AttachmentChips(
+    attachments: List<ChatAttachment>,
+    onRemove: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        attachments.forEachIndexed { index, att ->
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 10.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Description,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = att.fileName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .padding(start = 6.dp)
+                            .widthIn(max = 160.dp),
+                    )
+                    IconButton(onClick = { onRemove(index) }, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            imageVector = Icons.Outlined.Close,
+                            contentDescription = stringResource(R.string.chat_attach_remove),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SettingsMenu(
     currentLanguage: String,
     currentFontOffset: Int,
+    conversationId: String,
     onSelectLanguage: (String) -> Unit,
     onSelectFontOffset: (Int) -> Unit,
     onSignOut: () -> Unit,
@@ -359,6 +552,8 @@ private fun SettingsMenu(
     var showFontSizeDialog by remember { mutableStateOf(false) }
     var showBackendDialog by remember { mutableStateOf(false) }
     var showHealthDialog by remember { mutableStateOf(false) }
+    var showCircleDialog by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
     IconButton(onClick = { expanded = true }) {
@@ -398,6 +593,22 @@ private fun SettingsMenu(
                     showHealthDialog = true
                 },
             )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.chat_care_circle)) },
+                onClick = {
+                    expanded = false
+                    showCircleDialog = true
+                },
+            )
+            if (conversationId.isNotBlank()) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.chat_share)) },
+                    onClick = {
+                        expanded = false
+                        showShareDialog = true
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.chat_about)) },
                 onClick = {
@@ -466,6 +677,21 @@ private fun SettingsMenu(
         )
     }
 
+    if (showCircleDialog) {
+        CareCircleDialog(
+            currentLanguage = currentLanguage,
+            onDismiss = { showCircleDialog = false },
+        )
+    }
+
+    if (showShareDialog && conversationId.isNotBlank()) {
+        ShareConversationDialog(
+            conversationId = conversationId,
+            currentLanguage = currentLanguage,
+            onDismiss = { showShareDialog = false },
+        )
+    }
+
     if (showAboutDialog) {
         AboutDialog(
             currentLanguage = currentLanguage,
@@ -483,81 +709,6 @@ private fun SettingsMenu(
             onDismiss = { showSignOutDialog = false },
         )
     }
-}
-
-@Composable
-private fun FontSizeDialog(
-    currentLanguage: String,
-    current: Int,
-    onPreview: (Int) -> Unit,
-    onPick: (Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val tiers = listOf(
-        -4 to R.string.chat_font_size_smaller,
-        -2 to R.string.chat_font_size_small,
-        0 to R.string.chat_font_size_normal,
-        2 to R.string.chat_font_size_large,
-        4 to R.string.chat_font_size_larger,
-    )
-    val initialIndex = tiers.indexOfFirst { it.first == current }.let {
-        if (it < 0) 2 else it
-    }
-    var stagedIndex by remember(current) { mutableStateOf(initialIndex) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            ProvideLocale(currentLanguage) {
-                Text(stringResource(R.string.chat_font_size))
-            }
-        },
-        text = {
-            ProvideLocale(currentLanguage) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Slider(
-                        value = stagedIndex.toFloat(),
-                        onValueChange = { v ->
-                            val idx = v.roundToInt().coerceIn(0, tiers.lastIndex)
-                            if (idx != stagedIndex) {
-                                stagedIndex = idx
-                                onPreview(tiers[idx].first)
-                            }
-                        },
-                        valueRange = 0f..tiers.lastIndex.toFloat(),
-                        steps = tiers.size - 2,
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        tiers.forEachIndexed { index, (_, labelRes) ->
-                            val selected = index == stagedIndex
-                            Text(
-                                text = stringResource(labelRes),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = { onPick(tiers[stagedIndex].first) }) {
-                    Text(stringResource(R.string.common_done))
-                }
-            }
-        },
-        dismissButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.common_cancel))
-                }
-            }
-        },
-    )
 }
 
 @Composable
@@ -728,11 +879,13 @@ private fun MessageBubble(msg: ChatMessage, currentLanguage: String) {
             }
         }
         if (isUser) {
-            val userShape = RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp, bottomStart = 14.dp, bottomEnd = 4.dp)
+            // Solid navy bubble with light text — the web client's user-turn style:
+            // 8dp corners with a sharp 2dp "tail" at the top-end (top-right in LTR).
+            val userShape = RoundedCornerShape(topStart = 8.dp, topEnd = 2.dp, bottomEnd = 8.dp, bottomStart = 8.dp)
             Surface(
                 shape = userShape,
-                color = BrandBlue.copy(alpha = 0.12f),
-                contentColor = MaterialTheme.colorScheme.onSurface,
+                color = BrandBlue,
+                contentColor = Color.White,
                 modifier = Modifier.widthIn(max = bubbleMaxWidth),
             ) {
                 BubbleContent(msg)
@@ -745,15 +898,25 @@ private fun MessageBubble(msg: ChatMessage, currentLanguage: String) {
                     .padding(vertical = 2.dp),
             ) {
                 BubbleContent(msg)
-                // Footer for a settled reply: the stats icon (when cost data is
-                // available) and, to its right, a copy icon.
+                // Footer for a settled reply: the provider ("Agent/model") label on
+                // the left; on the right the stats icon (when cost data is available)
+                // and a copy icon. Mirrors the web client's reply footer.
                 val showStatsIcon = msg.costStats != null
                 val showCopyIcon = msg.text.isNotEmpty()
-                if (!msg.streaming && (showStatsIcon || showCopyIcon)) {
+                val showLabel = msg.provider.isNotBlank()
+                if (!msg.streaming && (showLabel || showStatsIcon || showCopyIcon)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Text(
+                            text = msg.provider,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
                         if (showStatsIcon) {
                             IconButton(
                                 onClick = { showStats = true },
@@ -863,6 +1026,27 @@ private fun BubbleContent(msg: ChatMessage) {
     val context = LocalContext.current
     var viewerUrl by remember { mutableStateOf<String?>(null) }
     Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+        msg.attachmentNames.forEach { name ->
+            // Uses LocalContentColor so it stays legible on the navy user bubble.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 4.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = LocalContentColor.current.copy(alpha = 0.8f),
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalContentColor.current.copy(alpha = 0.9f),
+                    maxLines = 1,
+                    modifier = Modifier.padding(start = 6.dp),
+                )
+            }
+        }
         msg.toolCalls.forEachIndexed { index, tool ->
             ToolCallCard(
                 tool = tool,

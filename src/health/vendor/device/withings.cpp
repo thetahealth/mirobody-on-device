@@ -5,9 +5,16 @@
 // Withings API (https://developer.withings.com/api-reference/):
 //   * base_url defaults to the documented host https://wbsapi.withings.net
 //     (override via MIROBODY_VENDOR_WITHINGS_BASE_URL).
-//   * auth is an OAuth 2.0 access token (config.api_key) as a Bearer header;
-//     minted out of band via Withings' authorization-code flow, so authorize_url
-//     / revoke stay stubs here.
+//   * auth is an OAuth 2.0 access token (config.api_key) as a Bearer header on
+//     fetch(); minted out of band via Withings' authorization-code flow.
+//   * authorize_url() builds the standard authorization-code consent URL at
+//     account.withings.com/oauth2_user/authorize2 from config.client_id (no
+//     network call). revoke() and handle_webhook() stay inherited stubs: Withings
+//     documents no app-initiated token-revoke endpoint (only the user can revoke,
+//     or Notify's `revoke` action which just drops a webhook subscription), and its
+//     Notify webhook carries no inbound signature to verify — the documented
+//     pattern is to treat a notification as an untrusted trigger and re-fetch via
+//     the Data API.
 //   * fetch() POSTs form-encoded requests with an `action` selector, the way the
 //     API is shaped. Domains map onto the documented services: body measures
 //     (Measure v1 getmeas, unix-second window), heart list (Heart v2, unix-second
@@ -19,6 +26,7 @@
 
 #include "client/http_client.hpp"
 
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
@@ -27,6 +35,29 @@
 
 namespace mirobody { namespace vendor {
 namespace {
+
+// OAuth 2.0 authorization endpoint (account host; the Data API lives on the
+// wbsapi host that base_url() points at).
+const char kAuthorizeUrl[] = "https://account.withings.com/oauth2_user/authorize2";
+// Consent scopes for the domains this client brokers (comma-separated per docs).
+const char kDefaultScope[] = "user.info,user.metrics,user.activity,user.sleepevents";
+
+// Percent-encode a query-string component (RFC 3986 unreserved pass through).
+std::string url_encode(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() * 3);
+    for (unsigned char c : s) {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out.push_back(static_cast<char>(c));
+        } else {
+            static const char* hex = "0123456789ABCDEF";
+            out.push_back('%');
+            out.push_back(hex[c >> 4]);
+            out.push_back(hex[c & 0x0F]);
+        }
+    }
+    return out;
+}
 
 // ISO-8601 UTC -> Unix epoch seconds; -1 when it doesn't start with a date-time.
 // (Measure/Heart take second-resolution windows.)
@@ -122,6 +153,30 @@ public:
                               std::to_string(res.status) + "): " + res.body.substr(0, 300));
         }
         return res.body;
+    }
+
+    // Build the OAuth 2.0 authorization-code consent URL (pure construction; the
+    // token is exchanged out of band afterwards). Withings requires redirect_uri
+    // and state; user_id/provider are unused. Requires the OAuth client_id. (The
+    // authorization code Withings returns is valid for only ~30 seconds.)
+    std::string authorize_url(const std::string& redirect_uri,
+                              const std::string& state,
+                              const std::string& /*user_id*/,
+                              const std::string& /*provider*/) override {
+        if (config().client_id.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires an OAuth client_id — set "
+                              "MIROBODY_VENDOR_WITHINGS_CLIENT_ID");
+        }
+        std::string url = std::string(kAuthorizeUrl) +
+                          "?response_type=code&client_id=" + url_encode(config().client_id) +
+                          "&scope=" + url_encode(kDefaultScope);
+        if (!redirect_uri.empty()) {
+            url += "&redirect_uri=" + url_encode(std::string(redirect_uri));
+        }
+        if (!state.empty()) {
+            url += "&state=" + url_encode(std::string(state));
+        }
+        return url;
     }
 
 private:

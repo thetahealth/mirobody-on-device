@@ -79,24 +79,42 @@ struct BaseUrlDialog: View {
     }
 }
 
-/// Toolbar menu for the auth screens — a gear that opens the Backend dialog.
-/// Mirrors `BackendOnlyMenu` in `EmailScreen.kt`.
-struct BackendMenu: View {
+/// Pre-auth settings menu for the auth screens — Language, Font size, Backend.
+/// Mirrors `LoginSettingsMenu` in `EmailScreen.kt` (the care-circle / health /
+/// sign-out items only appear once authenticated, in the chat menu).
+struct LoginSettingsMenu: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.mbColors) private var colors
     @Environment(\.mbLanguage) private var lang
+    @State private var showLanguage = false
+    @State private var showFontSize = false
     @State private var showBackend = false
 
     var body: some View {
         Menu {
+            Button(L("chat_language", lang)) { showLanguage = true }
+            Button(L("chat_font_size", lang)) { showFontSize = true }
             Button(L("chat_backend", lang)) { showBackend = true }
         } label: {
             Image(systemName: "gearshape").foregroundColor(colors.onSurfaceVariant)
+        }
+        .sheet(isPresented: $showLanguage) {
+            LanguageDialog(current: settings.language) { settings.setLanguage($0) }
+                .environmentObject(settings)
+                .environment(\.mbLanguage, lang)
+                .environment(\.mbFontScale, fontScale(forOffset: settings.fontSizeOffset))
+        }
+        .sheet(isPresented: $showFontSize) {
+            FontSizeDialog()
+                .environmentObject(settings)
+                .environment(\.mbLanguage, lang)
+                .environment(\.mbFontScale, fontScale(forOffset: settings.fontSizeOffset))
         }
         .sheet(isPresented: $showBackend) {
             BaseUrlDialog()
                 .environmentObject(settings)
                 .environment(\.mbLanguage, lang)
+                .environment(\.mbFontScale, fontScale(forOffset: settings.fontSizeOffset))
         }
     }
 }

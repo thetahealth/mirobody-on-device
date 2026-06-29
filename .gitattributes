@@ -1,3 +1,6 @@
 # Shell scripts must stay LF even on Windows checkout, or they break under
 # bash on Linux / WSL (a CRLF in the shebang line is fatal).
 *.sh text eol=lf
+# Android APKs (htdoc/static/mirobody.apk + its res/htdoc/ build copy) are large
+# binaries served for download; keep them out of normal git history via LFS.
+*.apk filter=lfs diff=lfs merge=lfs -text

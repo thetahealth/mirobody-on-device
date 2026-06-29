@@ -17,6 +17,7 @@ const color  = config.color;
 const serifFamily = config.serifFamily;
 const state  = config.state;
 const isMobile    = config.isMobile;
+const isAndroid   = config.isAndroid;
 const PROVIDER_KEY = config.PROVIDER_KEY;
 
 const widgets = require("./widgets");
@@ -138,7 +139,13 @@ function buildChat() {
     providerWrap.appendChild(caret);
 
     app.slots.topCenter = providerWrap;
-    app.slots.topRight  = buildSettingsMenu();
+
+    // Right slot: just the settings menu.
+    var rightWrap = ui.dom("div", {
+        display: "flex", alignItems: "center", gap: "2px"
+    });
+    rightWrap.appendChild(buildSettingsMenu());
+    app.slots.topRight = rightWrap;
 
     //----------------------------------------------------
 
@@ -166,8 +173,7 @@ function buildChat() {
         maxWidth      : THREAD_MAX,
         marginInline  : "auto",
         display       : "flex",
-        flexDirection : "column",
-        gap           : "14px"
+        flexDirection : "column"
     });
     log.appendChild(thread);
 
@@ -193,18 +199,19 @@ function buildChat() {
             bubble = ui.setText(ui.dom("div", {
                 whiteSpace   : "pre-wrap",
                 wordWrap     : "break-word",
-                padding      : "10px 14px",
+                padding      : "5px 9px",
                 // Sharp "tail" at the top-inline-end corner (top-right in LTR,
                 // top-left in RTL); the other three corners stay rounded.
-                borderStartStartRadius : "16px",
-                borderStartEndRadius   : "4px",
-                borderEndEndRadius     : "16px",
-                borderEndStartRadius   : "16px",
+                borderStartStartRadius : "8px",
+                borderStartEndRadius   : "2px",
+                borderEndEndRadius     : "8px",
+                borderEndStartRadius   : "8px",
                 fontSize     : "1rem",
-                lineHeight   : "1.5",
+                lineHeight   : "1.75",
                 maxWidth     : isMobile() ? "85%" : "320px",
-                background   : "#1A1A1A",
-                color        : color.onPrimary
+                background   : "#1E3A6B",
+                color        : color.onPrimary,
+                margin       : "32px 0 0 0"
             }), text);
         } else {
             // Assistant turn: rendered Markdown + math (class "md", styled in
@@ -214,6 +221,12 @@ function buildChat() {
                 fontSize   : "1rem",
                 lineHeight : "1.6",
                 width      : "100%",
+                // Flex items default to min-width:auto, which refuses to shrink
+                // below the intrinsic width of wide children (code blocks, tables).
+                // That would push the row past the viewport and give phones a
+                // horizontal scrollbar; min-width:0 lets the bubble shrink so those
+                // children honor their own overflow-x:auto (see index.css) instead.
+                minWidth   : "0",
                 color      : color.onSurface
             });
             bubble.className = "md";
@@ -229,7 +242,7 @@ function buildChat() {
             var stamp = ui.dom("div", {
                 display        : "flex",
                 justifyContent : "flex-end",
-                marginTop      : "-8px"
+                margin         : "4px 0"
             });
             stamp.appendChild(ui.setText(ui.dom("div", {
                 fontSize : "0.7rem",
@@ -270,7 +283,7 @@ function buildChat() {
             flex       : "1 1 auto",
             display    : "flex",
             alignItems : "center",
-            fontSize   : "14px",
+            fontSize   : "0.7rem",
             fontWeight : "400",
             color      : "#757575"
         }), providerLabel || "");
@@ -279,8 +292,7 @@ function buildChat() {
             flex           : "1 1 auto",
             display        : "flex",
             alignItems     : "center",
-            justifyContent : "flex-end",
-            gap            : "2px"
+            justifyContent : "flex-end"
         });
 
         if (cost) {
@@ -300,8 +312,7 @@ function buildChat() {
         var row = ui.dom("div", {
             display        : "flex",
             alignItems     : "center",
-            justifyContent : "space-between",
-            marginTop      : "4px"
+            justifyContent : "space-between"
         });
         row.appendChild(label);
         row.appendChild(actions);
@@ -381,8 +392,36 @@ function buildChat() {
     };
 
     // Hidden native picker; the paperclip button proxies clicks to it.
+    //
+    // `accept` must be non-empty: with none, some mobile browsers (Android WebViews,
+    // WeChat/UC/QQ) treat a bare `type=file` as a capture input and open the camera
+    // directly instead of the file chooser.
+    //
+    // On Android, though, a *narrow* list breaks the picker outright: Chrome turns
+    // the MIME/extension list into an ACTION_GET_CONTENT intent, and on many devices
+    // (esp. domestic ROMs) nothing is registered to satisfy the exotic Office/vendor
+    // types, so tapping the paperclip just toasts "no app can perform this action"
+    // and no file (not even an image) can be picked. `*/*` is still non-empty (so it
+    // keeps the WebView camera workaround) but always resolves to the system file
+    // manager. Other platforms keep the curated list so the chooser pre-filters; the
+    // server accepts any bytes either way.
+    var fileAccept = isAndroid()
+        ? "*/*"
+        : [
+            "image/*",
+            "application/pdf",
+            "text/plain", "text/csv", "text/markdown", "text/xml",
+            "application/json", "application/xml",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.ms-excel",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".txt", ".csv", ".md", ".json", ".xml", ".pdf",
+            ".doc", ".docx", ".xls", ".xlsx"
+        ].join(",");
     var fileInput = ui.dom("input", { display: "none" }, {
-        type: "file", multiple: "multiple"
+        type: "file", multiple: "multiple",
+        accept: fileAccept
     });
 
     // The strip of attachment chips above the input bar; collapsed when empty.
@@ -616,6 +655,11 @@ function buildChat() {
 
     var attach = iconButton(ATTACH_SVG, t("attachFile"));
     attach.style.flex = "0 0 auto";
+    // Match the 40px send button so that, with the bar's flex-end alignment, the
+    // paperclip is vertically centered against a single-line composer (rather than
+    // sitting ~4px low as a 32px button would).
+    attach.style.width  = "40px";
+    attach.style.height = "40px";
     attach.addEventListener("click", function () { fileInput.click(); });
 
     // Circular navy send button with an up-arrow (Theta Health style); toggled
@@ -667,6 +711,47 @@ function buildChat() {
         }
     });
 
+    // "Currently for" subject selector — shown only when care-circle members have
+    // shared their health data with this user. Picking one sends `subject` so the
+    // AI's family_health tool defaults to that member ("how is Mom doing?").
+    var subjectSelect = ui.dom("select", {
+        font: "inherit", fontSize: "0.85rem", padding: "4px 8px", borderRadius: "10px",
+        border: "1px solid " + color.outlineVar, background: color.surfaceLow,
+        color: color.onSurface, cursor: "pointer"
+    });
+    subjectSelect.addEventListener("change", function () { state.currentSubjectId = subjectSelect.value; });
+    var subjectRow = ui.dom("div", {
+        display: "none", alignItems: "center", gap: "8px",
+        width: "100%", maxWidth: THREAD_MAX, marginInline: "auto", padding: "0 10px 8px"
+    });
+    subjectRow.appendChild(ui.setText(ui.dom("span", {
+        fontSize: "0.8rem", color: color.onSurfaceVar, flex: "0 0 auto"
+    }), t("chatCurrentlyFor")));
+    subjectRow.appendChild(subjectSelect);
+    function loadSubjects() {
+        net.get("/api/circle/health-shared-with-me", function (d) {
+            var users = (d && d.users instanceof Array) ? d.users : [];
+            ui.clear(subjectSelect);
+            var me = ui.dom("option", null, { value: "" }); ui.setText(me, t("chatSubjectMe"));
+            subjectSelect.appendChild(me);
+            var shown = 0;
+            for (var i = 0; i < users.length; i ++) {
+                var u = users[i];
+                if (u.member == null) { continue; }   // no usable handle — skip (don't make value "undefined")
+                var op = ui.dom("option", null, { value: String(u.member) });
+                ui.setText(op, u.nickname || u.email || ("#" + u.member));
+                subjectSelect.appendChild(op);
+                shown ++;
+            }
+            subjectSelect.value = state.currentSubjectId || "";
+            if (subjectSelect.value !== (state.currentSubjectId || "")) {   // stale selection
+                state.currentSubjectId = ""; subjectSelect.value = "";
+            }
+            subjectRow.style.display = shown ? "flex" : "none";
+        }, function () { subjectRow.style.display = "none"; });
+    }
+    loadSubjects();
+
     var form = ui.dom("form", {
         flex          : "0 0 auto",
         display       : "flex",
@@ -676,6 +761,7 @@ function buildChat() {
     });
     send.setAttribute("type", "submit");
     form.appendChild(previews);
+    form.appendChild(subjectRow);
     form.appendChild(bar);
     form.appendChild(fileInput);
 
@@ -991,6 +1077,10 @@ function buildChat() {
                 appendFooter(turnProvider, acc, assistantCost);
             };
 
+            // Only an opaque member handle (positive integer) is a valid subject;
+            // anything else (including a stale "undefined") means "myself" => "".
+            var subjectId = /^[0-9]+$/.test(state.currentSubjectId) ? state.currentSubjectId : "";
+
             // With attachments, post a multipart form so the files ride along
             // (the server saves them to object storage and references them on the
             // turn); otherwise the lighter JSON body. Same fields either way.
@@ -1001,12 +1091,16 @@ function buildChat() {
                 agentBody.append("provider", providerName);
                 agentBody.append("question", text);
                 agentBody.append("language", state.language || "");
+                if (state.currentConversationId) { agentBody.append("conversation_id", state.currentConversationId); }
+                if (subjectId) { agentBody.append("subject", subjectId); }
                 for (var fi = 0; fi < turnFiles.length; fi ++) {
                     agentBody.append("file", turnFiles[fi], turnFiles[fi].name);
                     appendUploading(turnFiles[fi].name);
                 }
             } else {
-                agentBody = { agent: agentName, provider: providerName, question: text, language: state.language };
+                agentBody = { agent: agentName, provider: providerName, question: text,
+                              language: state.language, conversation_id: state.currentConversationId || "",
+                              subject: subjectId };
             }
 
             net.stream(
@@ -1015,6 +1109,12 @@ function buildChat() {
                 function (chunk) { // onmessage
                     if (handled) { return; }
                     var ev = parseAgentChunk(chunk);
+                    if (ev.conversation) {
+                        // The server's thread id for this turn; remember it so the
+                        // next turn continues the same thread and Share targets it.
+                        if (ev.conversation.id) { state.currentConversationId = ev.conversation.id; }
+                        return;
+                    }
                     if (ui.isString(ev.reply)) {
                         acc += ev.reply;
                         streamRender(bubble, acc);
@@ -1090,7 +1190,9 @@ function buildChat() {
     });
 
     wrap.appendChild(log);
-    wrap.appendChild(form);
+    // A conversation shared *to* the user is read-only: omit the composer so it
+    // can't be continued (only its owner can).
+    if (!state.readOnly) { wrap.appendChild(form); }
     return wrap;
 };
 
@@ -1132,6 +1234,12 @@ function parseAgentChunk(chunk) {
     }
     if (json.type === "error") {
         return { error: json.content || "error" };
+    }
+    // The durable conversation (thread) id for this turn. content carries it as a
+    // precise decimal string (JS loses integer precision past 2^53).
+    if (json.type === "conversation") {
+        return { conversation: { id: ui.isString(json.content) ? json.content
+                    : (json.conversation_id != null ? String(json.conversation_id) : "") } };
     }
     // Tool-call lifecycle: one queryTitle / queryArguments / queryDetail
     // triple per invocation, correlated by tool_id (title = tool name,

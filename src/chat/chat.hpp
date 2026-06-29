@@ -84,11 +84,25 @@ public:
     // event. Does NOT emit a terminal frame -- the caller marks turn end.
     void live_response(const LiveRequest& req, const llm::EventHandler& on_event);
 
-    // Best-effort: record a session row for an agent turn so it shows in
-    // history. No-op for anonymous users / empty questions; never throws.
-    void persist_history(const AgentRequest& req);
+    // Best-effort: record this turn's question so the thread shows in history,
+    // and return the conversation (thread) id it landed in -- 0 when nothing was
+    // written (anonymous user / empty question / failure / legacy backend).
+    //
+    // Thread-aware (modern backends): when req.conversation_id names a thread the
+    // caller owns, the question is appended to it; otherwise a new thread is
+    // started. Either way it stamps req.conversation_id (the thread) and
+    // req.question_id (this question's row) so the streamed answer -- persisted
+    // by response() once the turn ends -- can link back. Never throws.
+    std::int64_t persist_history(AgentRequest& req);
 
 private:
+    // Best-effort: persist the finished assistant answer for `req`'s turn as a
+    // messages row linked to req.conversation_id / req.question_id (set by
+    // persist_history). No-op when those are unset, the answer is empty, or on the
+    // legacy backend. Never throws.
+    void persist_response(const AgentRequest& req, const std::string& agent_name,
+                          const std::string& reply);
+
     const Config&      cfg_;
     database::Database& db_;
 };

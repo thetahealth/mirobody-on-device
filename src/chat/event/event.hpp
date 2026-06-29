@@ -20,6 +20,7 @@
 
 #include "llm/event.hpp"   // llm::Event, llm::CostStatistics (producer side)
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -167,6 +168,21 @@ private:
     Phase       phase_;
     std::string filename_;
     bool        extracted_;
+};
+
+// The durable conversation (thread) id for this turn. Chat-tier only -- the
+// dispatcher emits it once, right after persisting the question, so the client
+// can remember it and (a) echo it back as conversation_id to continue the same
+// thread, and (b) share it with a care-circle member. `content` carries the id
+// as a decimal string (precise for JS, which loses integer precision past 2^53);
+// "conversation_id" repeats it as a number for convenience.
+class ConversationEvent : public Event {
+public:
+    explicit ConversationEvent(std::int64_t id) : id_(id) {}
+    const char* type() const override { return "conversation"; }
+    std::string to_json() const override;
+private:
+    std::int64_t id_;
 };
 
 // The end-of-turn marker the frontend waits for. Chat-tier only -- the domain

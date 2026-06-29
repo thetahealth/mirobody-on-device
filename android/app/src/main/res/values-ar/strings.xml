@@ -37,6 +37,46 @@
     <string name="chat_message_hint">رسالة</string>
     <string name="chat_history_cd">السجل</string>
     <string name="chat_select_model">اختر النموذج</string>
+    <string name="chat_currently_for">حاليًا لـ</string>
+    <string name="chat_subject_me">أنا</string>
+
+    <string name="chat_attach_file">إرفاق ملف</string>
+    <string name="chat_attach_remove">إزالة المرفق</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">مشاركة</string>
+    <string name="share_title">مشاركة هذه المحادثة</string>
+    <string name="share_no_members">أضِف أعضاء إلى دائرة رعاية أولًا (الإعدادات → دائرة الرعاية).</string>
+    <string name="share_access_view">عرض</string>
+    <string name="share_access_edit">تحرير</string>
+    <string name="share_save">حفظ</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">دائرة الرعاية</string>
+    <string name="circle_title">دوائر الرعاية الخاصة بي</string>
+    <string name="circle_members">الأعضاء</string>
+    <string name="circle_invites">الدعوات المستلمة</string>
+    <string name="circle_invite_hint">الدعوة عبر البريد</string>
+    <string name="circle_invite">دعوة</string>
+    <string name="circle_accept">قبول</string>
+    <string name="circle_decline">رفض</string>
+    <string name="circle_remove">إزالة</string>
+    <string name="circle_remove_confirm">إزالة %1$s من هذه الدائرة؟</string>
+    <string name="circle_pending">قيد الانتظار</string>
+    <string name="circle_owner">المالك</string>
+    <string name="circle_you">أنا</string>
+    <string name="circle_role_member">عضو</string>
+    <string name="circle_role_maintainer">مشرف</string>
+    <string name="circle_no_members">لا أحد بعد. ادعُ شخصًا عبر البريد أدناه.</string>
+    <string name="circle_health_share">مشاركة بياناتي الصحية</string>
+    <string name="circle_health_off">إيقاف</string>
+    <string name="circle_health_view">يمكنه العرض</string>
+    <string name="circle_health_edit">يمكنه العرض والتحرير</string>
+    <string name="circle_no_circles">لا توجد دوائر بعد. أنشئ واحدة أدناه لدعوة الأشخاص.</string>
+    <string name="circle_new_name_hint">اسم الدائرة الجديدة</string>
+    <string name="circle_create">إنشاء</string>
+    <string name="circle_delete_circle">حذف الدائرة</string>
+    <string name="circle_delete_confirm">حذف ”%1$s“؟ سيفقد الأعضاء الوصول إلى كل ما تمت مشاركته عبر هذه الدائرة فقط.</string>
     <string name="chat_no_providers">لم يتم تحميل أي مزوّدين</string>
     <string name="chat_language">اللغة</string>
     <string name="chat_font_size">حجم الخط</string>
@@ -46,6 +86,16 @@
     <string name="chat_font_size_large">كبير</string>
     <string name="chat_font_size_larger">أكبر</string>
     <string name="chat_backend">الخادم</string>
+
+    <!-- On-device health sync -->
+    <string name="chat_sync_health">مزامنة البيانات الصحية</string>
+    <string name="health_checking">جارٍ البحث عن مصدر صحي على الجهاز…</string>
+    <string name="health_no_source">لا يوجد مصدر صحي على هذا الجهاز.</string>
+    <string name="health_source">المصدر: %1$s</string>
+    <string name="health_sync_button">مزامنة آخر 7 أيام</string>
+    <string name="health_syncing">جارٍ المزامنة…</string>
+    <string name="health_result">تم الإرسال %1$d، فشل %2$d.</string>
+    <string name="health_error">خطأ: %1$s</string>
     <string name="chat_about">حول</string>
     <string name="about_version">الإصدار %1$s</string>
     <string name="chat_sign_out">تسجيل الخروج</string>

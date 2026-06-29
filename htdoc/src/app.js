@@ -35,6 +35,11 @@ function render() {
         flexDirection : "column",
         height        : "100vh"
     });
+    // Prefer the dynamic viewport height where supported: on mobile, 100vh spans
+    // the area *behind* the soft keyboard, so the bottom composer ends up hidden
+    // under it; 100dvh tracks the visible viewport and keeps the composer above
+    // the keyboard. An unsupported value is ignored, leaving the 100vh fallback.
+    appEl.style.height = "100dvh";
 
     // The views (and the top bar they pull in) are required here, at call time,
     // rather than at module load -- by now this module's exports are complete, so
@@ -71,6 +76,9 @@ function signOut() {
     state.messages  = [];
     state.providers = [];   // don't leak the previous session's provider list
     state.streaming = false;
+    state.currentConversationId = "";
+    state.readOnly  = false;
+    state.currentSubjectId = "";
     // Modals/history mount their backdrop on document.body as siblings of #app,
     // so render() (which only clears #app) wouldn't remove them -- tear down any
     // open overlay here so a 401 mid-modal doesn't leave it floating over login.
@@ -105,6 +113,9 @@ function completeLogin(accessToken) {
         if (msgs && msgs.length) { state.messages = msgs; }
     }).catch(function () {}).then(function () {
         render();
+        // A care-circle invite link consumed before sign-in: accept it now that
+        // a session exists (no-op when there's nothing stashed).
+        require("./circle_accept").consume();
     });
 };
 

@@ -26,6 +26,46 @@
     <string name="chat_message_hint">메시지</string>
     <string name="chat_history_cd">기록</string>
     <string name="chat_select_model">모델 선택</string>
+    <string name="chat_currently_for">현재 대상</string>
+    <string name="chat_subject_me">나</string>
+
+    <string name="chat_attach_file">파일 첨부</string>
+    <string name="chat_attach_remove">첨부 삭제</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">공유</string>
+    <string name="share_title">이 대화 공유</string>
+    <string name="share_no_members">먼저 케어 서클에 멤버를 추가하세요 (설정 → 케어 서클).</string>
+    <string name="share_access_view">보기</string>
+    <string name="share_access_edit">편집</string>
+    <string name="share_save">저장</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">케어 서클</string>
+    <string name="circle_title">내 케어 서클</string>
+    <string name="circle_members">멤버</string>
+    <string name="circle_invites">받은 초대</string>
+    <string name="circle_invite_hint">이메일로 초대</string>
+    <string name="circle_invite">초대</string>
+    <string name="circle_accept">수락</string>
+    <string name="circle_decline">거절</string>
+    <string name="circle_remove">삭제</string>
+    <string name="circle_remove_confirm">%1$s 님을 이 서클에서 삭제할까요?</string>
+    <string name="circle_pending">대기 중</string>
+    <string name="circle_owner">소유자</string>
+    <string name="circle_you">나</string>
+    <string name="circle_role_member">멤버</string>
+    <string name="circle_role_maintainer">관리자</string>
+    <string name="circle_no_members">아직 아무도 없습니다. 아래에서 이메일로 초대하세요.</string>
+    <string name="circle_health_share">내 건강 데이터 공유</string>
+    <string name="circle_health_off">끔</string>
+    <string name="circle_health_view">보기 가능</string>
+    <string name="circle_health_edit">보기·편집 가능</string>
+    <string name="circle_no_circles">아직 서클이 없습니다. 아래에서 만들어 초대하세요.</string>
+    <string name="circle_new_name_hint">새 서클 이름</string>
+    <string name="circle_create">만들기</string>
+    <string name="circle_delete_circle">서클 삭제</string>
+    <string name="circle_delete_confirm">“%1$s”을(를) 삭제할까요? 이 서클을 통해서만 공유된 항목에 멤버가 접근할 수 없게 됩니다.</string>
     <string name="chat_no_providers">사용 가능한 모델이 없습니다</string>
     <string name="chat_language">언어</string>
     <string name="chat_font_size">글자 크기</string>
@@ -35,6 +75,16 @@
     <string name="chat_font_size_large">크게</string>
     <string name="chat_font_size_larger">아주 크게</string>
     <string name="chat_backend">백엔드</string>
+
+    <!-- On-device health sync -->
+    <string name="chat_sync_health">건강 데이터 동기화</string>
+    <string name="health_checking">기기의 건강 데이터 소스를 확인하는 중…</string>
+    <string name="health_no_source">이 기기에는 건강 데이터 소스가 없습니다.</string>
+    <string name="health_source">소스: %1$s</string>
+    <string name="health_sync_button">최근 7일 동기화</string>
+    <string name="health_syncing">동기화 중…</string>
+    <string name="health_result">%1$d개 전송, %2$d개 실패.</string>
+    <string name="health_error">오류: %1$s</string>
     <string name="chat_about">정보</string>
     <string name="about_version">버전 %1$s</string>
     <string name="chat_sign_out">로그아웃</string>

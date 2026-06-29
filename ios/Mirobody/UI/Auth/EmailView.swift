@@ -124,7 +124,7 @@ struct EmailView: View {
             .frame(maxWidth: contentMaxWidth)
             .frame(maxWidth: .infinity)
         }
-        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { BackendMenu() } }
+        .toolbar { ToolbarItem(placement: .navigationBarTrailing) { LoginSettingsMenu() } }
         .navigationBarTitleDisplayMode(.inline)
     }
 

@@ -11,11 +11,14 @@ import kotlinx.serialization.json.JsonElement
  *  - reply / thinking / error: string
  *  - queryTitle: string (tool name)
  *  - queryArguments / queryDetail: string (JSON-stringified args / tool result)
- *  - costStatistics: object ({model, input_tokens, output_tokens, ...})
  *  - heartbeat / end: empty string
  *
  * `tool_id` is set on queryTitle / queryArguments / queryDetail and links the three
  * events of a single tool invocation together.
+ *
+ * The `costStatistics` event carries its payload in a sibling `cost` object
+ * ({model, input_tokens, output_tokens, ...}), NOT in `content` (see CostEvent in
+ * src/chat/event/event.cpp; the web client reads `json.cost`).
  */
 @Serializable
 data class RawSseChunk(
@@ -25,6 +28,11 @@ data class RawSseChunk(
     @SerialName("tool_id") val toolId: String? = null,
     // Set only on `chart` events: the Apache ECharts `option`, a nested JSON object.
     val chart: JsonElement? = null,
+    // Set only on `costStatistics` events: the per-turn LLM accounting object.
+    val cost: JsonElement? = null,
+    // Set on `conversation` events as a decimal-string fallback when `content` is absent
+    // (the client carries large thread ids as strings to avoid JS integer-precision loss).
+    @SerialName("conversation_id") val conversationId: String? = null,
 )
 
 /** Per-turn LLM accounting emitted by every provider client on stream completion. */
@@ -53,6 +61,8 @@ sealed interface ChatStreamEvent {
     data class Image(val url: String) : ChatStreamEvent
     /** Backend-emitted Apache ECharts `option` (JSON object, stringified) to render as a chart. */
     data class Chart(val optionJson: String) : ChatStreamEvent
+    /** The durable server-side conversation (thread) id for this turn, as a decimal string. */
+    data class Conversation(val id: String) : ChatStreamEvent
     data object Heartbeat : ChatStreamEvent
     data class Error(val message: String) : ChatStreamEvent
     data object End : ChatStreamEvent

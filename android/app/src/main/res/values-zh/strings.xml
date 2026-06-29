@@ -26,6 +26,46 @@
     <string name="chat_message_hint">输入消息</string>
     <string name="chat_history_cd">历史</string>
     <string name="chat_select_model">选择模型</string>
+    <string name="chat_currently_for">当前对象</string>
+    <string name="chat_subject_me">我自己</string>
+
+    <string name="chat_attach_file">附加文件</string>
+    <string name="chat_attach_remove">移除附件</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">分享</string>
+    <string name="share_title">分享此对话</string>
+    <string name="share_no_members">请先在「设置 → 关爱圈」中添加成员。</string>
+    <string name="share_access_view">查看</string>
+    <string name="share_access_edit">编辑</string>
+    <string name="share_save">保存</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">关爱圈</string>
+    <string name="circle_title">我的关爱圈</string>
+    <string name="circle_members">成员</string>
+    <string name="circle_invites">收到的邀请</string>
+    <string name="circle_invite_hint">输入邮箱邀请</string>
+    <string name="circle_invite">邀请</string>
+    <string name="circle_accept">接受</string>
+    <string name="circle_decline">拒绝</string>
+    <string name="circle_remove">移除</string>
+    <string name="circle_remove_confirm">确定将 %1$s 移出该关爱圈？</string>
+    <string name="circle_pending">待接受</string>
+    <string name="circle_owner">创建者</string>
+    <string name="circle_you">我</string>
+    <string name="circle_role_member">成员</string>
+    <string name="circle_role_maintainer">管理员</string>
+    <string name="circle_no_members">还没有成员，在下方输入邮箱邀请。</string>
+    <string name="circle_health_share">分享我的健康数据</string>
+    <string name="circle_health_off">关闭</string>
+    <string name="circle_health_view">可查看</string>
+    <string name="circle_health_edit">可查看和编辑</string>
+    <string name="circle_no_circles">还没有关爱圈，在下方创建一个并邀请成员。</string>
+    <string name="circle_new_name_hint">新关爱圈名称</string>
+    <string name="circle_create">创建</string>
+    <string name="circle_delete_circle">删除关爱圈</string>
+    <string name="circle_delete_confirm">确定删除「%1$s」？仅通过该关爱圈分享的内容，成员将失去访问权限。</string>
     <string name="chat_no_providers">暂无可用模型</string>
     <string name="chat_language">语言</string>
     <string name="chat_font_size">字号</string>
@@ -35,6 +75,16 @@
     <string name="chat_font_size_large">大</string>
     <string name="chat_font_size_larger">更大</string>
     <string name="chat_backend">后端</string>
+
+    <!-- On-device health sync -->
+    <string name="chat_sync_health">同步健康数据</string>
+    <string name="health_checking">正在检查设备上的健康数据源…</string>
+    <string name="health_no_source">此设备上没有健康数据源。</string>
+    <string name="health_source">数据源：%1$s</string>
+    <string name="health_sync_button">同步最近 7 天</string>
+    <string name="health_syncing">正在同步…</string>
+    <string name="health_result">已上传 %1$d 条，失败 %2$d 条。</string>
+    <string name="health_error">错误：%1$s</string>
     <string name="chat_about">关于</string>
     <string name="about_version">版本 %1$s</string>
     <string name="chat_sign_out">退出登录</string>

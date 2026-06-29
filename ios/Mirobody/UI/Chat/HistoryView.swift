@@ -86,7 +86,7 @@ private struct HistoryRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).mbFont(.bodyLarge).foregroundColor(colors.onSurface).lineLimit(2)
-                if !item.timestamp.isEmpty {
+                if item.timestamp > 0 {
                     Text(formatHistoryTimestamp(item.timestamp))
                         .mbFont(.labelSmall)
                         .foregroundColor(colors.onSurfaceVariant.opacity(0.6))
@@ -106,28 +106,10 @@ private struct HistoryRow: View {
     }
 }
 
-/// Parses the backend's ISO-8601 timestamp (with or without offset; naive strings
-/// are treated as UTC) and formats it in the device's local zone. Mirrors
-/// `formatTimestamp` in HistoryScreen.kt.
-func formatHistoryTimestamp(_ raw: String) -> String {
-    let date: Date? = {
-        let withFraction = ISO8601DateFormatter()
-        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let d = withFraction.date(from: raw) { return d }
-        let plain = ISO8601DateFormatter()
-        plain.formatOptions = [.withInternetDateTime]
-        if let d = plain.date(from: raw) { return d }
-        // Naive (no offset) — interpret as UTC.
-        let naive = DateFormatter()
-        naive.locale = Locale(identifier: "en_US_POSIX")
-        naive.timeZone = TimeZone(identifier: "UTC")
-        for fmt in ["yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss.SSS", "yyyy-MM-dd'T'HH:mm:ss"] {
-            naive.dateFormat = fmt
-            if let d = naive.date(from: raw) { return d }
-        }
-        return nil
-    }()
-    guard let date else { return raw }
+/// Formats the backend's epoch-millisecond timestamp (UTC) in the device's local
+/// zone. Mirrors `formatTimestamp` in HistoryScreen.kt.
+func formatHistoryTimestamp(_ millis: Int64) -> String {
+    let date = Date(timeIntervalSince1970: Double(millis) / 1000.0)
     let out = DateFormatter()
     out.dateFormat = "yyyy-MM-dd HH:mm"
     out.timeZone = .current

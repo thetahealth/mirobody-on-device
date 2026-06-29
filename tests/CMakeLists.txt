@@ -22,6 +22,8 @@ add_executable(mirobody_tests
     chat/agent_test.cpp
     chat/event_test.cpp
     chat/history_test.cpp
+    chat/persist_test.cpp
+    circle/access_test.cpp
     storage/sign_test.cpp
     storage/storage_test.cpp
     transcode/image_test.cpp

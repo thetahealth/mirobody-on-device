@@ -130,6 +130,12 @@ std::string TranscriptEvent::to_json() const {
     return serialize(d);
 }
 
+std::string ConversationEvent::to_json() const {
+    rapidjson::Document d = base_obj(type(), std::to_string(id_), std::string());
+    d.AddMember("conversation_id", static_cast<std::int64_t>(id_), d.GetAllocator());
+    return serialize(d);
+}
+
 std::string EndEvent::to_json() const {
     return serialize(base_obj(type(), std::string(), std::string()));
 }

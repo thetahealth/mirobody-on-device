@@ -6,6 +6,8 @@
 
 #include <rapidjson/document.h>
 
+#include <cstdlib>   // strtoll
+
 namespace mirobody { namespace chat {
 
 namespace {
@@ -56,6 +58,34 @@ ChatParams ChatParams::parse(const Packet& pkt, std::int64_t user_id) {
     areq.question   = pkt.str("question");
 
     const rapidjson::Value& params = pkt.params();
+
+    // conversation_id: continue an existing server-side thread (absent / 0 / an
+    // id the caller does not own => a new thread is started). Accept a JSON
+    // number or a decimal string -- the client carries large ids as strings to
+    // avoid JS losing integer precision past 2^53.
+    rapidjson::Value::ConstMemberIterator cit = params.FindMember("conversation_id");
+    if (cit != params.MemberEnd()) {
+        if (cit->value.IsInt64() || cit->value.IsInt()) {
+            areq.conversation_id = cit->value.GetInt64();
+        } else if (cit->value.IsString()) {
+            areq.conversation_id = std::strtoll(cit->value.GetString(), nullptr, 10);
+        }
+    }
+
+    // subject: the "currently for" care-circle member whose health the caller
+    // wants to ask about, as an opaque member handle (care_circle_members.id).
+    // Stored here as-is and resolved to the real target user id (with an access
+    // check) in the dispatcher. Number or decimal string. `subject_user_id` is
+    // still accepted as a legacy alias for the same handle field.
+    rapidjson::Value::ConstMemberIterator sit = params.FindMember("subject");
+    if (sit == params.MemberEnd()) sit = params.FindMember("subject_user_id");
+    if (sit != params.MemberEnd()) {
+        if (sit->value.IsInt64() || sit->value.IsInt()) {
+            areq.subject_user_id = sit->value.GetInt64();
+        } else if (sit->value.IsString()) {
+            areq.subject_user_id = std::strtoll(sit->value.GetString(), nullptr, 10);
+        }
+    }
 
     rapidjson::Value::ConstMemberIterator mit = params.FindMember("messages");
     if (mit != params.MemberEnd() && mit->value.IsArray()) {

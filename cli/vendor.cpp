@@ -39,14 +39,16 @@ void usage(const char* prog) {
         "Commands:\n"
         "  list                 List all registered vendors.\n"
         "  info                 Print full metadata for <id>.\n"
-        "  auth-url             Print the consumer-consent URL (--redirect, --state).\n"
-        "  providers            List connectable data sources.\n"
+        "  auth-url             Print the consumer-consent entry point (--redirect, --state,\n"
+        "                       --user, --provider — which apply depends on the vendor).\n"
+        "  providers            List connectable data sources (--user for user-scoped vendors).\n"
         "  fetch                Fetch data (--user, --domain, --start, --end).\n"
         "  webhook              Parse a webhook delivery (body via --file/--data/stdin).\n"
-        "  revoke               Revoke a user's authorization (--user).\n"
+        "  revoke               Revoke a user's authorization (--user, --provider).\n"
         "\n"
         "Options:\n"
         "  --user <id>          End-user id from the consent flow.\n"
+        "  --provider <slug>    Single data source, for per-provider authorize/revoke.\n"
         "  --domain <name>      activity|sleep|heart_rate|glucose|nutrition|body_metrics|labs|clinical\n"
         "  --start <iso>        ISO-8601 start of the fetch window.\n"
         "  --end <iso>          ISO-8601 end of the fetch window.\n"
@@ -113,7 +115,7 @@ int main(int argc, char** argv) {
     int rc = 0;
 
     std::string id, command;
-    std::string user, domain_s, start, end, redirect, state, file, data;
+    std::string user, provider, domain_s, start, end, redirect, state, file, data;
     bool have_data = false;
     mv::VendorConfig flag_cfg;
 
@@ -126,6 +128,7 @@ int main(int argc, char** argv) {
         std::string a = argv[i];
         if      (a == "-h" || a == "--help")  { usage(argv[0]); mirobody::client::HttpClient::global_cleanup(); return 0; }
         else if (a == "--user")               { user = need(i, "--user"); }
+        else if (a == "--provider")           { provider = need(i, "--provider"); }
         else if (a == "--domain")             { domain_s = need(i, "--domain"); }
         else if (a == "--start")              { start = need(i, "--start"); }
         else if (a == "--end")                { end = need(i, "--end"); }
@@ -180,9 +183,9 @@ int main(int argc, char** argv) {
         if (command == "info") {
             print_info(vendor->info());
         } else if (command == "auth-url") {
-            std::fprintf(stdout, "%s\n", vendor->authorize_url(redirect, state).c_str());
+            std::fprintf(stdout, "%s\n", vendor->authorize_url(redirect, state, user, provider).c_str());
         } else if (command == "providers") {
-            std::fprintf(stdout, "%s\n", vendor->list_providers().c_str());
+            std::fprintf(stdout, "%s\n", vendor->list_providers(user).c_str());
         } else if (command == "fetch") {
             mv::DataDomain domain;
             if (!mv::parse_domain(domain_s, domain)) {
@@ -199,8 +202,9 @@ int main(int argc, char** argv) {
             } else if (!mirobody::tools::stdin_is_tty()) body = read_stdin();
             if (rc == 0) std::fprintf(stdout, "%s\n", vendor->handle_webhook("", body).c_str());
         } else if (command == "revoke") {
-            vendor->revoke(user);
-            std::fprintf(stderr, "revoked %s for %s\n", user.c_str(), id.c_str());
+            vendor->revoke(user, provider);
+            std::fprintf(stderr, "revoked %s%s for %s\n", user.c_str(),
+                         provider.empty() ? "" : (" / " + provider).c_str(), id.c_str());
         } else {
             std::fprintf(stderr, "unknown command: %s\n\n", command.c_str());
             usage(argv[0]);

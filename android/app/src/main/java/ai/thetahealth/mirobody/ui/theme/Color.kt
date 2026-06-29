@@ -2,32 +2,33 @@ package ai.thetahealth.mirobody.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Brand blue (mirobody icon) — independent of M3 dynamicColor so it stays stable
-// across devices and wallpapers. Adjust to match the actual icon if needed.
-val BrandBlue = Color(0xFF3A78B5)
+// Brand navy (mirobody / Theta Health) — independent of M3 dynamicColor so it stays
+// stable across devices and wallpapers, matching the web client's brand color.
+val BrandBlue = Color(0xFF1E3A6B)
 
-// Light scheme — warm off-white surfaces, slate-blue accent.
-val LightPrimary = Color(0xFF2F5E78)
+// Light scheme — the "Theta Health" design (mirrors the web client htdoc): a deep
+// navy primary on warm cream surfaces with warm hairlines.
+val LightPrimary = Color(0xFF1E3A6B)            // deep navy: primary buttons, links, logo
 val LightOnPrimary = Color(0xFFFFFFFF)
-val LightPrimaryContainer = Color(0xFFCFE5F2)
-val LightOnPrimaryContainer = Color(0xFF001E2D)
-val LightSecondary = Color(0xFF50616B)
+val LightPrimaryContainer = Color(0xFFDCE4F4)
+val LightOnPrimaryContainer = Color(0xFF0A1B3D)
+val LightSecondary = Color(0xFF4A5568)
 val LightOnSecondary = Color(0xFFFFFFFF)
-val LightSecondaryContainer = Color(0xFFD3E5F0)
-val LightOnSecondaryContainer = Color(0xFF0B1D26)
-val LightBackground = Color(0xFFFBFCFD)
+val LightSecondaryContainer = Color(0xFFDDE2EA)
+val LightOnSecondaryContainer = Color(0xFF161A22)
+val LightBackground = Color(0xFFF2EFE9)         // warm cream page background
 val LightOnBackground = Color(0xFF1A1C1E)
-val LightSurface = Color(0xFFFBFCFD)
-val LightOnSurface = Color(0xFF1A1C1E)
-val LightSurfaceVariant = Color(0xFFE1E4E8)
-val LightOnSurfaceVariant = Color(0xFF44474A)
+val LightSurface = Color(0xFFF2EFE9)
+val LightOnSurface = Color(0xFF1A1C1E)           // near-black text
+val LightSurfaceVariant = Color(0xFFE7E1D5)
+val LightOnSurfaceVariant = Color(0xFF52565C)    // secondary text (subtitle, hints)
 val LightSurfaceContainerLowest = Color(0xFFFFFFFF)
-val LightSurfaceContainerLow = Color(0xFFF4F6F8)
-val LightSurfaceContainer = Color(0xFFEEF1F4)
-val LightSurfaceContainerHigh = Color(0xFFE8ECEF)
-val LightSurfaceContainerHighest = Color(0xFFE3E7EA)
+val LightSurfaceContainerLow = Color(0xFFFAF7F1) // field / card fill (slightly lighter than bg)
+val LightSurfaceContainer = Color(0xFFF4F0E8)
+val LightSurfaceContainerHigh = Color(0xFFEDE8DE)
+val LightSurfaceContainerHighest = Color(0xFFE7E1D5)
 val LightOutline = Color(0xFF74787C)
-val LightOutlineVariant = Color(0xFFC4C7CB)
+val LightOutlineVariant = Color(0xFFDDD6C9)       // warm hairlines / idle field borders
 
 // Dark scheme — near-black surfaces, soft slate-blue accent.
 val DarkPrimary = Color(0xFFA0CDE5)

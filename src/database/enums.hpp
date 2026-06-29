@@ -69,4 +69,40 @@ enum class MemoryKind : int16_t {
     Episode    = 3,
 };
 
+//-----------------------------------------------------------------------------
+
+// Care-circle membership role. Stored in care_circle_members.role. The creator
+// of a care_circles row is its Owner; the owner may promote members to
+// Maintainer. Owner and Maintainer are admins (invite / remove members);
+// renaming, deleting and role changes stay owner-only. Ordered by privilege so
+// `role >= Maintainer` means "admin". Modern backends only (no legacy support).
+enum class CircleRole : int16_t {
+    Member     = 0,
+    Maintainer = 1,
+    Owner      = 2,
+};
+
+//-----------------------------------------------------------------------------
+
+// Care-circle membership invite state. Stored in care_circle_members.status. An
+// owner inviting someone creates the membership Pending; the invitee moves it to
+// Accepted (they are then mutually in the circle with every other accepted
+// member) or Declined. The owner's own membership is created Accepted.
+enum class CircleStatus : int16_t {
+    Unknown  = 0,
+    Pending  = 1,
+    Accepted = 2,
+    Declined = 3,
+};
+
+//-----------------------------------------------------------------------------
+
+// Conversation share access level. Stored in conversation_shares.access_level.
+// Shared threads are read-only for now (View); Edit is reserved for later.
+enum class ShareAccess : int16_t {
+    Unknown = 0,
+    View    = 1,
+    Edit    = 2,
+};
+
 }}

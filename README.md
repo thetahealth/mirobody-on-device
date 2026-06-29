@@ -5,7 +5,7 @@
 > Because the core runs on-device, **all data can stay on the phone** - it
 > never has to leave the device unless you choose to sync it.
 
-**Live demo:** [dev-mcp.thetahealth.ai](https://dev-mcp.thetahealth.ai)
+**Live demo:** [test.mirobody.ai](https://test.mirobody.ai)
 
 <p align="center">
   <img src="docs/what-is-mirobody.svg" alt="What is Mirobody? One health AI — runs anywhere, your data stays yours. On a server (self-hosted, the whole family), on your phone (just you, works offline), or peer-to-peer (no server)." width="920">
@@ -13,6 +13,10 @@
 
 <p align="center">
   <img src="docs/where-your-data-comes-from.svg" alt="Where your data comes from — wearables, phone health, lab results, clinic records, and everyday photo/voice logging all flow into mirobody, which normalizes everything to FHIR R4, then an AI model (OpenAI, Gemini, …) answers your questions in plain language." width="920">
+</p>
+
+<p align="center">
+  <img src="docs/your-care-circle.svg" alt="Your care circle — create a circle and invite the people you trust by email; once they accept, members are mutually in the circle. You stay in control: remove a member or unshare a thread anytime, and health sharing stays off until you allow it. Choose what to share — a conversation (view or edit) or your health data, a per-person switch off by default; once on, the AI can answer 'How is my family doing?' reading only what members chose to share." width="920">
 </p>
 
 A lightweight C++ server that links personal health data to LLMs - it pulls
@@ -399,7 +403,7 @@ See [src/memory/README.md](src/memory/README.md) for the backend table, the
 remote-adapter caveats (opaque ids, server-side extraction), the config keys,
 and how to add a backend.
 
-## Vendors
+## Vendor
 
 `mirobody::vendor::Vendor` is a health-data source interface — `authorize_url` /
 `list_providers` / `fetch` / `handle_webhook` / `revoke` — over brokers of
@@ -809,7 +813,7 @@ Runnable, verified bindings and the full writeup live under
 | Method | Path          | Purpose                                              |
 | ------ | ------------- | ---------------------------------------------------- |
 | GET    | `/api/health` | Liveness probe - returns `ok`.                       |
-| POST   | `/api/chat`    | Streams a chat response over SSE - runs the named agent, or (with no `agent` field) proxies the body to OpenAI `/v1/chat/completions`. |
+| POST   | `/api/chat`    | Streams a chat response over SSE - runs the named agent, or (with no `agent` field) proxies the body to OpenAI `/v1/chat/completions`. Rate-limited per user (`CHAT_RATE_MAX` / `CHAT_RATE_WINDOW_SEC`; the shipped `config.example.yml` caps it at 5 turns / 60s, `0` disables). |
 
 Paths are shown at the root; when [`HTTP_URI_PREFIX`](src/config/README.md#uri-prefix-sub-path-mounting)
 is set they are served under it (e.g. `/mirobody/api/health`).
@@ -923,6 +927,81 @@ resolver (indicator → code) and the document → FHIR pipeline are the next
 milestones. See [src/fhir/README.md](src/fhir/README.md) for the phase table,
 the generic-resource model, validation rules, and current limitations.
 
+Reads and writes may target another user's records via `?subject=<member>` —
+an opaque care-circle member handle, never a raw user id — when a
+[care circle](#care-circles) authorizes it; without it they stay scoped to the
+authenticated user.
+
+## Care circles
+
+A **care circle** layers opt-in sharing on top of the otherwise single-user core
+— it's whoever you trust with your health (family, a partner, a caregiver). Two
+things can be shared, each checked at the read/write path so no other table is
+rescoped:
+
+- **Conversations** — grant a fellow member view/edit access to one chat thread; it then appears in their history.
+- **Health data** — a per-member, per-circle switch (off / view / edit) that lets accepted members read — or read+write — your FHIR records, so the AI can answer "how is my family doing?".
+
+### Privacy — what the assistant can and can't reach
+
+The view/edit switch governs **two separate planes**, and they are deliberately
+asymmetric:
+
+- **FHIR REST** (`?subject=<member>`) honors the full switch: `view` reads,
+  `edit` reads **and writes** the sharer's records. This is the programmatic
+  data plane (apps, integrations).
+- **The AI assistant is read-only, always.** When you pick a member in the chat
+  composer's "currently for" selector and ask on their behalf, exactly **one**
+  tool — `family_health` — reads their data, and only with `view`-or-higher
+  access. Even if they granted you `edit`, the assistant **never writes** to
+  their records, memory, files, or chat history. `edit` matters only on the FHIR
+  REST plane above.
+
+Every other tool stays scoped to **you**, the signed-in caller, and never reads
+or writes the subject's data:
+
+| Tool | Acts on the "currently for" subject? |
+| ---- | ------------------------------------ |
+| `family_health` | **Yes** — read-only, gated by `view`+ health access |
+| `whoami` | No — only flags that a subject is in focus (no id/data) |
+| `list_files`, `read_file` | No — your uploads only |
+| `recall_memory`, `remember` | No — your long-term memory only |
+| `summarize_conversation` | No — your own current conversation only |
+| `render_chart`, `echo` | No — touch no user data |
+
+In other words, asking the assistant about a family member can only ever **read**
+their health observations, and nothing the assistant does on their behalf can
+modify their data or expose their files, memories, or conversations to you. See
+[src/chat/README.md](src/chat/README.md) for the threading details
+(`UserInfo::subject_user_id`).
+
+A circle is a **group**: any two *accepted* members are mutually in it. Roles are
+**Member / Maintainer / Owner** (maintainers and owners are admins who invite &
+remove; owners also rename, delete, and change roles). Invites go out by email
+and require acceptance.
+
+| Method | Path | Purpose |
+| ------ | ---- | ------- |
+| POST | `/api/circle/create` \| `/rename` \| `/delete` | manage circles you own |
+| POST | `/api/circle/invite` \| `/accept` \| `/decline` \| `/remove` | membership (invite by email, acceptance required) |
+| GET\|POST | `/api/circle/members` | every circle you belong to, with your role + health level |
+| POST | `/api/circle/role` \| `/nickname` \| `/health-sharing` | per-member role, label, and your own sharing level |
+| POST | `/api/conversation/share` \| `/unshare`; GET `/api/conversation/shares` | share a conversation with co-members |
+
+Cross-user references never expose the internal `users` primary key: members are
+addressed by an opaque `member` handle (a `care_circle_members` row id) that the
+server resolves back to a user with an access check, and the caller's own id only
+ever comes from the JWT. Growth is bounded by configurable caps — the shipped
+`config.example.yml` allows **5 circles per user** (`CIRCLE_MAX_PER_USER`) and
+**5 members per circle** (`CIRCLE_MAX_MEMBERS`), with `0` disabling either.
+
+Modern backends only — the schema lives under `res/sql/{pg,mysql,sqlite}` and the
+legacy backend has no care-circle feature. See
+[src/circle/README.md](src/circle/README.md) for the group model, the
+role/permission matrix, the opaque-handle scheme, the limits, the health-access
+seam (`?subject=` cross-user FHIR read/write via `circle::resolve_health_subject`),
+and the full route list.
+
 ## Debug tools
 
 The desktop build produces a small family of standalone CLIs under `cli/` that
@@ -942,6 +1021,41 @@ See [cli/README.md](cli/README.md) for the shared CLI UX, the per-binary
 endpoint/credential table, YAML config keys, Gemini-path notes, and the storage
 CLI command set.
 
+## Compliance — HIPAA & GDPR
+
+Mirobody is built privacy-first: because the core runs on-device or self-hosted,
+**personal health data never has to leave your device or your infrastructure**.
+That architecture is the foundation for deploying in a HIPAA- or GDPR-compatible
+way — the software gives you the controls, while the deployer remains the covered
+entity / data controller responsible for the final compliance posture.
+
+- **Keep PHI in-house.** On the phone (SQLite, offline) or self-hosted
+  (PostgreSQL + local or regional object storage), no health record is sent to a
+  third party unless you turn on an outbound integration. Care-circle sharing is
+  opt-in and off by default, and the AI assistant is **read-only** over another
+  member's data (see [Care circles](#care-circles)).
+
+- **HIPAA — choose a BAA-covered LLM.** The one place PHI can leave is the LLM
+  call. The public AI Studio / OpenAI-direct endpoints are not covered by a
+  Business Associate Agreement, so for PHI route the same models through their
+  BAA-eligible enterprise surfaces — both already supported:
+  - **Google Gemini via Vertex AI** — set `GOOGLE_GENAI_USE_VERTEXAI=1` with
+    `GCP_PROJECT` / `VERTEX_LOCATION` and an OAuth access token; calls go to
+    Google Cloud (covered by Google's BAA) instead of AI Studio.
+  - **OpenAI GPT via Azure OpenAI** — set `AZURE_OPENAI_ENDPOINT` (the client
+    auto-flips into Azure mode) with the deployment and key; calls run inside
+    your own Azure resource (covered by Microsoft's BAA).
+
+  See the `VERTEX_*` and `AZURE_OPENAI_*` keys in
+  [config.example.yml](config.example.yml).
+
+- **GDPR — data residency & sovereign clouds.** Self-host in your region and pin
+  every outbound dependency to it: `VERTEX_LOCATION` / `VERTEX_BASE_URL` for the
+  Gemini region, the Azure resource region for GPT, the object-storage region per
+  backend (see [Storage](#storage)), and `AZURE_BLOB_ENDPOINT_SUFFIX` for
+  sovereign clouds. The single-user core keeps records scoped per user, so
+  subject data stays locatable for access and erasure requests.
+
 ## Layout
 
 ```
@@ -960,6 +1074,7 @@ src/                    # C++ core
   cache/                # cache::Cache facade (in-process KV or Redis)
   storage/              # storage::Storage: S3 / OSS / Azure Blob / local-filesystem backends
   user/                 # user domain: email + social sign-in (incl. Tanka QR), token issuance
+  circle/               # care circles: social graph + conversation / health-data sharing
   jwt/                  # JWT issue/verify (HS256 / RS256) + Google / Apple / Firebase ID-token validators
   oauth/                # OAuth 2.0 authorization server (authorization-code + PKCE)
   config/               # Config schema + loader (YAML + Fernet, env fallback)

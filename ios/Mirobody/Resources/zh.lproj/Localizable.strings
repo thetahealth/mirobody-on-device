@@ -43,6 +43,8 @@
 "chat_font_size_large" = "大";
 "chat_font_size_larger" = "更大";
 "chat_backend" = "后端";
+"chat_attach_file" = "附加文件";
+"chat_attach_remove" = "移除附件";
 "chat_about" = "关于";
 "about_version" = "版本 %1$@";
 "chat_sign_out" = "退出登录";

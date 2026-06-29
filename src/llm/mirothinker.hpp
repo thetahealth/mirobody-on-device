@@ -56,6 +56,11 @@ struct UserContext {
     std::int64_t user_id = 0;     // decoded raw row id
     std::string  session_id;
 
+    // Care-circle "currently for" subject: a member whose health the caller may
+    // read this turn (0 == none / self). Forwarded to the tool executor so a
+    // health-read tool can default to the subject; never replaces user_id.
+    std::int64_t subject_user_id = 0;
+
     // Borrowed services for a locally-executed tool, forwarded verbatim to the
     // tool executor (which maps them onto mcp::ToolContext). Null when the agent
     // path has none. Pointers only, so llm/ stays decoupled from their defs.

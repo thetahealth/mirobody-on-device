@@ -1,5 +1,6 @@
 #include "fhir/rest.hpp"
 
+#include "circle/access.hpp"     // can_read_health
 #include "fhir/fhir.hpp"
 #include "fhir/resource.hpp"
 #include "platform/clock.hpp"   // now_unix_ms
@@ -9,6 +10,7 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <cstdlib>   // atoll
 #include <ctime>
 #include <cstdio>
 #include <random>
@@ -143,9 +145,49 @@ struct OpOutcome {
 
 FhirService::FhirService(server::Router& router, const Config& cfg,
                          database::Database& db, const jwt::Jwt& jwt)
-    : store_(db), jwt_(jwt) {
+    : store_(db), db_(db), jwt_(jwt) {
     base_url_path_ = cfg.uri_prefix + "/fhir";
     register_routes(router);
+}
+
+// Reads default to the caller; ?subject=<user_id> targets another user's records
+// when the caller is an authorized care-circle reader (target shared health).
+// Writes never call this -- they are always scoped to the authenticated user.
+bool FhirService::resolve_read_subject(const server::Request& req, server::Response& res,
+                                       std::int64_t* target) {
+    *target = req.user_id;
+    const std::string subj = req.query_get("subject");
+    if (subj.empty()) { return true; }
+    // `subject` is an opaque care-circle member handle, not a users PK; resolve +
+    // authorize it in one step (0 => unknown handle or access not granted).
+    const std::int64_t handle = std::atoll(subj.c_str());
+    if (handle <= 0) { return true; }                  // unparseable -> caller
+    const std::int64_t t = circle::resolve_health_subject(db_, req.user_id, handle, /*need_write*/false);
+    if (t <= 0) {
+        respond_outcome(res, 403, "error", "forbidden", "not authorized to read that user's records");
+        return false;
+    }
+    *target = t;
+    return true;
+}
+
+// Writes default to the caller; ?subject=<user_id> targets another user's
+// records only when that member granted the caller Edit health access.
+bool FhirService::resolve_write_subject(const server::Request& req, server::Response& res,
+                                        std::int64_t* target) {
+    *target = req.user_id;
+    const std::string subj = req.query_get("subject");
+    if (subj.empty()) { return true; }
+    // Opaque member handle (see resolve_read_subject); Edit access required.
+    const std::int64_t handle = std::atoll(subj.c_str());
+    if (handle <= 0) { return true; }                  // unparseable -> caller
+    const std::int64_t t = circle::resolve_health_subject(db_, req.user_id, handle, /*need_write*/true);
+    if (t <= 0) {
+        respond_outcome(res, 403, "error", "forbidden", "not authorized to modify that user's records");
+        return false;
+    }
+    *target = t;
+    return true;
 }
 
 void FhirService::register_routes(server::Router& router) {
@@ -233,6 +275,8 @@ void FhirService::handle_type(const server::Request& req, server::Response& res)
 
     if (req.method == "POST") {
         // ── create ──
+        std::int64_t subject = 0;
+        if (!resolve_write_subject(req, res, &subject)) { return; }   // 403 already sent
         Document doc;
         std::string err;
         int st = parse_body(req.body, doc, err);
@@ -255,7 +299,7 @@ void FhirService::handle_type(const server::Request& req, server::Response& res)
         sr.deleted = false;
         inject_meta(doc, sr.id, sr.version_id, iso8601_from_unix_ms(sr.updated_at));
         sr.content = serialize(doc);
-        store_.upsert(req.user_id, sr);
+        store_.upsert(subject, sr);
 
         res.header("Location", base_url_path_ + "/" + type + "/" + sr.id + "/_history/1");
         res.header("ETag", "W/\"1\"");
@@ -264,6 +308,8 @@ void FhirService::handle_type(const server::Request& req, server::Response& res)
     }
 
     // ── search (GET) ──
+    std::int64_t subject = 0;
+    if (!resolve_read_subject(req, res, &subject)) { return; }   // 403 already sent
     std::string id_filter = req.query_get("_id");
     int count = 50;
     std::string cstr = req.query_get("_count");
@@ -275,7 +321,7 @@ void FhirService::handle_type(const server::Request& req, server::Response& res)
     if (!ostr.empty()) { offset = std::atoi(ostr.c_str()); if (offset < 0) offset = 0; }
 
     std::int64_t total = 0;
-    std::vector<StoredResource> hits = store_.search(req.user_id, type, id_filter, count, offset, total);
+    std::vector<StoredResource> hits = store_.search(subject, type, id_filter, count, offset, total);
 
     Document d;
     d.SetObject();
@@ -317,8 +363,10 @@ void FhirService::handle_instance(const server::Request& req, server::Response& 
     }
 
     if (req.method == "GET") {
+        std::int64_t subject = 0;
+        if (!resolve_read_subject(req, res, &subject)) { return; }   // 403 already sent
         StoredResource sr;
-        if (!store_.get(req.user_id, type, id, sr)) {
+        if (!store_.get(subject, type, id, sr)) {
             respond_outcome(res, 404, "error", "not-found", type + "/" + id + " not found");
             return;
         }
@@ -333,6 +381,8 @@ void FhirService::handle_instance(const server::Request& req, server::Response& 
     }
 
     if (req.method == "PUT") {
+        std::int64_t subject = 0;
+        if (!resolve_write_subject(req, res, &subject)) { return; }   // 403 already sent
         Document doc;
         std::string err;
         int st = parse_body(req.body, doc, err);
@@ -353,7 +403,7 @@ void FhirService::handle_instance(const server::Request& req, server::Response& 
         }
 
         StoredResource prior;
-        bool exists = store_.get(req.user_id, type, id, prior) && !prior.deleted;
+        bool exists = store_.get(subject, type, id, prior) && !prior.deleted;
         std::int64_t version = exists ? prior.version_id + 1 : 1;
 
         StoredResource sr;
@@ -364,7 +414,7 @@ void FhirService::handle_instance(const server::Request& req, server::Response& 
         sr.deleted = false;
         inject_meta(doc, id, version, iso8601_from_unix_ms(sr.updated_at));
         sr.content = serialize(doc);
-        store_.upsert(req.user_id, sr);
+        store_.upsert(subject, sr);
 
         res.header("ETag", "W/\"" + std::to_string(version) + "\"");
         res.header("Last-Modified", iso8601_from_unix_ms(sr.updated_at));
@@ -379,10 +429,12 @@ void FhirService::handle_instance(const server::Request& req, server::Response& 
     }
 
     if (req.method == "DELETE") {
+        std::int64_t subject = 0;
+        if (!resolve_write_subject(req, res, &subject)) { return; }   // 403 already sent
         // Idempotent: 204 whether or not the resource was present/already gone.
         StoredResource prior;
-        if (store_.get(req.user_id, type, id, prior) && !prior.deleted) {
-            store_.soft_delete(req.user_id, type, id, prior.version_id + 1, platform::now_unix_ms());
+        if (store_.get(subject, type, id, prior) && !prior.deleted) {
+            store_.soft_delete(subject, type, id, prior.version_id + 1, platform::now_unix_ms());
         }
         res.status(204);
         return;

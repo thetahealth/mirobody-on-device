@@ -31,7 +31,9 @@ final class ChatRepository {
         question: String,
         agentCode: String,
         provider: String,
-        language: String
+        language: String,
+        subject: Int64 = 0,
+        attachments: [ChatAttachment] = []
     ) -> AsyncStream<ChatStreamEvent> {
         streamClient.stream(
             ChatStreamRequest(
@@ -39,8 +41,10 @@ final class ChatRepository {
                 sessionId: sessionId,
                 agent: agentCode,
                 provider: provider,
-                language: language
-            )
+                language: language,
+                subject: subject > 0 ? String(subject) : nil
+            ),
+            attachments: attachments
         )
     }
 }

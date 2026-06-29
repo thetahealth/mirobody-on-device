@@ -34,9 +34,14 @@
 // dev-id / x-api-key / signing-secret; VendorConfig has no dedicated slot for the
 // last, so it rides on client_secret). The header *names* and the secrets they
 // carry are confirmed; only which VendorConfig field holds the signing secret is
-// our choice. list_providers and revoke stay inherited stubs: list_providers has
-// no single documented "list everything" REST contract here, and Terra
-// deauthentication is keyed by Terra user_id via a path we did not confirm.
+// our choice. list_providers and revoke are implemented against confirmed public
+// endpoints (docs.tryterra.co/reference):
+//   * list_providers -> GET /v2/integrations — the provider/integration catalogue.
+//     Per the docs this endpoint takes NO authentication; we send it without the
+//     dev-id/x-api-key headers and return the JSON verbatim.
+//   * revoke         -> DELETE /v2/auth/deauthenticateUser?user_id=<uuid> — keyed
+//     by the Terra user_id (UUID), authenticated with the usual dev-id/x-api-key.
+//     On success Terra deletes the user's records and emits a deauth webhook.
 
 #include "health/vendor/vendor.hpp"
 
@@ -143,7 +148,9 @@ public:
     // is used as the success redirect, with the failure redirect pointed at the
     // same URL (callers can disambiguate via Terra's appended query params).
     std::string authorize_url(const std::string& redirect_uri,
-                              const std::string& state) override {
+                              const std::string& state,
+                              const std::string& /*user_id*/,
+                              const std::string& /*provider*/) override {
         require_configured();
 
         const std::string redirect(redirect_uri);
@@ -286,6 +293,39 @@ public:
             throw VendorError(info_.id + ": webhook body was not a JSON object");
         }
         return std::string(body);
+    }
+
+    // List the providers/integrations Terra supports: GET /v2/integrations. Per
+    // the docs this catalogue endpoint takes NO authentication, so it is sent
+    // without the dev-id/x-api-key headers. Returns the JSON verbatim.
+    std::string list_providers(const std::string& /*user_id*/) override {
+        client::HttpResponse res =
+            client::HttpClient().get(base_url() + "/integrations",
+                                     /*timeout_ms=*/30000,
+                                     {"Accept: application/json"});
+        if (res.status < 200 || res.status >= 300) {
+            throw VendorError(http_error("list_providers (integrations)", res));
+        }
+        return res.body;
+    }
+
+    // Disconnect a Terra user: DELETE /v2/auth/deauthenticateUser?user_id=<uuid>.
+    // `user_id` is the Terra user UUID from the consent flow. On success Terra
+    // deletes the user's records and emits a deauth webhook. A non-2xx is surfaced
+    // as a VendorError.
+    void revoke(const std::string& user_id, const std::string& /*provider*/) override {
+        require_configured();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": revoke requires a user_id (the Terra user UUID)");
+        }
+        client::HttpRequest req;
+        req.url     = base_url() + "/auth/deauthenticateUser?user_id=" + url_encode(uid);
+        req.headers = auth_headers();
+        client::HttpResponse res = client::HttpClient().request("DELETE", req);
+        if (res.status < 200 || res.status >= 300) {
+            throw VendorError(http_error("revoke (auth/deauthenticateUser)", res));
+        }
     }
 
 private:

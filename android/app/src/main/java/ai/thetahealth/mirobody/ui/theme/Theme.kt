@@ -61,7 +61,9 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun MirobodyTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    // Off by default so the fixed "Theta Health" brand palette (matching the web
+    // client) applies on every device, rather than wallpaper-derived Material You colors.
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {

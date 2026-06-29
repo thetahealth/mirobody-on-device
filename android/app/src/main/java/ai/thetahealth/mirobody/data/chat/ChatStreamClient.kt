@@ -1,5 +1,6 @@
 package ai.thetahealth.mirobody.data.chat
 
+import ai.thetahealth.mirobody.data.chat.dto.ChatAttachment
 import ai.thetahealth.mirobody.data.chat.dto.ChatStreamRequest
 import ai.thetahealth.mirobody.data.chat.dto.ChatStreamEvent
 import ai.thetahealth.mirobody.data.chat.dto.CostStatistics
@@ -13,8 +14,11 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
@@ -44,9 +48,33 @@ class ChatStreamClient(
         .build()
     private val sseFactory = EventSources.createFactory(streamingClient)
 
-    fun stream(request: ChatStreamRequest): Flow<ChatStreamEvent> = callbackFlow {
-        val body = json.encodeToString(ChatStreamRequest.serializer(), request)
-            .toRequestBody("application/json".toMediaType())
+    fun stream(
+        request: ChatStreamRequest,
+        attachments: List<ChatAttachment> = emptyList(),
+    ): Flow<ChatStreamEvent> = callbackFlow {
+        // With attachments, post a multipart form so the files ride along (the server
+        // stores them and references them on the turn); otherwise the lighter JSON body.
+        // The server reads the same field names from either form (src/chat/params.cpp).
+        val body: RequestBody = if (attachments.isEmpty()) {
+            json.encodeToString(ChatStreamRequest.serializer(), request)
+                .toRequestBody("application/json".toMediaType())
+        } else {
+            MultipartBody.Builder().setType(MultipartBody.FORM).apply {
+                addFormDataPart("agent", request.agent)
+                addFormDataPart("provider", request.provider)
+                addFormDataPart("question", request.question)
+                addFormDataPart("language", request.language)
+                addFormDataPart("session_id", request.sessionId)
+                request.subject?.takeIf { it.isNotBlank() }?.let { addFormDataPart("subject", it) }
+                for (att in attachments) {
+                    addFormDataPart(
+                        "file",
+                        att.fileName,
+                        att.bytes.toRequestBody(att.mimeType.toMediaTypeOrNull()),
+                    )
+                }
+            }.build()
+        }
         val httpReq = Request.Builder()
             .url("http://placeholder.invalid/api/chat")
             .post(body)
@@ -121,12 +149,17 @@ class ChatStreamClient(
                 if (option == null || option is JsonNull) ChatStreamEvent.Unknown(chunk.type, data)
                 else ChatStreamEvent.Chart(option.toString())
             }
+            "conversation" -> {
+                val id = chunk.content.asString().ifBlank { chunk.conversationId.orEmpty() }
+                if (id.isBlank()) ChatStreamEvent.Unknown(chunk.type, data)
+                else ChatStreamEvent.Conversation(id)
+            }
             "heartbeat" -> ChatStreamEvent.Heartbeat
             "error" -> ChatStreamEvent.Error(chunk.content.asString())
             "end" -> ChatStreamEvent.End
             "costStatistics" -> {
-                val node = chunk.content
-                if (node != null) {
+                val node = chunk.cost
+                if (node != null && node !is JsonNull) {
                     // If decode throws, the outer try/catch turns it into Unknown("parse_error", ...).
                     ChatStreamEvent.Stats(json.decodeFromJsonElement(CostStatistics.serializer(), node))
                 } else {

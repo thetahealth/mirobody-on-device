@@ -44,6 +44,22 @@ var t = i18n.t;
 var compactFit   = false;
 var resizeHooked = false;
 
+// Draw the APK download QR into `box` once the QR lib has loaded. Mirrors the
+// QR rendering in tanka.js (our own trusted markup).
+function renderApkQr(box, url) {
+    if (typeof window.qrcode !== "function") { return; }
+    var qr = window.qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    var holder = document.createElement("div");
+    holder.innerHTML = qr.createImgTag(4, 0);   // trusted: our own QR markup
+    var img = holder.firstChild;
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.imageRendering = "pixelated";
+    box.appendChild(img);
+};
+
 //----------------------------------------------------------------------------
 
 function buildLogin() {
@@ -409,6 +425,36 @@ function buildLogin() {
     card.appendChild(signInBtn);
     card.appendChild(status);
 
+    // The Android APK — served from the doc root (htdoc/static/mirobody.apk,
+    // copied to res/htdoc/ at build). On Android, a plain download link installs
+    // it directly. On PC the APK can't be installed locally, so show a QR code
+    // that points to the download URL for the user to scan with their phone.
+    var apkUrl = net.appBase() + "/mirobody.apk";
+    if (config.isAndroid()) {
+        var apkLink = ui.dom("a", {
+            display: "block", textAlign: "center", marginTop: "20px",
+            fontSize: "0.8rem", color: color.onSurfaceVar, textDecoration: "none"
+        }, { href: apkUrl, download: "mirobody.apk" });
+        ui.setText(apkLink, t("downloadAndroid"));
+        card.appendChild(apkLink);
+    } else {
+        var apkQr = ui.dom("div", {
+            display: "flex", flexDirection: "column", alignItems: "center",
+            marginTop: "20px", gap: "8px"
+        });
+        var apkCaption = ui.setText(ui.dom("div", {
+            fontSize: "0.8rem", color: color.onSurfaceVar, textAlign: "center"
+        }), t("downloadAndroidQr"));
+        var apkBox = ui.dom("div", {
+            width: "128px", height: "128px", padding: "8px", boxSizing: "border-box",
+            background: "#fff", borderRadius: "8px"
+        });
+        apkQr.appendChild(apkCaption);
+        apkQr.appendChild(apkBox);
+        card.appendChild(apkQr);
+        tanka.loadQrLib().then(function () { renderApkQr(apkBox, apkUrl); });
+    }
+
     // Surface a failed WeChat / GitHub callback exchange (flagged by auth.js before
     // it re-rendered the login view).
     if (auth.takeWeChatError()) { ui.setText(status, t("wechatFailed")); }
@@ -430,11 +476,21 @@ function buildLogin() {
     // Re-evaluate on resize: drop the latch so a now-taller window restores the
     // labels (the check above re-trips it if it still overflows). Debounced, and
     // only while the login view is up.
+    //
+    // Width-only guard: on touch devices, focusing an input pops the soft keyboard,
+    // which shrinks the viewport HEIGHT and fires `resize`. Re-rendering here would
+    // clear #app and recreate the focused input -- blurring it and dismissing the
+    // keyboard before the user can type. The compact-fit reflow only ever depends
+    // on width (isMobile) or a genuinely taller window, so ignore resizes that
+    // don't change the width; the keyboard never changes it.
     if (!resizeHooked) {
         resizeHooked = true;
         var pending = null;
+        var lastWidth = window.innerWidth;
         window.addEventListener("resize", function () {
             if (net.getToken()) { return; }   // not on the login view
+            if (window.innerWidth === lastWidth) { return; }   // height-only (soft keyboard): ignore
+            lastWidth = window.innerWidth;
             if (pending) { clearTimeout(pending); }
             pending = setTimeout(function () {
                 pending = null;

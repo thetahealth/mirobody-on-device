@@ -247,6 +247,116 @@ size_t smtp_read_cb(char* buffer, size_t size, size_t nitems, void* userp) {
     return n;
 }
 
+// Send a prebuilt RFC 5322 `message` to one recipient over SMTP(S). Transport
+// only -- the caller composes the message. nullopt on success, else an error.
+mirobody::optional<std::string> smtp_send(const std::string& host, int port,
+                                          const std::string& user, const std::string& pass,
+                                          const std::string& from_email, const std::string& to_email,
+                                          const std::string& message) {
+    CURL* curl = curl_easy_init();
+    if (!curl) return std::string("curl_easy_init failed");
+
+    const int  use_port     = port > 0 ? port : 465;
+    const bool implicit_tls = (use_port == 465);
+    const std::string url = (implicit_tls ? "smtps://" : "smtp://") +
+                            host + ":" + std::to_string(use_port);
+    const std::string mail_from = "<" + from_email + ">";
+    const std::string rcpt      = "<" + to_email + ">";
+
+    UploadCtx ctx;
+    ctx.data = &message;
+    ctx.offset = 0;
+
+    struct curl_slist* recipients = curl_slist_append(nullptr, rcpt.c_str());
+
+    client::configure_tls_trust(curl);
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_USERNAME, user.c_str());
+    curl_easy_setopt(curl, CURLOPT_PASSWORD, pass.c_str());
+    curl_easy_setopt(curl, CURLOPT_MAIL_FROM, mail_from.c_str());
+    curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
+    if (!implicit_tls) {
+        curl_easy_setopt(curl, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
+    }
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+    curl_easy_setopt(curl, CURLOPT_READFUNCTION, smtp_read_cb);
+    curl_easy_setopt(curl, CURLOPT_READDATA, &ctx);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+
+    CURLcode rc = curl_easy_perform(curl);
+    curl_slist_free_all(recipients);
+    curl_easy_cleanup(curl);
+
+    if (rc != CURLE_OK) {
+        return std::string("Failed to send email: ") + curl_easy_strerror(rc);
+    }
+    return mirobody::nullopt;
+}
+
+// Build a minimal RFC 5322 HTML message (CRLF line endings as SMTP requires).
+std::string build_rfc5322(const std::string& from_display, const std::string& to_email,
+                          const std::string& subject, const std::string& html_body) {
+    std::string msg;
+    msg += "Date: " + rfc5322_date() + "\r\n";
+    msg += "To: " + to_email + "\r\n";
+    msg += "From: " + from_display + "\r\n";
+    msg += "Subject: " + subject + "\r\n";
+    msg += "MIME-Version: 1.0\r\n";
+    msg += "Content-Type: text/html; charset=UTF-8\r\n";
+    msg += "\r\n";
+    msg += html_body;
+    msg += "\r\n";
+    return msg;
+}
+
+// Send a one-off HTML email via Mandrill's raw messages/send.json (no template).
+mirobody::optional<std::string> mandrill_send_html(const std::string& api_key,
+                                                   const std::string& from_email, const std::string& from_name,
+                                                   const std::string& to_email, const std::string& subject,
+                                                   const std::string& html_body) {
+    rapidjson::StringBuffer sb;
+    rapidjson::Writer<rapidjson::StringBuffer> w(sb);
+    w.StartObject();
+    w.Key("key");     w.String(api_key.c_str());
+    w.Key("message"); w.StartObject();
+        w.Key("html");       w.String(html_body.c_str(), static_cast<rapidjson::SizeType>(html_body.size()));
+        w.Key("subject");    w.String(subject.c_str());
+        w.Key("from_email"); w.String(from_email.c_str());
+        w.Key("from_name");  w.String(from_name.c_str());
+        w.Key("to"); w.StartArray(); w.StartObject();
+            w.Key("email"); w.String(to_email.c_str());
+            w.Key("type");  w.String("to");
+        w.EndObject(); w.EndArray();
+    w.EndObject();
+    w.Key("async"); w.Bool(false);
+    w.EndObject();
+
+    client::HttpRequest req;
+    req.url = "https://mandrillapp.com/api/1.0/messages/send.json";
+    req.content_type = "application/json";
+    req.body = std::string(sb.GetString(), sb.GetSize());
+
+    client::HttpClient http;
+    client::HttpResponse resp = http.post(req);
+    if (resp.status < 200 || resp.status >= 300) {
+        return std::string("Failed to send email to ") + to_email + ": " + resp.body;
+    }
+    rapidjson::Document doc;
+    doc.Parse(resp.body.c_str(), resp.body.size());
+    if (doc.HasParseError() || !doc.IsArray() || doc.Empty()) {
+        return std::string("Failed to send email to ") + to_email + ": " + resp.body;
+    }
+    const rapidjson::Value& first = doc[0];
+    const std::string status = (first.IsObject() && first.HasMember("status") && first["status"].IsString())
+        ? std::string(first["status"].GetString(), first["status"].GetStringLength()) : std::string();
+    if (status != "sent" && status != "queued") {
+        return std::string("Failed to send email to ") + to_email + ": " + resp.body;
+    }
+    return mirobody::nullopt;
+}
+
 class SmtpEmailValidator : public StoringEmailValidator {
 public:
     SmtpEmailValidator(cache::Cache& cache, std::string host, int port,
@@ -274,47 +384,9 @@ protected:
 
     mirobody::optional<std::string> deliver(
         const std::string& to_email, const std::string& code) override {
-        const std::string message = build_message(to_email, code);
-
-        CURL* curl = curl_easy_init();
-        if (!curl) return std::string("curl_easy_init failed");
-
-        const bool implicit_tls = (port_ == 465);
-        const std::string url = (implicit_tls ? "smtps://" : "smtp://") +
-                                host_ + ":" + std::to_string(port_);
-        const std::string mail_from = "<" + from_email_ + ">";
-        const std::string rcpt = "<" + to_email + ">";
-
-        UploadCtx ctx;
-        ctx.data = &message;
-        ctx.offset = 0;
-
-        struct curl_slist* recipients = curl_slist_append(nullptr, rcpt.c_str());
-
-        client::configure_tls_trust(curl);
-        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(curl, CURLOPT_USERNAME, user_.c_str());
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, pass_.c_str());
-        curl_easy_setopt(curl, CURLOPT_MAIL_FROM, mail_from.c_str());
-        curl_easy_setopt(curl, CURLOPT_MAIL_RCPT, recipients);
-        // smtps:// negotiates TLS at connect; smtp:// must be upgraded.
-        if (!implicit_tls) {
-            curl_easy_setopt(curl, CURLOPT_USE_SSL, static_cast<long>(CURLUSESSL_ALL));
-        }
-        curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
-        curl_easy_setopt(curl, CURLOPT_READFUNCTION, smtp_read_cb);
-        curl_easy_setopt(curl, CURLOPT_READDATA, &ctx);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15L);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
-        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-
-        CURLcode rc = curl_easy_perform(curl);
-        curl_slist_free_all(recipients);
-        curl_easy_cleanup(curl);
-
-        if (rc != CURLE_OK) {
-            return std::string("Failed to send email: ") + curl_easy_strerror(rc);
-        }
+        mirobody::optional<std::string> err =
+            smtp_send(host_, port_, user_, pass_, from_email_, to_email, build_message(to_email, code));
+        if (err) return err;
         platform::log_debug("email: verification code sent to %s via SMTP", to_email.c_str());
         return mirobody::nullopt;
     }
@@ -575,6 +647,37 @@ std::unique_ptr<EmailCodeValidator> create_email_validator(
 
     // 4. No transport configured.
     return std::unique_ptr<EmailCodeValidator>(new DummyEmailValidator(predefined, predefined_domains));
+}
+
+//------------------------------------------------------------------------------
+// One-off transactional mail
+//------------------------------------------------------------------------------
+
+mirobody::optional<std::string> send_email(const EmailValidatorOptions& opts,
+                                           const std::string& to_email,
+                                           const std::string& subject,
+                                           const std::string& html_body) {
+    std::string to;
+    mirobody::optional<std::string> err = normalize_email(to_email, &to);
+    if (err) return err;
+
+    const std::string from_name = opts.from_name.empty() ? std::string("Theta Wellness") : opts.from_name;
+
+    // Same transport precedence as create_email_validator: direct SMTP first
+    // (an smtp_host that isn't Mandrill, with user/pass/from), then Mandrill
+    // (key from smtp_pass when smtp_host is mandrillapp.com, else mandrill_api_key).
+    const bool is_mandrill_host = contains_ci(opts.smtp_host, "mandrillapp.com");
+    if (!opts.smtp_host.empty() && !is_mandrill_host &&
+        !opts.smtp_user.empty() && !opts.smtp_pass.empty() && !opts.from_email.empty()) {
+        const std::string from_display = from_name + " <" + opts.from_email + ">";
+        return smtp_send(opts.smtp_host, opts.smtp_port, opts.smtp_user, opts.smtp_pass,
+                         opts.from_email, to, build_rfc5322(from_display, to, subject, html_body));
+    }
+    const std::string key = is_mandrill_host ? opts.smtp_pass : opts.mandrill_api_key;
+    if (!key.empty() && !opts.from_email.empty()) {
+        return mandrill_send_html(key, opts.from_email, from_name, to, subject, html_body);
+    }
+    return std::string("no email transport configured");
 }
 
 }}

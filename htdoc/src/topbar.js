@@ -200,6 +200,10 @@ function buildSettingsMenu() {
     // Connect EHR joins the main items, but only when signed in (it needs a
     // session); About follows it and stays visible on the login screen too.
     if (net.getToken()) {
+        var circle = menuItem(t("careCircle"), "", false);
+        circle.el.addEventListener("click", function () { close(); modals.showManageCircleModal(); });
+        menu.appendChild(circle.el);
+
         var ehr = menuItem(t("ehrConnect"), "", false);
         ehr.el.addEventListener("click", function () { close(); require("./ehr").showEhrModal(); });
         menu.appendChild(ehr.el);

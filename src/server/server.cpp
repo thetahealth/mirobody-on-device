@@ -295,6 +295,12 @@ bool Server::start() {
         new user::UserService(*router_, cfg_, *db_, *cache_, *jwt_, firebase_.get(), apple_.get()));
     chat_service_ = std::unique_ptr<chat::ChatService>(
         new chat::ChatService(*router_, cfg_, *db_, *cache_, storage_.get(), memory_.get(), *jwt_));
+#if !defined(MIROBODY_DATABASE_PG_LEGACY)
+    // Care circles (invite/share). Modern backends only -- the schema
+    // (res/sql/*/2_care_circle.sql) exists only there; left unbuilt on legacy.
+    circle_service_ = std::unique_ptr<circle::CircleService>(
+        new circle::CircleService(*router_, cfg_, *db_, *cache_, *jwt_));
+#endif
     mcp_service_ = std::unique_ptr<mcp::McpService>(
         new mcp::McpService(*router_, cfg_, *jwt_, *cache_, storage_.get(), memory_.get(), db_.get()));
     // OAuth 2.0 authorization server: issues access tokens for the MCP endpoint
@@ -438,6 +444,7 @@ void Server::teardown() {
     fhir_service_.reset();
     oauth_service_.reset();
     mcp_service_.reset();
+    circle_service_.reset();
     chat_service_.reset();
     user_service_.reset();
     firebase_.reset();

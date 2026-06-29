@@ -23,14 +23,22 @@ Drawer {
     }
 
     function pad(n) { return (n < 10 ? "0" : "") + n; }
+    // The backend sends `timestamp` as epoch milliseconds (UTC); a legacy ISO-8601
+    // string is also tolerated. Format in the device's local zone. Mirrors
+    // formatTimestamp in htdoc/src/format.js and HistoryScreen.kt.
     function formatTimestamp(raw) {
         if (!raw) return "";
-        var s = String(raw).trim().replace(" ", "T");
-        s = s.replace(/([+\-]\d\d)(\d\d)$/, "$1:$2");
-        s = s.replace(/([+\-]\d\d)$/, "$1:00");
-        if (!/[zZ]$|[+\-]\d\d:\d\d$/.test(s)) s += "Z";
-        var d = new Date(s);
-        if (isNaN(d.getTime())) return raw;
+        var d;
+        if (typeof raw === "number" || /^\d+$/.test(String(raw).trim())) {
+            d = new Date(Number(raw));                   // unix milliseconds
+        } else {
+            var s = String(raw).trim().replace(" ", "T");
+            s = s.replace(/([+\-]\d\d)(\d\d)$/, "$1:$2");
+            s = s.replace(/([+\-]\d\d)$/, "$1:00");
+            if (!/[zZ]$|[+\-]\d\d:\d\d$/.test(s)) s += "Z";
+            d = new Date(s);
+        }
+        if (isNaN(d.getTime())) return String(raw);
         return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate())
              + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
     }

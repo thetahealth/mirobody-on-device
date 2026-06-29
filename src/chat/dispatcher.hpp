@@ -54,8 +54,12 @@ public:
     // `memory` (the long-term memory store, see memory/) is borrowed and may be
     // null (the `remember` / `recall_memory` tools then report memory is off);
     // it is threaded onto each turn's AgentRequest so the tool executor reaches it.
+    // `rate_max` / `rate_window_seconds` cap agent/live turns per user per window
+    // (rate_max <= 0 disables the limit); enforced via `cache` (no cache => no
+    // limit). See CHAT_RATE_MAX / CHAT_RATE_WINDOW_SEC.
     Dispatcher(Chat& chat, storage::Storage* storage, cache::Cache* cache,
-               file::Parser* parser, database::Database* db, memory::Memory* memory);
+               file::Parser* parser, database::Database* db, memory::Memory* memory,
+               int rate_max = 0, int rate_window_seconds = 60);
 
     Dispatcher(const Dispatcher&)            = delete;
     Dispatcher& operator=(const Dispatcher&) = delete;
@@ -78,12 +82,19 @@ private:
     // the turn streams.
     void store_attachments(Packet& pkt, std::int64_t user_id, Responder& out) const;
 
+    // True if `user_id` may run another turn now (under the per-user rate limit);
+    // false once the window cap is hit. Always true when the limit is disabled,
+    // there's no cache, or user_id <= 0 (an unidentifiable caller can't be keyed).
+    bool allow_turn(std::int64_t user_id) const;
+
     Chat&               chat_;
     storage::Storage*   storage_;
     cache::Cache*       cache_;
     file::Parser*       parser_;
     database::Database* db_;
     memory::Memory*     memory_;
+    int                 rate_max_;
+    int                 rate_window_seconds_;
 };
 
 }}

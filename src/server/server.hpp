@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chat/service.hpp"
+#include "circle/service.hpp"
 #include "config/config.hpp"
 #include "fhir/rest.hpp"
 #include "health/ehr_connect.hpp"
@@ -71,6 +72,7 @@ private:
     std::unique_ptr<jwt::AppleTokenValidator>    apple_;
     std::unique_ptr<user::UserService>  user_service_;
     std::unique_ptr<chat::ChatService>  chat_service_;
+    std::unique_ptr<circle::CircleService> circle_service_;  // care circles; modern backends only (null on legacy)
     std::unique_ptr<mcp::McpService>    mcp_service_;
     std::unique_ptr<oauth::OAuthService> oauth_service_;
     std::unique_ptr<fhir::FhirService>  fhir_service_;

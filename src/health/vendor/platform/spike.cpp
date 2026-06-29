@@ -35,6 +35,16 @@
 // chain, and the more common convention); it is centralized in kSigEncodeHex /
 // sign_hmac() below so it can be flipped to base64 in one place if the console's
 // emitted format differs. Everything else above is from the published reference.
+//
+// authorize_url IS implemented: GET /providers/{provider}/integration/init_url
+// ?redirect_uri=&state= -> { path } (docs.spikeapi.com/api-docs/provider_integration).
+// The provider slug is a required path segment, now carried by the interface's
+// `provider` argument; `user_id` selects whose per-user JWT signs the call.
+//
+// list_providers stays a stub (verified, not a research gap): there is NO list
+// endpoint. The OpenAPI spec exposes only per-slug provider operations; the
+// supported-provider set is published only as a static documentation table (the
+// "provider matrix"), not a queryable REST resource.
 
 #include "health/vendor/vendor.hpp"
 
@@ -125,6 +135,47 @@ std::string sign_hmac(const std::string& secret, const std::string& data) {
 class Spike : public VendorBase {
 public:
     explicit Spike(VendorConfig cfg) : VendorBase(make_info(), std::move(cfg)) {}
+
+    // Begin consent for one provider: GET /providers/{provider}/integration/init_url
+    // with the per-user JWT, returning the `path` URL Spike hands back for the user
+    // to authorize at. Spike auth is per end user, so `user_id` (your
+    // application_user_id) selects whose JWT is used; `provider` is the Spike
+    // provider slug (fitbit/garmin/oura/…) and is REQUIRED — Spike's connect
+    // endpoint is per provider. redirect_uri/state pass through to Spike (it
+    // whitelists redirect_uri domains and echoes state after consent).
+    std::string authorize_url(const std::string& redirect_uri,
+                              const std::string& state,
+                              const std::string& user_id,
+                              const std::string& provider) override {
+        require_configured();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires a user_id (your application_user_id)");
+        }
+        if (provider.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires a provider (the Spike provider "
+                              "slug, e.g. fitbit/garmin/oura — Spike connects per provider)");
+        }
+
+        std::string url = base_url() + "providers/" + url_encode(provider) + "/integration/init_url";
+        char sep = '?';
+        if (!redirect_uri.empty()) {
+            url += sep; sep = '&';
+            url += "redirect_uri=" + url_encode(std::string(redirect_uri));
+        }
+        if (!state.empty()) {
+            url += sep; sep = '&';
+            url += "state=" + url_encode(std::string(state));
+        }
+
+        const std::string body = get_json(url, "authorize_url (integration/init_url)", uid);
+        rapidjson::Document doc;
+        if (doc.Parse(body.c_str()).HasParseError() || !doc.IsObject() ||
+            !doc.HasMember("path") || !doc["path"].IsString()) {
+            throw VendorError(info_.id + ": no 'path' in integration/init_url response");
+        }
+        return doc["path"].GetString();
+    }
 
     // Fetch `domain` for `user_id` over [start_iso, end_iso] as Spike's JSON.
     // `user_id` is the application_user_id minted into the per-user JWT. The
@@ -228,19 +279,27 @@ public:
         return std::string(body);
     }
 
-    // Disconnect the user from one provider: DELETE /providers/{slug}/integration.
-    // Spike scopes the delete by the per-user JWT, so `user_id` selects the user;
-    // the provider slug comes from config.client_id-adjacent context is N/A here,
-    // so the caller cannot specify a slug through this signature — see note below.
-    void revoke(const std::string& /*user_id*/) override {
-        // The published delete endpoint is per-provider (/providers/{slug}/
-        // integration); the Vendor interface carries no provider slug, so there
-        // is no faithful way to target a specific integration from here. Rather
-        // than guess an undocumented "delete all integrations" route, surface
-        // this honestly.
-        throw VendorError(info_.id + ": revoke needs a provider slug — Spike disconnects per "
-                          "provider via DELETE /providers/{slug}/integration, which the Vendor "
-                          "interface does not currently carry");
+    // Disconnect the user from one provider: DELETE /providers/{provider}/integration.
+    // Spike scopes the delete by the per-user JWT, so `user_id` (your
+    // application_user_id) selects the user, and `provider` is the slug to drop —
+    // both required, since Spike disconnects per provider (no whole-user route).
+    void revoke(const std::string& user_id, const std::string& provider) override {
+        require_configured();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": revoke requires a user_id (your application_user_id)");
+        }
+        if (provider.empty()) {
+            throw VendorError(info_.id + ": revoke requires a provider (the Spike provider slug) — "
+                              "Spike disconnects per provider via DELETE /providers/{slug}/integration");
+        }
+        client::HttpRequest req;
+        req.url     = base_url() + "providers/" + url_encode(provider) + "/integration";
+        req.headers = auth_headers(uid);
+        client::HttpResponse res = client::HttpClient().request("DELETE", req);
+        if (res.status < 200 || res.status >= 300) {
+            throw VendorError(http_error("revoke (DELETE providers/integration)", res));
+        }
     }
 
 private:

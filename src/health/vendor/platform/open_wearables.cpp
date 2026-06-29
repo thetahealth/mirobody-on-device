@@ -29,13 +29,13 @@
 // confirmed; only the timeseries metric selector is a guess.
 //
 // Mapped operations: fetch() (Activity→activity summary, Sleep→sleep summary,
-// HeartRate→timeseries) and list_providers(). The consent flow (authorize_url)
-// is left a stub: Open Wearables' authorize endpoint is per-provider
-// (GET /api/v1/oauth/{provider}/authorize?user_id=…) and takes neither the
-// redirect_uri nor the state the Vendor interface supplies, so there is no
-// faithful mapping — better an honest "not implemented" than a fabricated one.
-// revoke() / handle_webhook() stay stubs for the same reason (no documented
-// disconnect endpoint; webhook signature scheme not published).
+// HeartRate→timeseries), list_providers() (GET oauth/providers — a global
+// catalogue, so the user_id arg is ignored), and authorize_url(), which builds the
+// per-provider consent URL GET /api/v1/oauth/{provider}/authorize?user_id=… now
+// that the interface carries provider + user_id (the endpoint takes neither
+// redirect_uri nor state, so those are ignored). revoke() / handle_webhook() stay
+// inherited stubs: there is no documented disconnect endpoint, and the webhook
+// signature scheme is not published.
 
 #include "health/vendor/vendor.hpp"
 
@@ -96,9 +96,31 @@ class OpenWearables : public VendorBase {
 public:
     explicit OpenWearables(VendorConfig cfg) : VendorBase(make_info(), std::move(cfg)) {}
 
+    // Begin consent for one provider. Open Wearables' authorize endpoint IS the URL
+    // the user visits to start OAuth — GET /api/v1/oauth/{provider}/authorize
+    // ?user_id=<id> — so we build and return it directly (no API call). `provider`
+    // (the cloud provider slug) and `user_id` are both required; the endpoint takes
+    // neither redirect_uri nor state, so those are ignored.
+    std::string authorize_url(const std::string& /*redirect_uri*/,
+                              const std::string& /*state*/,
+                              const std::string& user_id,
+                              const std::string& provider) override {
+        const std::string base = require_base_url();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires a user_id (the Open Wearables user id)");
+        }
+        if (provider.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires a provider (the cloud provider "
+                              "slug; the authorize endpoint is per provider)");
+        }
+        return base + "oauth/" + url_encode(provider) + "/authorize?user_id=" + url_encode(uid);
+    }
+
     // The cloud providers (device brands) a user can connect, as the platform's
-    // JSON. Confirmed path: GET /api/v1/oauth/providers.
-    std::string list_providers() override {
+    // JSON. Confirmed path: GET /api/v1/oauth/providers (global catalogue, so the
+    // user_id argument is ignored).
+    std::string list_providers(const std::string& /*user_id*/) override {
         const std::string base = require_base_url();
         require_api_key();
         return get_json(base + "oauth/providers", "list_providers (oauth/providers)");

@@ -58,6 +58,23 @@ struct AgentRequest {
 
     std::int64_t user_id = 0;                    // decoded raw row id; 0 => anonymous
     std::string  session_id;
+
+    // Durable conversation thread (modern backends only).
+    //   conversation_id  IN:  continue this server-side thread (the client echoes
+    //                         the id it was told); 0 / unowned => start a new one.
+    //                    OUT: set by persist_history to the thread this turn
+    //                         landed in, so the dispatcher can tell the client.
+    //   question_id      OUT: this turn's question messages.id, set by
+    //                         persist_history so the streamed answer links back to it.
+    std::int64_t conversation_id = 0;
+    std::int64_t question_id     = 0;
+
+    // Chat "currently for" subject: a care-circle member whose health the caller
+    // may read. Validated against circle::can_read_health before it reaches the
+    // agent; 0 / self => the caller's own data. Drives a system-prompt hint so
+    // health questions default to this member (the family_health tool reads by id).
+    std::int64_t subject_user_id = 0;
+
     std::string  language;                       // hint; empty => auto-detect
     std::string  accept_language;                // client's top Accept-Language tag (e.g. "fr-FR"); empty => none
     std::string timezone;                        // IANA zone; empty => default

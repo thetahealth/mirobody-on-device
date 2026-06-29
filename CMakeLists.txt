@@ -221,6 +221,7 @@ set(MIROBODY_CORE_SOURCES
     src/chat/transport/ws.cpp
     src/chat/transport/mqtt.cpp
     src/chat/agent.cpp
+    src/circle/service.cpp
     src/mcp/tool.cpp
     src/mcp/resource.cpp
     src/mcp/service.cpp

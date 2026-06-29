@@ -11,6 +11,8 @@ import MarkdownUI
 struct MarkdownText: View {
     let text: String
     var textStyle: MBTextStyle = .bodyMedium
+    /// Overrides the body text color (e.g. white on the solid-navy user bubble).
+    var color: Color? = nil
 
     @Environment(\.mbFontScale) private var scale
     @Environment(\.mbColors) private var colors
@@ -19,9 +21,9 @@ struct MarkdownText: View {
         Markdown(text)
             .markdownTextStyle {
                 FontSize(textStyle.size * scale)
-                ForegroundColor(colors.onSurface)
+                ForegroundColor(color ?? colors.onSurface)
             }
-            .tint(colors.primary)   // link / accent color
+            .tint(color ?? colors.primary)   // link / accent color
             .textSelection(.enabled)
     }
 }

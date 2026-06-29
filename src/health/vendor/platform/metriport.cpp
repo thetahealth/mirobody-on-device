@@ -34,15 +34,35 @@
 //     site) rather than invent an undocumented range parameter.
 //   * Metriport dates are YYYY-MM-DD; ISO-8601 timestamps are truncated to their
 //     date component before being sent.
-// authorize_url / list_providers / handle_webhook / revoke stay inherited stubs —
-// those map to the Connect-widget token, connected-providers, and webhook flows,
-// which don't fit these signatures cleanly and aren't required here.
+// authorize_url, handle_webhook, and revoke are implemented against the
+// open-source Devices API (server routes + packages/api-sdk):
+//   * authorize_url  -> POST /user?appUserId=<user_id> then GET /user/connect/token,
+//     returning the Connect Widget URL https://connect.metriport.com/?token=…
+//     (user_id carries your appUserId; redirect_uri sets the success/failure
+//     redirects; sandbox flag added when base_url is the sandbox host).
+//   * handle_webhook -> verifies the `x-metriport-signature` header (lowercase-hex
+//     HMAC-SHA256 over the raw body, keyed by your webhook key in
+//     config.client_secret — api_key is taken by x-api-key). ping_pong() builds
+//     the {"pong":…} answer to Metriport's ping handshake.
+//   * revoke         -> DELETE /user/{userId} (deletes the connected user, revoking
+//     all their providers; revoke_provider() drops a single provider via
+//     DELETE /user/{userId}/revoke?provider=).
+// list_providers stays an inherited stub: the open source exposes NO supported-
+// provider CATALOGUE endpoint — only the user-scoped GET /user/{userId}/
+// connected-providers, which doesn't fit list_providers(). The supported set is
+// the ProviderSource enum (apple, cronometer, dexcom, fitbit, garmin, google,
+// oura, tenovi, whoop, withings).
 
 #include "health/vendor/vendor.hpp"
 
 #include "client/http_client.hpp"
+#include "storage/sign.hpp"   // hmac_sha256 / hex_encode
 
+#include <rapidjson/document.h>
+
+#include <array>
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -59,6 +79,9 @@ const char kApiKeyHeader[] = "x-api-key";
 
 // Medical API base path (BASE_PATH in the SDK's medical client).
 const char kMedicalBase[] = "/medical/v1";
+
+// Hosted Connect Widget the user is redirected to (connect-widget constants).
+const char kWidgetBase[] = "https://connect.metriport.com";
 
 //------------------------------------------------------------------------------
 // Local helpers
@@ -92,6 +115,75 @@ std::string to_date_only(const std::string& iso) {
     return s;
 }
 
+// JSON-string-escape a value for the small ping/pong body we build by hand.
+std::string json_escape(const std::string& s) {
+    std::string out;
+    out.reserve(s.size() + 2);
+    for (char c : s) {
+        switch (c) {
+            case '"':  out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\n': out += "\\n";  break;
+            case '\r': out += "\\r";  break;
+            case '\t': out += "\\t";  break;
+            default:   out.push_back(c);
+        }
+    }
+    return out;
+}
+
+// Constant-time compare of two strings (length itself is not secret). Used to
+// compare webhook signatures without leaking match position via timing.
+bool ct_equal(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    unsigned char diff = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        diff |= static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]);
+    }
+    return diff == 0;
+}
+
+// Lowercase a string (hex signatures may arrive upper- or lower-case; our
+// recomputed digest is lowercase hex).
+std::string to_lower(std::string s) {
+    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+// Find a header value in a raw "Name: value\r\n..." block, matching `name`
+// case-insensitively (HTTP header names are case-insensitive). Returns the
+// trimmed value, or "" if absent.
+std::string header_value(const std::string& raw, const char* name) {
+    std::string lname(name);
+    for (char& c : lname) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    std::size_t pos = 0;
+    while (pos < raw.size()) {
+        std::size_t eol = raw.find('\n', pos);
+        std::string line = raw.substr(pos, eol == std::string::npos ? std::string::npos
+                                                                     : eol - pos);
+        pos = (eol == std::string::npos) ? raw.size() : eol + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+
+        std::size_t colon = line.find(':');
+        if (colon == std::string::npos) continue;
+
+        std::string key = line.substr(0, colon);
+        std::size_t ks = key.find_first_not_of(" \t");
+        std::size_t ke = key.find_last_not_of(" \t");
+        if (ks == std::string::npos) continue;
+        key = key.substr(ks, ke - ks + 1);
+        for (char& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (key != lname) continue;
+
+        std::string val = line.substr(colon + 1);
+        std::size_t vs = val.find_first_not_of(" \t");
+        std::size_t ve = val.find_last_not_of(" \t");
+        return vs == std::string::npos ? std::string() : val.substr(vs, ve - vs + 1);
+    }
+    return std::string();
+}
+
 //------------------------------------------------------------------------------
 
 class Metriport : public VendorBase {
@@ -119,6 +211,135 @@ public:
             return fetch_consolidated(uid, start_iso, end_iso);
         }
         return fetch_device_metric(uid, domain, start_iso);
+    }
+
+    // Begin the Devices-API connect flow and return the Connect Widget URL to
+    // redirect the user to. Metriport provisions its own user from your app's user
+    // id, so `user_id` carries that app id (sent as appUserId). state/provider have
+    // no slot here (the widget lets the user pick a provider; the landing is set via
+    // redirect_uri). Two server calls run:
+    //   POST /user?appUserId=<user_id>      -> { userId }
+    //   GET  /user/connect/token?userId=... -> { token }
+    // and we return https://connect.metriport.com/?token=<token>, with the
+    // success/failure redirects set to redirect_uri and the sandbox flag added when
+    // base_url targets the sandbox host. Each call PROVISIONS a Metriport user from
+    // appUserId (the SDK does the same); store and reuse the returned connection.
+    std::string authorize_url(const std::string& redirect_uri,
+                              const std::string& /*state*/,
+                              const std::string& user_id,
+                              const std::string& /*provider*/) override {
+        require_configured();
+        const std::string app_user_id(user_id);
+        if (app_user_id.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires a user_id (your app's user "
+                              "id, sent to Metriport as appUserId)");
+        }
+
+        const std::string metriport_user_id = create_user(app_user_id);
+        const std::string token              = connect_token(metriport_user_id);
+
+        std::string url = std::string(kWidgetBase) + "/?token=" + url_encode(token);
+        if (is_sandbox()) {
+            url += "&sandbox=true";
+        }
+        if (!redirect_uri.empty()) {
+            const std::string r = url_encode(std::string(redirect_uri));
+            url += "&redirectUrl=" + r + "&failRedirectUrl=" + r;
+        }
+        return url;
+    }
+
+    // Disconnect the user. With a `provider` slug, drop just that connection via
+    // revoke_provider(); otherwise DELETE /user/{userId} deletes the Metriport
+    // connected user, revoking all their provider connections. `user_id` is the
+    // Metriport userId. A non-2xx is surfaced as a VendorError.
+    void revoke(const std::string& user_id, const std::string& provider) override {
+        require_configured();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": revoke requires a user_id (the Metriport userId)");
+        }
+        if (!provider.empty()) {
+            revoke_provider(uid, provider);
+            return;
+        }
+        client::HttpRequest req;
+        req.url     = base_url() + "/user/" + url_encode(uid);
+        req.headers = { std::string(kApiKeyHeader) + ": " + config().api_key };
+        client::HttpResponse res = client::HttpClient().request("DELETE", req);
+        if (res.status < 200 || res.status >= 300) {
+            throw VendorError(http_error("revoke (DELETE /user)", res));
+        }
+    }
+
+    // Verify and return an inbound Metriport webhook. The signature is in the
+    // `x-metriport-signature` header as lowercase-hex HMAC-SHA256 over the RAW
+    // request body, keyed by your webhook key (config.client_secret — Metriport
+    // uses api_key for x-api-key, so the webhook key rides on client_secret). The
+    // same scheme covers both Devices and Medical webhooks. On success returns the
+    // body verbatim; mismatch / malformed input throws.
+    //
+    // Ping handshake: Metriport verifies an endpoint by POSTing (through this same
+    // signed pipeline) a body with a top-level "ping" field; the endpoint must
+    // reply HTTP 200 with {"pong": <value>}. This method verifies + returns the
+    // ping body like any other event; ping_pong() builds the answer the caller's
+    // HTTP layer writes back.
+    std::string handle_webhook(const std::string& raw_headers,
+                               const std::string& body) override {
+        const std::string secret = config().client_secret;
+        if (secret.empty()) {
+            throw VendorError(info_.id + ": handle_webhook requires your webhook key — set "
+                              "MIROBODY_VENDOR_METRIPORT_CLIENT_SECRET to the key Metriport "
+                              "generated when you set your webhook URL");
+        }
+        const std::string sig = header_value(raw_headers, "x-metriport-signature");
+        if (sig.empty()) {
+            throw VendorError(info_.id + ": webhook missing x-metriport-signature header");
+        }
+
+        std::array<unsigned char, 32> mac = storage::hmac_sha256(secret, std::string(body));
+        const std::string expected = storage::hex_encode(mac.data(), mac.size());
+        if (!ct_equal(expected, to_lower(sig))) {
+            throw VendorError(info_.id + ": webhook signature verification failed (x-metriport-signature)");
+        }
+
+        rapidjson::Document doc;
+        if (doc.Parse(std::string(body).c_str()).HasParseError() || !doc.IsObject()) {
+            throw VendorError(info_.id + ": webhook body was not a JSON object");
+        }
+        return std::string(body);
+    }
+
+    //--------------------------------------------------------------------------
+    // Connect-flow / disconnect helpers (not part of the Vendor interface)
+    //--------------------------------------------------------------------------
+
+    // Build the {"pong": <value>} body that answers a Metriport ping. Returns ""
+    // when `webhook_json` is not a ping (no top-level "ping" string), so the
+    // caller can branch: non-empty => write it back with HTTP 200.
+    static std::string ping_pong(const std::string& webhook_json) {
+        rapidjson::Document doc;
+        if (doc.Parse(webhook_json.c_str()).HasParseError() || !doc.IsObject()) {
+            return std::string();
+        }
+        if (!doc.HasMember("ping") || !doc["ping"].IsString()) {
+            return std::string();
+        }
+        return std::string("{\"pong\":\"") + json_escape(doc["ping"].GetString()) + "\"}";
+    }
+
+    // Revoke a SINGLE provider for a user: DELETE /user/{userId}/revoke?provider=.
+    // `provider` is a Metriport ProviderSource slug (fitbit, garmin, oura, …).
+    void revoke_provider(const std::string& user_id, const std::string& provider) {
+        require_configured();
+        client::HttpRequest req;
+        req.url     = base_url() + "/user/" + url_encode(user_id) +
+                      "/revoke?provider=" + url_encode(provider);
+        req.headers = { std::string(kApiKeyHeader) + ": " + config().api_key };
+        client::HttpResponse res = client::HttpClient().request("DELETE", req);
+        if (res.status < 200 || res.status >= 300) {
+            throw VendorError(http_error("revoke_provider (DELETE /user/revoke)", res));
+        }
     }
 
 private:
@@ -185,6 +406,41 @@ private:
     }
 
     //--------------------------------------------------------------------------
+    // Connect-flow transport
+    //   POST /user?appUserId=<id>           -> { userId }
+    //   GET  /user/connect/token?userId=... -> { token }
+    //--------------------------------------------------------------------------
+    std::string create_user(const std::string& app_user_id) {
+        client::HttpRequest req;
+        req.url     = base_url() + "/user?appUserId=" + url_encode(app_user_id);
+        req.headers = { std::string(kApiKeyHeader) + ": " + config().api_key,
+                        "Accept: application/json" };
+        client::HttpResponse res = client::HttpClient().post(req);
+        if (res.status < 200 || res.status >= 300) {
+            throw VendorError(http_error("authorize_url (POST /user)", res));
+        }
+        return json_field(res.body, "userId", "POST /user");
+    }
+
+    std::string connect_token(const std::string& user_id) {
+        const std::string url = base_url() + "/user/connect/token?userId=" + url_encode(user_id);
+        return json_field(get_json(url, "authorize_url (GET /user/connect/token)"),
+                          "token", "GET /user/connect/token");
+    }
+
+    // Pull a required top-level string field out of a JSON object response.
+    std::string json_field(const std::string& body, const char* field, const char* op) const {
+        rapidjson::Document doc;
+        if (doc.Parse(body.c_str()).HasParseError() || !doc.IsObject()) {
+            throw VendorError(info_.id + ": " + op + " response was not a JSON object");
+        }
+        if (!doc.HasMember(field) || !doc[field].IsString()) {
+            throw VendorError(std::string(info_.id) + ": no '" + field + "' in " + op + " response");
+        }
+        return doc[field].GetString();
+    }
+
+    //--------------------------------------------------------------------------
     // Transport
     //--------------------------------------------------------------------------
     std::string get_json(const std::string& url, const std::string& op) {
@@ -194,11 +450,21 @@ private:
         };
         client::HttpResponse res = client::HttpClient().get(url, /*timeout_ms=*/30000, headers);
         if (res.status < 200 || res.status >= 300) {
-            // status <= 0 is a transport failure; curl puts the reason in body.
-            throw VendorError(info_.id + ": " + op + " failed (HTTP " +
-                              std::to_string(res.status) + "): " + res.body.substr(0, 300));
+            throw VendorError(http_error(op, res));
         }
         return res.body;
+    }
+
+    std::string http_error(const std::string& op, const client::HttpResponse& res) const {
+        // status <= 0 is a transport failure; curl puts the reason in body.
+        return info_.id + ": " + op + " failed (HTTP " + std::to_string(res.status) +
+               "): " + res.body.substr(0, 300);
+    }
+
+    // True when the configured host is Metriport's sandbox (so the Connect Widget
+    // is told to run in sandbox mode).
+    bool is_sandbox() const {
+        return base_url().find("sandbox") != std::string::npos;
     }
 
     //--------------------------------------------------------------------------

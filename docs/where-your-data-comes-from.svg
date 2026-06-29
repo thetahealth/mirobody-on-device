@@ -66,12 +66,12 @@
   <text x="474" y="231" text-anchor="middle" font-size="16" font-weight="bold" fill="#9a6a1e">FHIR R4</text>
   <text x="474" y="258" text-anchor="middle" font-size="10" fill="#5a6b7a">one standard format</text>
   <!-- ===== mirobody feeds an AI model, which answers you ===== -->
-  <line x1="564" y1="198" x2="592" y2="198" stroke="#2f7d4a" stroke-width="2.5" marker-end="url(#fg)"/>
+  <line x1="564" y1="199" x2="594" y2="199" stroke="#2f7d4a" stroke-width="2.5" marker-end="url(#fg)"/>
   <rect x="596" y="156" width="112" height="86" rx="12" fill="#f3e8f7" stroke="#8a4fb0" stroke-width="2.5"/>
   <path d="M652 166 L654.5 171.5 L660 174 L654.5 176.5 L652 182 L649.5 176.5 L644 174 L649.5 171.5 Z" fill="#8a4fb0"/>
   <text x="652" y="201" text-anchor="middle" font-size="15" font-weight="bold" fill="#5e2e80">AI model</text>
   <text x="652" y="220" text-anchor="middle" font-size="8.5" fill="#8a4fb0">OpenAI · Gemini · …</text>
-  <line x1="710" y1="198" x2="750" y2="194" stroke="#2f7d4a" stroke-width="2.5" marker-end="url(#fg)"/>
+  <line x1="710" y1="199" x2="740" y2="199" stroke="#2f7d4a" stroke-width="2.5" marker-end="url(#fg)"/>
   <g>
     <path d="M678 66 H808 A12 12 0 0 1 820 78 V100 A12 12 0 0 1 808 112 H788 L778 130 L770 112 H678 A12 12 0 0 1 666 100 V78 A12 12 0 0 1 678 66 Z" fill="#f3e8f7" stroke="#8a4fb0"/>
     <text x="743" y="86" text-anchor="middle" font-size="11" fill="#5e2e80">“Am I getting</text>

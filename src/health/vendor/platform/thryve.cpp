@@ -34,6 +34,18 @@
 // unified payload for the window rather than guess an ID. The credential->header
 // split (client pair -> Authorization, api_key -> AppAuthorization) is the one
 // mapping choice not spelled out by the docs and is flagged here too.
+//
+// STUBS (verified against the public reference, not gaps in research):
+//   * list_providers — there is NO "list data sources" endpoint. The v5 reference
+//     enumerates only user/data endpoints; connecting a source is delegated to the
+//     hosted Connection Widget (POST /widget/v6/connection), which renders an
+//     iframe, not a machine-readable provider catalogue. Left a stub.
+//   * handle_webhook — the push PAYLOAD is documented (POST JSON, zstd-encoded,
+//     event types event.data.{epoch,daily}.{create,update}), but the SIGNATURE
+//     scheme is NOT public: the docs only say "an HMAC secret can be configured"
+//     without naming the header, the HMAC variant, or what is signed (raw zstd
+//     bytes vs decompressed JSON). Verification cannot be implemented faithfully
+//     from public docs, so handle_webhook stays a stub rather than guess a scheme.
 
 #include "health/vendor/vendor.hpp"
 
@@ -110,17 +122,20 @@ public:
     explicit Thryve(VendorConfig cfg) : VendorBase(make_info(), std::move(cfg)) {}
 
     // Begin consent: ask Thryve for a hosted Connection Widget URL for this user
-    // and return it for the caller to redirect to. `state` has no documented slot
-    // in the v6 widget request, so it is left to the caller's redirect handling;
-    // `redirect_uri` is likewise configured on the Thryve app side. We pass the
-    // endUserId (Thryve's user identifier == the access token from createUser).
-    std::string authorize_url(const std::string& redirect_uri,
-                              const std::string& /*state*/) override {
+    // and return its JSON for the caller to redirect from. `user_id` is the Thryve
+    // endUserId (== the access token from createUser), the only value the v6 widget
+    // request needs; redirect_uri/state have no documented slot (the landing is
+    // configured on the Thryve app side) and provider is chosen in the widget, so
+    // all three are ignored.
+    std::string authorize_url(const std::string& /*redirect_uri*/,
+                              const std::string& /*state*/,
+                              const std::string& user_id,
+                              const std::string& /*provider*/) override {
         require_configured();
-        const std::string uid(redirect_uri);  // caller passes the endUserId here
+        const std::string uid(user_id);  // Thryve endUserId (== the access token)
         if (uid.empty()) {
-            throw VendorError(info_.id + ": authorize_url requires the endUserId "
-                              "(create one first via createUser / POST v5/accessToken)");
+            throw VendorError(info_.id + ": authorize_url requires a user_id (the Thryve endUserId; "
+                              "create one first via createUser / POST v5/accessToken)");
         }
 
         rapidjson::StringBuffer sb;
@@ -168,7 +183,7 @@ public:
 
     // Disconnect the user: delete the Thryve user (and thereby their connections)
     // via DELETE /v5/userInformation, scoped by the authenticationToken.
-    void revoke(const std::string& user_id) override {
+    void revoke(const std::string& user_id, const std::string& /*provider*/) override {
         require_configured();
         const std::string uid(user_id);
         if (uid.empty()) {

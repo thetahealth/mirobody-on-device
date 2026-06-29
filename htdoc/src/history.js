@@ -11,6 +11,7 @@ const i18n = require("./i18n");
 
 const config = require("./config");
 const color  = config.color;
+const state  = config.state;
 
 const button = require("./widgets").button;
 const icons  = require("./icons");
@@ -183,6 +184,37 @@ function openHistory() {
         }), t("historyEmpty"))));
     };
 
+    // Open a conversation into the chat view. Owned threads stay editable; one
+    // shared *to* the user opens read-only (the composer is hidden). Best-effort:
+    // a load failure leaves the drawer open.
+    function openConversation(item) {
+        net.get(
+            "/api/conversation?id=" + encodeURIComponent(item.session_id),
+            function (data) {
+                var msgs = (data && data.messages instanceof Array) ? data.messages : [];
+                state.messages = msgs.map(function (m) {
+                    var o = { role: m.role, content: m.content || "", ts: m.created_at };
+                    if (m.role === "assistant" && m.provider) { o.provider = m.provider; }
+                    return o;
+                });
+                state.currentConversationId = String((data && data.id) || item.session_id);
+                state.readOnly = !(data && data.owned);
+                dismiss();
+                require("./app").render();
+            },
+            function () {}
+        );
+    };
+
+    function badge(text, strong) {
+        return ui.setText(ui.dom("div", {
+            display: "inline-block", fontSize: "0.68rem", padding: "1px 7px",
+            borderRadius: "9px", whiteSpace: "nowrap", alignSelf: "flex-start",
+            background: strong ? color.userBubble : color.surfaceLow,
+            color: strong ? color.primary : color.onSurfaceVar
+        }), text);
+    };
+
     function row(item) {
         var wrap = ui.dom("div", {
             display: "flex", alignItems: "center",
@@ -192,15 +224,23 @@ function openHistory() {
         wrap.style.borderBottomColor = "rgba(196, 199, 203, 0.4)";
 
         var texts = ui.dom("div", {
-            flex: "1 1 auto", minWidth: "0",
+            flex: "1 1 auto", minWidth: "0", cursor: "pointer",
             display: "flex", flexDirection: "column", gap: "4px"
         });
+        texts.addEventListener("click", function () { openConversation(item); });
         var title = item.summary || item.session_id || t("historyUntitled");
         texts.appendChild(ui.setText(ui.dom("div", {
             fontSize: "1rem", color: color.onSurface, lineHeight: "1.35",
             overflow: "hidden", textOverflow: "ellipsis",
             display: "-webkit-box", WebkitLineClamp: "2", WebkitBoxOrient: "vertical"
         }), title));
+        // Sharing badges: "Shared by <owner>" on a thread shared to me; "Shared
+        // with N" on one of my own that I've shared.
+        if (item.owned === false && item.shared_by) {
+            texts.appendChild(badge(t("sharedByBadge", item.shared_by), true));
+        } else if (item.owned && item.shared_with_count > 0) {
+            texts.appendChild(badge(t("sharedWithBadge", String(item.shared_with_count)), false));
+        }
         if (item.timestamp) {
             texts.appendChild(ui.setText(ui.dom("div", {
                 fontSize: "0.7rem", color: color.onSurfaceVar, opacity: "0.7"

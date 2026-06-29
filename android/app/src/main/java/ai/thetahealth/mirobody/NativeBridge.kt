@@ -11,6 +11,8 @@ class NativeBridge {
         geminiKey: String,
         listenPort: Int,
     ): Boolean {
+        // Pure-client build (libmirobody.so not packaged): no embedded server to run.
+        if (!available) return false
         if (handle != 0L) return true
         handle = nativeStart(configPath, dataDir, openaiKey, geminiKey, listenPort)
         return handle != 0L
@@ -39,8 +41,16 @@ class NativeBridge {
     private external fun nativeListenPort(handle: Long): Int
 
     companion object {
-        init {
+        // The embedded C++ server (libmirobody.so) is only packaged when the arm64
+        // prebuilt deps exist at build time (see app/build.gradle.kts). On a pure-client
+        // build the library is absent; loading it must NOT crash the app — MirobodyService
+        // checks `available`/start() and stops itself, leaving the UI running as a plain
+        // client against the configured BASE_URL.
+        val available: Boolean = try {
             System.loadLibrary("mirobody")
+            true
+        } catch (e: UnsatisfiedLinkError) {
+            false
         }
     }
 }

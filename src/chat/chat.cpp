@@ -117,22 +117,21 @@ void Chat::response(const std::string& agent_name, AgentRequest& req,
         }
     }
 
-    // Accumulate the streamed answer so the finished exchange can be appended
-    // to the conversation memory once the turn ends.
+    // Accumulate the streamed answer so the finished exchange can be appended to
+    // the conversation memory and persisted to the durable thread once the turn
+    // ends. Done unconditionally now (DB persistence needs it even when the
+    // client manages its own multi-turn history and the cache memory is off).
     std::string reply;
-    llm::EventHandler recorder;
-    if (memory) {
-        recorder = [&reply, &on_event](const llm::Event& e) -> bool {
-            if (e.type == llm::EventType::Reply) reply += e.content;
-            return on_event(e);
-        };
-    }
+    llm::EventHandler recorder = [&reply, &on_event](const llm::Event& e) -> bool {
+        if (e.type == llm::EventType::Reply) reply += e.content;
+        return on_event(e);
+    };
 
     // Stream the agent's events straight through. Presentation transforms (e.g.
     // collapsing a render_chart tool call into a ChartEvent) are applied by the
     // chat event-filter pipeline at the dispatcher boundary, not here -- this tier
     // deals only in the raw llm event stream.
-    agent->generate_response(req, memory ? recorder : on_event);
+    agent->generate_response(req, recorder);
 
     // A turn that produced no answer (error, abort) is not recorded -- the
     // question will be resent, and a context entry with no reply teaches the
@@ -143,6 +142,10 @@ void Chat::response(const std::string& agent_name, AgentRequest& req,
         exchange.push_back(llm::ChatMessage{"assistant", reply,     {}});
         history_append(*req.cache, req.user_id, req.session_id, exchange);
     }
+
+    // Persist the finished answer to the durable thread (modern backends), linked
+    // to the question persist_history recorded before streaming.
+    persist_response(req, agent_name, reply);
 }
 
 //------------------------------------------------------------------------------
@@ -185,8 +188,8 @@ void Chat::live_response(const LiveRequest& req, const llm::EventHandler& on_eve
 // History
 //------------------------------------------------------------------------------
 
-void Chat::persist_history(const AgentRequest& req) {
-    if (req.user_id <= 0 || req.question.empty()) return;
+std::int64_t Chat::persist_history(AgentRequest& req) {
+    if (req.user_id <= 0 || req.question.empty()) return 0;
 
     // Summary is the question, capped so a long prompt doesn't bloat the row.
     std::string summary = req.question;
@@ -202,21 +205,59 @@ void Chat::persist_history(const AgentRequest& req) {
 #if defined(MIROBODY_DATABASE_PG_LEGACY)
         // Legacy th_sessions: one row keyed on a supplied string session_id,
         // carrying the question detail inline (no separate messages table here).
+        // The legacy backend has no message-level thread/responses, so it
+        // surfaces no conversation id and persists no answer.
         db_.execute(
             "INSERT INTO th_sessions (session_id, user_id, summary, language, timezone, files) "
             "VALUES (?, ?, ?, ?, ?, ?);",
             {new_history_id(), uid, summary, req.language, req.timezone, files});
+        return 0;
 #else
-        // Modern: write the opening question as a messages row (conversation_id
-        // left NULL -- it is the conversation root), then seed a thin conversations
-        // row whose id IS that question's id, so one id names the thread across
-        // both tables. The two writes share a transaction so a conversation never
-        // exists without its opening question. Agent responses are persisted by
-        // the streaming path, not here; each call starts a fresh conversation
-        // (continuing an existing thread is future work).
+        // Modern: one messages row per message; one id (the opening question's)
+        // names the whole thread across conversations + messages. A turn writes
+        // its question here (the answer is persisted by persist_response once the
+        // turn ends, linked by question_id).
         database::Transaction tx  = db_.begin();
         const int             role = static_cast<int>(database::MessageRole::User);
         const std::int64_t    now  = platform::now_unix_ms();   // created_at/updated_at (unix ms)
+
+        // Continue an existing thread the caller owns (a multi-turn follow-up or a
+        // re-share)? Otherwise (no id, or an id the caller does not own) start a
+        // fresh thread -- a body can never attach a turn to someone else's thread.
+        bool append = false;
+        if (req.conversation_id > 0) {
+            database::Result own = tx.execute(
+                "SELECT 1 FROM conversations WHERE id=? AND user_id=? AND deleted_at IS NULL;",
+                {req.conversation_id, uid});
+            append = !own.rows.empty();
+        }
+
+        if (append) {
+            const std::int64_t cid = req.conversation_id;   // the thread this turn extends
+  #if defined(MIROBODY_DATABASE_PG)
+            database::Result qr = tx.execute(
+                "INSERT INTO messages (user_id, conversation_id, role, content, language, timezone, files, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id;",
+                {uid, cid, role, req.question, req.language, req.timezone, files, now});
+            const std::int64_t qid =
+                (qr.rows.empty() || qr.rows[0].empty()) ? 0 : qr.rows[0][0].as_int();
+  #else
+            database::Result qr = tx.execute(
+                "INSERT INTO messages (user_id, conversation_id, role, content, language, timezone, files, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+                {uid, cid, role, req.question, req.language, req.timezone, files, now});
+            const std::int64_t qid = qr.last_insert_id;
+  #endif
+            tx.execute("UPDATE conversations SET updated_at=? WHERE id=? AND user_id=?;",
+                       {now, cid, uid});
+            tx.commit();
+            req.question_id = qid;
+            return cid;
+        }
+
+        // New thread: the opening question (conversation_id NULL -- it is the
+        // root) seeds a thin conversations row whose id IS that question's id. The
+        // two writes share a transaction so a conversation never exists without it.
   #if defined(MIROBODY_DATABASE_PG)
         // PG has no last_insert_id; read the assigned id back with RETURNING.
         database::Result qr = tx.execute(
@@ -238,10 +279,47 @@ void Chat::persist_history(const AgentRequest& req) {
             "VALUES (?, ?, ?, ?);",
             {qid, uid, summary, now});
         tx.commit();
+        req.conversation_id = qid;
+        req.question_id     = qid;
+        return qid;
 #endif
     } catch (const std::exception& e) {
         platform::log_warn("history: persist failed: %s", e.what());
+        return 0;
     }
+}
+
+//------------------------------------------------------------------------------
+
+void Chat::persist_response(const AgentRequest& req, const std::string& agent_name,
+                            const std::string& reply) {
+#if !defined(MIROBODY_DATABASE_PG_LEGACY)
+    // Need the question this answers (persist_history set both ids); a turn that
+    // produced no answer (error/abort) writes nothing.
+    if (req.user_id <= 0 || req.conversation_id <= 0 || req.question_id <= 0 || reply.empty())
+        return;
+
+    const std::string  uid  = std::to_string(req.user_id);
+    const int          role = static_cast<int>(database::MessageRole::Assistant);
+    const std::int64_t now  = platform::now_unix_ms();
+
+    try {
+        // The answer row: role Assistant, conversation_id = the thread,
+        // question_id = the question it answers; language/timezone/files stay
+        // NULL (those are per-question). Touch the thread so history sorts by
+        // most-recent activity.
+        db_.execute(
+            "INSERT INTO messages (user_id, conversation_id, question_id, role, agent, provider, content, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
+            {uid, req.conversation_id, req.question_id, role, agent_name, req.provider, reply, now});
+        db_.execute("UPDATE conversations SET updated_at=? WHERE id=? AND user_id=?;",
+                    {now, req.conversation_id, uid});
+    } catch (const std::exception& e) {
+        platform::log_warn("history: response persist failed: %s", e.what());
+    }
+#else
+    (void)req; (void)agent_name; (void)reply;
+#endif
 }
 
 //------------------------------------------------------------------------------

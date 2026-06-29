@@ -133,7 +133,18 @@ var state = {
     providers : [],    // [{code, name}] from /api/providers; name is "Agent/provider"
     language  : localStorage.getItem(LANGUAGE_KEY) || defaultLanguage(),
     fontOffset : parseInt(localStorage.getItem(FONT_KEY), 10) || 0,
-    provider  : localStorage.getItem(PROVIDER_KEY) || ""  // last selection ("Agent/provider")
+    provider  : localStorage.getItem(PROVIDER_KEY) || "",  // last selection ("Agent/provider")
+    // The server-side conversation (thread) id of the current chat, learned from
+    // the chat stream's "conversation" event and echoed back to continue the same
+    // thread; also what the Share action shares. "" => a fresh thread.
+    currentConversationId : "",
+    // True when viewing a conversation shared *to* the user (read-only): the
+    // composer is hidden and the thread can't be continued.
+    readOnly  : false,
+    // The chat "currently for" subject: "" / "0" => the user themselves; otherwise
+    // a care-circle member's user id (someone who shared their health data), sent
+    // as `subject` so the AI's family_health tool defaults to them.
+    currentSubjectId : ""
 };
 
 // Two layouts: a centered card on wide screens, a full-width column on phones.
@@ -142,6 +153,12 @@ var state = {
 var MOBILE_QUERY = "(max-width: 600px)";
 function isMobile() {
     return !!(window.matchMedia && window.matchMedia(MOBILE_QUERY).matches);
+};
+
+// True on Android (any browser). Used to decide how to offer the APK: a direct
+// download link on Android, a scan-me QR code everywhere else (PC).
+function isAndroid() {
+    return /android/i.test(navigator.userAgent || "");
 };
 
 //----------------------------------------------------------------------------
@@ -167,3 +184,4 @@ exports.languageLabel  = languageLabel;
 exports.applyFontScale = applyFontScale;
 exports.fontTierLabel  = fontTierLabel;
 exports.isMobile       = isMobile;
+exports.isAndroid      = isAndroid;

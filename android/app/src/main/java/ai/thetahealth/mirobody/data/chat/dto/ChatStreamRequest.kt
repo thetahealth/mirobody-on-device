@@ -15,6 +15,9 @@ data class ChatStreamRequest(
     val language: String = "en",
     val timezone: String = "Asia/Shanghai",
     val scene: String? = null,
+    // Opaque care-circle member handle for the "currently for" subject (whose
+    // health the AI's family_health tool should default to). Null/omitted = self.
+    val subject: String? = null,
 )
 
 @Serializable

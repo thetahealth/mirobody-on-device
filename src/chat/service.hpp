@@ -56,10 +56,17 @@ private:
     // GET|POST /api/providers -- "agent/provider" pairs that have a client loaded.
     void handle_providers(const server::Request& req, server::Response& res);
     // GET|POST /api/history -- the caller's past sessions (newest first),
-    // paginated by ?page / ?page_size.
+    // paginated by ?page / ?page_size. Includes conversations shared *to* the
+    // caller by a care-circle member, each tagged owned / shared-by.
     void handle_history(const server::Request& req, server::Response& res);
-    // POST /api/history/delete -- remove one of the caller's sessions by id.
+    // POST /api/history/delete -- remove one of the caller's sessions by id. For
+    // a conversation shared to the caller this drops their share (removes it from
+    // their history), never the owner's conversation.
     void handle_history_delete(const server::Request& req, server::Response& res);
+    // GET|POST /api/conversation?id=<id> -- the full message thread (questions +
+    // answers) of one conversation, for its owner or a care-circle member it was
+    // shared with. 404/forbidden otherwise. Modern backends only.
+    void handle_conversation(const server::Request& req, server::Response& res);
     // GET|POST /api/files -- the caller's uploaded files (newest first), each
     // with a signed `url` (raw bytes) and `text_url` (extracted text, when one
     // exists), both fetchable directly by the browser. Empty when no object

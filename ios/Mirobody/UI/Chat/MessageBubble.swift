@@ -31,9 +31,10 @@ struct MessageBubble: View {
             }
 
             if isUser {
+                // Solid navy bubble with light text — the web client's user-turn style.
                 bubbleContent
                     .frame(maxWidth: 320, alignment: .leading)
-                    .background(brandBlue.opacity(0.12))
+                    .background(brandBlue)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
             } else {
                 VStack(alignment: .leading, spacing: 0) {
@@ -63,11 +64,20 @@ struct MessageBubble: View {
 
     private var bubbleContent: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Attached file names (user turns only). White-ish on the navy bubble.
+            ForEach(message.attachmentNames, id: \.self) { name in
+                HStack(spacing: 6) {
+                    Image(systemName: "doc").font(.system(size: 12))
+                    Text(name).mbFont(.bodySmall).lineLimit(1)
+                }
+                .foregroundColor(isUser ? Color.white.opacity(0.9) : colors.onSurfaceVariant)
+                .padding(.bottom, 4)
+            }
             ForEach(Array(message.toolCalls.enumerated()), id: \.element.id) { index, tool in
                 ToolCallCard(tool: tool).padding(.top, index > 0 ? 6 : 0)
             }
             if !message.text.isEmpty {
-                MarkdownText(text: message.text)
+                MarkdownText(text: message.text, color: isUser ? .white : nil)
                     .padding(.top, message.toolCalls.isEmpty ? 0 : 8)
             } else if message.streaming && message.error == nil
                         && message.toolCalls.isEmpty && message.imageUrls.isEmpty

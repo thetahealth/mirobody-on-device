@@ -220,6 +220,9 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.listen_addr        = store.get_str("HTTP_HOST", cfg.listen_addr);
     cfg.listen_port        = static_cast<std::uint16_t>(store.get_int("HTTP_PORT", cfg.listen_port));
     cfg.uri_prefix         = normalize_uri_prefix(store.get_str("HTTP_URI_PREFIX", cfg.uri_prefix));
+    cfg.public_base_url    = store.get_str("PUBLIC_BASE_URL", cfg.public_base_url);
+    while (!cfg.public_base_url.empty() && cfg.public_base_url.back() == '/')
+        cfg.public_base_url.pop_back();   // trim trailing '/' so links join cleanly
 
     cfg.openai.base_url     = store.get_str("OPENAI_BASE_URL",     cfg.openai.base_url);
     cfg.openai.realtime_url = store.get_str("OPENAI_REALTIME_URL", cfg.openai.realtime_url);
@@ -309,6 +312,14 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.smart_fhir.redirect_uri  = store.get_str("SMART_FHIR_REDIRECT_URI",  cfg.smart_fhir.redirect_uri);
     cfg.smart_fhir.scope         = store.get_str("SMART_FHIR_SCOPE",         cfg.smart_fhir.scope);
     cfg.smart_fhir.state_ttl     = store.get_int("SMART_FHIR_STATE_TTL",     cfg.smart_fhir.state_ttl);
+
+    cfg.chat.rate_max_per_window = static_cast<int>(store.get_int("CHAT_RATE_MAX",        cfg.chat.rate_max_per_window));
+    cfg.chat.rate_window_seconds = static_cast<int>(store.get_int("CHAT_RATE_WINDOW_SEC", cfg.chat.rate_window_seconds));
+
+    cfg.circle.max_circles_per_user   = static_cast<int>(store.get_int("CIRCLE_MAX_PER_USER",      cfg.circle.max_circles_per_user));
+    cfg.circle.max_members_per_circle = static_cast<int>(store.get_int("CIRCLE_MAX_MEMBERS",       cfg.circle.max_members_per_circle));
+    cfg.circle.invite_max_per_window  = static_cast<int>(store.get_int("CIRCLE_INVITE_MAX",        cfg.circle.invite_max_per_window));
+    cfg.circle.invite_window_seconds  = static_cast<int>(store.get_int("CIRCLE_INVITE_WINDOW_SEC", cfg.circle.invite_window_seconds));
 
     cfg.google_client_id    = store.get_str("GOOGLE_CLIENT_ID",     cfg.google_client_id);
     cfg.apple_client_id     = store.get_str("APPLE_CLIENT_ID",      cfg.apple_client_id);

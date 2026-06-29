@@ -7,16 +7,18 @@ import QtQuick
 // same. `fontScale` follows the persisted font-size offset added to the 16px
 // base, mirroring config.applyFontScale.
 QtObject {
-    readonly property color primary:      "#2f5e78"
+    readonly property color primary:      "#1e3a6b"
     readonly property color onPrimary:    "#ffffff"
-    readonly property color brand:        "#3a78b5"
-    readonly property color background:   "#fbfcfd"
-    readonly property color surfaceLow:   "#f4f6f8"
+    readonly property color brand:        "#1e3a6b"
+    readonly property color background:   "#f2efe9"
+    readonly property color surfaceLow:   "#faf7f1"
     readonly property color onSurface:    "#1a1c1e"
-    readonly property color onSurfaceVar: "#44474a"
+    readonly property color onSurfaceVar: "#52565c"
     readonly property color outline:      "#74787c"
-    readonly property color outlineVar:   "#c4c7cb"
-    readonly property color userBubble:   Qt.rgba(0x3a / 255, 0x78 / 255, 0xb5 / 255, 0.12)
+    readonly property color outlineVar:   "#ddd6c9"
+    // Solid navy user bubble with light text (matches the web client + Android).
+    readonly property color userBubble:   "#1e3a6b"
+    readonly property color onUserBubble: "#ffffff"
     readonly property color error:        "#ba1a1a"
 
     // Base font point size; the whole UI scales relative to this. Bound to the

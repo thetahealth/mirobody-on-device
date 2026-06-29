@@ -22,6 +22,11 @@ i18n.setLang(state.language);
 config.applyFontScale(state.fontOffset);
 config.applyDirection(state.language);
 
+// A care-circle invite link (?circle_token=...): stash the token and clean the
+// URL now, before any render. It's accepted once we hold a session -- below if
+// already signed in, otherwise after sign-in (see app.completeLogin).
+require("./circle_accept").capture();
+
 // If we arrived back from a WeChat or GitHub sign-in redirect
 // (?code=...&state=...), exchange the code for tokens. Each consumer handles the
 // callback only if the returned state matches the nonce it issued, so at most one
@@ -46,6 +51,8 @@ db.loadMessages().then(function (msgs) {
     // provider-config probes (GET /{google,apple,wechat,github}/verify) need-
     // lessly, right as the sign-in completes.
     if (!handlingRedirect) { app.render(); }
+    // Already signed in with a stashed invite token? Accept it now.
+    require("./circle_accept").consume();
 });
 app.loadProviders();
 

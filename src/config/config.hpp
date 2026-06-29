@@ -198,6 +198,29 @@ struct EmailConfig {
 
 //------------------------------------------------------------------------------
 
+// Chat limits. Each agent / live turn on /api/chat drives an upstream LLM call
+// (tokens + latency + cost), so a per-user rolling-window cap guards against
+// runaway loops and abuse. Defaults to 0 = unlimited (no behavior change); set a
+// positive value to enforce it. Applies to both the SSE and WebSocket paths
+// (they share the dispatcher). See src/chat/dispatcher.cpp.
+struct ChatConfig {
+    int rate_max_per_window = 0;     // agent/live turns per user per window (0 = unlimited)
+    int rate_window_seconds = 60;    // length of that window, in seconds
+};
+
+//------------------------------------------------------------------------------
+
+// Care-circle limits. All caps default to 0, meaning "unlimited" (the prior
+// behavior); set a positive value to bound growth and abuse. See src/circle.
+struct CircleConfig {
+    int max_circles_per_user   = 0;     // owned active circles per user (0 = unlimited)
+    int max_members_per_circle = 0;     // active members (incl. pending) per circle (0 = unlimited)
+    int invite_max_per_window  = 20;    // per-inviter invitations allowed per window (0 = unlimited)
+    int invite_window_seconds  = 3600;  // length of the invite rate-limit window
+};
+
+//------------------------------------------------------------------------------
+
 struct Config {
     std::string listen_addr = "0.0.0.0";
     std::uint16_t listen_port = 8080;
@@ -209,6 +232,14 @@ struct Config {
     // on load to a leading-slash, no-trailing-slash form. Empty (the default)
     // serves everything at the root, exactly as if unset.
     std::string uri_prefix;
+
+    // Public origin of this server / its web app, e.g. "https://app.example.com"
+    // (no trailing slash), from PUBLIC_BASE_URL. Used to build absolute links in
+    // outbound email -- currently the care-circle invite link
+    // (<public_base_url>/circle/accept?token=...). Empty falls back to the OAuth
+    // issuer; when neither is set the invite email omits the link and the invitee
+    // accepts in-app instead.
+    std::string public_base_url;
 
     UpstreamConfig openai{
         "https://api.openai.com",
@@ -268,6 +299,12 @@ struct Config {
 
     // SMART-on-FHIR client settings for the EHR connect flow. See SmartFhirConfig.
     SmartFhirConfig            smart_fhir;
+
+    // Chat per-user rate limit (agent/live turns). See ChatConfig.
+    ChatConfig                 chat;
+
+    // Care-circle limits (circle count / member count / invite rate). See CircleConfig.
+    CircleConfig               circle;
 
     // Firebase project ID, used to verify Firebase ID tokens: the validator in
     // src/jwt/firebase.* requires the token's `aud` claim to equal this value

@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import ai.thetahealth.mirobody.data.chat.ChatHistoryStore
 import ai.thetahealth.mirobody.data.chat.ChatRepository
+import ai.thetahealth.mirobody.data.chat.dto.ChatAttachment
 import ai.thetahealth.mirobody.data.chat.dto.ChatStreamEvent
 import ai.thetahealth.mirobody.data.chat.dto.CostStatistics
 import ai.thetahealth.mirobody.data.chat.dto.ProviderInfo
+import ai.thetahealth.mirobody.data.circle.CircleRepository
+import ai.thetahealth.mirobody.data.circle.dto.HealthSharer
 import ai.thetahealth.mirobody.data.net.ErrorBus
 import ai.thetahealth.mirobody.data.settings.SettingsStore
 import java.util.UUID
@@ -52,6 +55,11 @@ data class ChatMessage(
     @Transient val streaming: Boolean = false,
     val error: String? = null,
     val costStats: CostStatistics? = null,
+    // The "Agent/model" provider label this (assistant) turn ran on, shown in the
+    // reply footer. Mirrors the web client's per-turn provider label.
+    val provider: String = "",
+    // Display names of files attached to this (user) turn, shown as chips in the bubble.
+    val attachmentNames: List<String> = emptyList(),
 )
 
 data class ChatUiState(
@@ -63,10 +71,20 @@ data class ChatUiState(
     val selected: ProviderInfo? = null,
     val error: String? = null,
     val language: String = "en",
+    // Care-circle members who shared their health data with me (the "currently
+    // for" picker). `subject` is the selected member handle, 0 = me.
+    val sharers: List<HealthSharer> = emptyList(),
+    val subject: Long = 0,
+    // Files staged in the composer for the next turn (cleared on send).
+    val attachments: List<ChatAttachment> = emptyList(),
+    // The server-side thread id for the current conversation, learned from the
+    // `conversation` SSE event. Empty until the first turn lands; powers sharing.
+    val conversationId: String = "",
 )
 
 class ChatViewModel(
     private val repo: ChatRepository,
+    private val circleRepo: CircleRepository,
     private val settings: SettingsStore,
     private val errorBus: ErrorBus,
     private val history: ChatHistoryStore,
@@ -79,6 +97,7 @@ class ChatViewModel(
 
     init {
         loadProviders()
+        loadSharers()
         // Restore the locally-persisted conversation so a relaunch resumes where
         // the user left off (the screen auto-scrolls to the latest message).
         viewModelScope.launch {
@@ -118,6 +137,36 @@ class ChatViewModel(
         }
     }
 
+    /** Load who has shared their health data with me; powers the subject picker. */
+    fun loadSharers() {
+        viewModelScope.launch {
+            runCatching { circleRepo.healthSharedWithMe() }
+                .onSuccess { list ->
+                    _state.update {
+                        // Drop a stale selection if that sharer is no longer listed.
+                        val keep = it.subject != 0L && list.any { s -> s.member == it.subject }
+                        it.copy(sharers = list, subject = if (keep) it.subject else 0)
+                    }
+                }
+                .onFailure { _state.update { it.copy(sharers = emptyList(), subject = 0) } }
+        }
+    }
+
+    fun onSubjectSelected(member: Long) {
+        _state.update { it.copy(subject = member) }
+    }
+
+    fun addAttachment(attachment: ChatAttachment) {
+        _state.update { it.copy(attachments = it.attachments + attachment) }
+    }
+
+    fun removeAttachment(index: Int) {
+        _state.update {
+            if (index !in it.attachments.indices) it
+            else it.copy(attachments = it.attachments.filterIndexed { i, _ -> i != index })
+        }
+    }
+
     fun onInputChange(value: String) {
         _state.update { it.copy(input = value) }
     }
@@ -133,17 +182,21 @@ class ChatViewModel(
         val s = _state.value
         val question = s.input.trim()
         val selected = s.selected
-        if (question.isEmpty() || s.sending || selected == null) return
+        val attachments = s.attachments
+        // Allow an attachment-only turn (no text), matching the web composer.
+        if ((question.isEmpty() && attachments.isEmpty()) || s.sending || selected == null) return
 
         val userMsg = ChatMessage(
             id = "u-${System.currentTimeMillis()}",
             role = Role.User,
             text = question,
+            attachmentNames = attachments.map { it.fileName },
         )
         val assistantMsg = ChatMessage(
             id = "a-${System.currentTimeMillis()}",
             role = Role.Assistant,
             streaming = true,
+            provider = selected.name,
         )
         _state.update {
             it.copy(
@@ -151,6 +204,7 @@ class ChatViewModel(
                 input = "",
                 sending = true,
                 error = null,
+                attachments = emptyList(),   // consumed by this turn
             )
         }
         // Save now so the question survives an app kill mid-stream; the in-flight
@@ -166,6 +220,8 @@ class ChatViewModel(
                     agentCode = selected.agentCode,
                     provider = selected.code,
                     language = s.language,
+                    subject = s.subject,
+                    attachments = attachments,
                 ).collect { event -> applyEvent(assistantMsg.id, event) }
             }.onFailure { t ->
                 errorBus.emit(t)
@@ -211,6 +267,8 @@ class ChatViewModel(
                 updateMessage(targetId) { it.copy(streaming = false) }
             is ChatStreamEvent.Stats ->
                 updateMessage(targetId) { it.copy(costStats = event.stats) }
+            is ChatStreamEvent.Conversation ->
+                _state.update { if (it.conversationId == event.id) it else it.copy(conversationId = event.id) }
             ChatStreamEvent.Heartbeat,
             is ChatStreamEvent.Id,
             is ChatStreamEvent.Unknown -> Unit

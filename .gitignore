@@ -100,5 +100,6 @@ desktop.ini
 # Local dev scratch: standalone-server SQLite db, uploads, etc.
 /_local/
 *.yml
+*.yaml
 # ...except the committed template, which is the source of defaults.
 !config.example.yml

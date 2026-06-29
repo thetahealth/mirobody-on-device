@@ -26,6 +26,46 @@
     <string name="chat_message_hint">Mensaje</string>
     <string name="chat_history_cd">Historial</string>
     <string name="chat_select_model">Elegir modelo</string>
+    <string name="chat_currently_for">Actualmente para</string>
+    <string name="chat_subject_me">Yo</string>
+
+    <string name="chat_attach_file">Adjuntar archivo</string>
+    <string name="chat_attach_remove">Quitar adjunto</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">Compartir</string>
+    <string name="share_title">Compartir esta conversación</string>
+    <string name="share_no_members">Añade primero miembros a un círculo de cuidado (Ajustes → Círculo de cuidado).</string>
+    <string name="share_access_view">Ver</string>
+    <string name="share_access_edit">Editar</string>
+    <string name="share_save">Guardar</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">Círculo de cuidado</string>
+    <string name="circle_title">Mis círculos de cuidado</string>
+    <string name="circle_members">Miembros</string>
+    <string name="circle_invites">Invitaciones recibidas</string>
+    <string name="circle_invite_hint">Invitar por correo</string>
+    <string name="circle_invite">Invitar</string>
+    <string name="circle_accept">Aceptar</string>
+    <string name="circle_decline">Rechazar</string>
+    <string name="circle_remove">Quitar</string>
+    <string name="circle_remove_confirm">¿Quitar a %1$s de este círculo?</string>
+    <string name="circle_pending">pendiente</string>
+    <string name="circle_owner">propietario</string>
+    <string name="circle_you">Yo</string>
+    <string name="circle_role_member">Miembro</string>
+    <string name="circle_role_maintainer">Administrador</string>
+    <string name="circle_no_members">Aún no hay nadie. Invita a alguien por correo abajo.</string>
+    <string name="circle_health_share">Compartir mis datos de salud</string>
+    <string name="circle_health_off">Desactivado</string>
+    <string name="circle_health_view">Puede ver</string>
+    <string name="circle_health_edit">Puede ver y editar</string>
+    <string name="circle_no_circles">Aún no hay círculos. Crea uno abajo para invitar a personas.</string>
+    <string name="circle_new_name_hint">Nombre del nuevo círculo</string>
+    <string name="circle_create">Crear</string>
+    <string name="circle_delete_circle">Eliminar círculo</string>
+    <string name="circle_delete_confirm">¿Eliminar «%1$s»? Los miembros perderán el acceso a todo lo compartido solo a través de este círculo.</string>
     <string name="chat_no_providers">No hay modelos disponibles</string>
     <string name="chat_language">Idioma</string>
     <string name="chat_font_size">Tamaño de fuente</string>
@@ -35,6 +75,16 @@
     <string name="chat_font_size_large">Grande</string>
     <string name="chat_font_size_larger">Muy grande</string>
     <string name="chat_backend">Servidor</string>
+
+    <!-- On-device health sync -->
+    <string name="chat_sync_health">Sincronizar datos de salud</string>
+    <string name="health_checking">Buscando una fuente de salud en el dispositivo…</string>
+    <string name="health_no_source">No hay ninguna fuente de salud en este dispositivo.</string>
+    <string name="health_source">Fuente: %1$s</string>
+    <string name="health_sync_button">Sincronizar últimos 7 días</string>
+    <string name="health_syncing">Sincronizando…</string>
+    <string name="health_result">Enviados %1$d, fallidos %2$d.</string>
+    <string name="health_error">Error: %1$s</string>
     <string name="chat_about">Acerca de</string>
     <string name="about_version">Versión %1$s</string>
     <string name="chat_sign_out">Cerrar sesión</string>

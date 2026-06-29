@@ -3,6 +3,7 @@ package ai.thetahealth.mirobody
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
@@ -44,6 +45,11 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalAppContainer provides container,
                     LocalFontSizePreview provides fontSizePreview,
+                    // ProvideLocale (below) swaps LocalContext for a createConfigurationContext
+                    // result whose unwrap chain no longer reaches this Activity, so
+                    // rememberLauncherForActivityResult can't find the registry owner by
+                    // unwrapping the context. Provide it explicitly here, above the locale wrap.
+                    LocalActivityResultRegistryOwner provides this@MainActivity,
                 ) {
                     val language by container.settings.language.collectAsState(initial = "en")
                     val persisted by container.settings.fontSizeOffset.collectAsState(initial = 0)
@@ -97,6 +103,9 @@ class MainActivity : ComponentActivity() {
     // service stops itself and the UI keeps running as a plain client. OpenAI/Gemini keys are left
     // empty here; supply them via config/secure storage to enable upstream chat.
     private fun startMirobodyService() {
+        // Pure-client build (no libmirobody.so): nothing to host, so don't start the
+        // foreground service at all — it would only stop itself immediately.
+        if (!NativeBridge.available) return
         val intent = Intent(this, MirobodyService::class.java)
             .putExtra(MirobodyService.EXTRA_LISTEN_PORT, 8080)
         ContextCompat.startForegroundService(this, intent)

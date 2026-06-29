@@ -22,17 +22,28 @@ final class ChatStreamClient {
         self.session = URLSession(configuration: cfg)
     }
 
-    func stream(_ request: ChatStreamRequest) -> AsyncStream<ChatStreamEvent> {
+    func stream(
+        _ request: ChatStreamRequest,
+        attachments: [ChatAttachment] = []
+    ) -> AsyncStream<ChatStreamEvent> {
         AsyncStream { continuation in
             let task = Task {
                 do {
-                    let body = try api.encode(request)
-                    let req = try api.makeURLRequest(
-                        path: "/api/chat",
-                        method: "POST",
-                        jsonBody: body,
-                        accept: "text/event-stream"
-                    )
+                    // With attachments, post a multipart form so the files ride along;
+                    // otherwise the lighter JSON body. The server reads the same field
+                    // names from either form (src/chat/params.cpp).
+                    let req: URLRequest
+                    if attachments.isEmpty {
+                        let body = try api.encode(request)
+                        req = try api.makeURLRequest(
+                            path: "/api/chat",
+                            method: "POST",
+                            jsonBody: body,
+                            accept: "text/event-stream"
+                        )
+                    } else {
+                        req = try Self.multipartRequest(api: api, request: request, attachments: attachments)
+                    }
                     var streamingReq = req
                     streamingReq.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
 
@@ -67,6 +78,43 @@ final class ChatStreamClient {
             }
             continuation.onTermination = { _ in task.cancel() }
         }
+    }
+
+    /// Builds a multipart/form-data `/api/chat` request: text fields + `file` parts.
+    /// Mirrors the web client's FormData and the Android multipart path.
+    private static func multipartRequest(
+        api: ApiClient,
+        request: ChatStreamRequest,
+        attachments: [ChatAttachment]
+    ) throws -> URLRequest {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var req = try api.makeURLRequest(path: "/api/chat", method: "POST", accept: "text/event-stream")
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        func append(_ s: String) { body.append(Data(s.utf8)) }
+        func field(_ name: String, _ value: String) {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            append(value)
+            append("\r\n")
+        }
+        field("agent", request.agent)
+        field("provider", request.provider)
+        field("question", request.question)
+        field("language", request.language)
+        field("session_id", request.sessionId)
+        if let subject = request.subject, !subject.isEmpty { field("subject", subject) }
+        for att in attachments {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"file\"; filename=\"\(att.fileName)\"\r\n")
+            append("Content-Type: \(att.mimeType)\r\n\r\n")
+            body.append(att.data)
+            append("\r\n")
+        }
+        append("--\(boundary)--\r\n")
+        req.httpBody = body
+        return req
     }
 
     static func parseChunk(_ data: String) -> ChatStreamEvent {

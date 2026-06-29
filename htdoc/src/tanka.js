@@ -335,3 +335,4 @@ function preload() {
 
 exports.buildTankaPanel = buildTankaPanel;
 exports.preload         = preload;
+exports.loadQrLib       = loadQrLib;

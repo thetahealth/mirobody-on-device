@@ -1,5 +1,6 @@
 package ai.thetahealth.mirobody.data.chat
 
+import ai.thetahealth.mirobody.data.chat.dto.ChatAttachment
 import ai.thetahealth.mirobody.data.chat.dto.ChatStreamEvent
 import ai.thetahealth.mirobody.data.chat.dto.ChatStreamRequest
 import ai.thetahealth.mirobody.data.chat.dto.HistoryDeleteRequest
@@ -29,6 +30,8 @@ class ChatRepository(
         agentCode: String,
         provider: String,
         language: String,
+        subject: Long = 0,
+        attachments: List<ChatAttachment> = emptyList(),
     ): Flow<ChatStreamEvent> = streamClient.stream(
         ChatStreamRequest(
             question = question,
@@ -36,6 +39,8 @@ class ChatRepository(
             agent = agentCode,
             provider = provider,
             language = language,
+            subject = if (subject > 0) subject.toString() else null,
         ),
+        attachments = attachments,
     )
 }

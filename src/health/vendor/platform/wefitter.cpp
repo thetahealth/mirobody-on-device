@@ -33,7 +33,12 @@
 //     path is not published anywhere public; rather than invent one, fetch()
 //     surfaces an honest VendorError for any domain without a confirmed endpoint,
 //     and the bio-age score is not exposed as a fabricated path.
-// webhook handling and the SDK-mediated Apple/Samsung connect flow stay stubs.
+// handle_webhook stays a stub (verified, not a research gap): WeFitter DOES have
+// webhooks with a documented payload (activity / challenge events, ~5-min batched
+// push to a dashboard-configured URL), but publishes NO signature/verification
+// scheme — no header name, no HMAC algorithm, no signing secret. Verification
+// cannot be implemented faithfully from public docs, so we do not fabricate one.
+// The SDK-mediated Apple/Samsung connect flow likewise stays a stub.
 
 #include "health/vendor/vendor.hpp"
 
@@ -120,17 +125,27 @@ class WeFitter : public VendorBase {
 public:
     explicit WeFitter(VendorConfig cfg) : VendorBase(make_info(), std::move(cfg)) {}
 
-    // Begin the connection flow. WeFitter has no single global OAuth screen:
-    // the connect URLs are returned per-profile by GET
-    // /profile/{public_id}/connections/ (with an optional `redirect` param for
-    // the post-connect landing). That endpoint is keyed by a profile public id,
-    // which this signature does not carry, so rather than fabricate a global
-    // consent URL we surface an honest "not implemented" pointing at the real,
-    // per-profile contract.
-    std::string authorize_url(const std::string& /*redirect_uri*/,
-                              const std::string& /*state*/) override {
-        return not_implemented("authorize_url (connections are per-profile: "
-                               "GET /profile/{public_id}/connections/)");
+    // Begin the connection flow. WeFitter has no single global OAuth screen: the
+    // connect URLs are returned per-profile by GET /profile/{public_id}/connections/
+    // (with an optional `redirect` param for the post-connect landing). `user_id` is
+    // the WeFitter profile public id (required); we return the connections JSON (the
+    // caller picks the provider URL to send the user to). state/provider have no slot
+    // in this endpoint, so they are ignored. (Apple/Samsung Health are SDK-only and
+    // have no web URL.)
+    std::string authorize_url(const std::string& redirect_uri,
+                              const std::string& /*state*/,
+                              const std::string& user_id,
+                              const std::string& /*provider*/) override {
+        require_configured();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires a user_id (the WeFitter profile public id)");
+        }
+        std::string url = base_url() + "profile/" + url_encode(uid) + "/connections/";
+        if (!redirect_uri.empty()) {
+            url += "?redirect=" + url_encode(std::string(redirect_uri));
+        }
+        return get_json(url, "authorize_url (profile/connections)");
     }
 
     // Fetch `domain` for `user_id` over [date_start, date_end] from the matching
@@ -167,18 +182,24 @@ public:
         return get_json(url, std::string("fetch ") + endpoint);
     }
 
-    // The data sources a connected profile can link. WeFitter exposes these
-    // per-profile (GET /profile/{public_id}/connections/); there is no global
-    // provider catalogue in the public API and this signature carries no profile
-    // id, so surface that honestly rather than guess a global endpoint.
-    std::string list_providers() override {
-        return not_implemented("list_providers (connections are per-profile: "
-                               "GET /profile/{public_id}/connections/)");
+    // The data sources a connected profile can link, as WeFitter's JSON: the
+    // per-profile connections endpoint GET /profile/{public_id}/connections/ (its
+    // per-provider connection URLs). WeFitter has no global catalogue, so `user_id`
+    // (the profile public id) is required.
+    std::string list_providers(const std::string& user_id) override {
+        require_configured();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": list_providers requires a user_id (the WeFitter "
+                              "profile public id; connections are per-profile)");
+        }
+        return get_json(base_url() + "profile/" + url_encode(uid) + "/connections/",
+                        "list_providers (profile/connections)");
     }
 
     // Disconnect a profile: DELETE /profile/{public_id}/ removes it (and with it
     // its provider connections). Best-effort — a non-2xx is surfaced.
-    void revoke(const std::string& user_id) override {
+    void revoke(const std::string& user_id, const std::string& /*provider*/) override {
         require_configured();
         const std::string uid(user_id);
         if (uid.empty()) {

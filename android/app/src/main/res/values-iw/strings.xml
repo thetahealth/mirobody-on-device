@@ -37,6 +37,46 @@
     <string name="chat_message_hint">הודעה</string>
     <string name="chat_history_cd">היסטוריה</string>
     <string name="chat_select_model">בחר מודל</string>
+    <string name="chat_currently_for">כעת עבור</string>
+    <string name="chat_subject_me">אני</string>
+
+    <string name="chat_attach_file">צירוף קובץ</string>
+    <string name="chat_attach_remove">הסרת הקובץ המצורף</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">שיתוף</string>
+    <string name="share_title">שיתוף שיחה זו</string>
+    <string name="share_no_members">הוסף תחילה חברים למעגל טיפול (הגדרות → מעגל טיפול).</string>
+    <string name="share_access_view">צפייה</string>
+    <string name="share_access_edit">עריכה</string>
+    <string name="share_save">שמור</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">מעגל טיפול</string>
+    <string name="circle_title">מעגלי הטיפול שלי</string>
+    <string name="circle_members">חברים</string>
+    <string name="circle_invites">הזמנות שהתקבלו</string>
+    <string name="circle_invite_hint">הזמנה באימייל</string>
+    <string name="circle_invite">הזמן</string>
+    <string name="circle_accept">קבל</string>
+    <string name="circle_decline">דחה</string>
+    <string name="circle_remove">הסר</string>
+    <string name="circle_remove_confirm">להסיר את %1$s מהמעגל הזה?</string>
+    <string name="circle_pending">ממתין</string>
+    <string name="circle_owner">בעלים</string>
+    <string name="circle_you">אני</string>
+    <string name="circle_role_member">חבר</string>
+    <string name="circle_role_maintainer">מנהל</string>
+    <string name="circle_no_members">עדיין אין אף אחד. הזמן מישהו באימייל למטה.</string>
+    <string name="circle_health_share">שיתוף נתוני הבריאות שלי</string>
+    <string name="circle_health_off">כבוי</string>
+    <string name="circle_health_view">יכול לצפות</string>
+    <string name="circle_health_edit">יכול לצפות ולערוך</string>
+    <string name="circle_no_circles">עדיין אין מעגלים. צור אחד למטה כדי להזמין אנשים.</string>
+    <string name="circle_new_name_hint">שם המעגל החדש</string>
+    <string name="circle_create">צור</string>
+    <string name="circle_delete_circle">מחק מעגל</string>
+    <string name="circle_delete_confirm">למחוק את „%1$s“? החברים יאבדו גישה לכל מה ששותף רק דרך המעגל הזה.</string>
     <string name="chat_no_providers">לא נטענו ספקים</string>
     <string name="chat_language">שפה</string>
     <string name="chat_font_size">גודל גופן</string>
@@ -46,6 +86,16 @@
     <string name="chat_font_size_large">גדול</string>
     <string name="chat_font_size_larger">גדול מאוד</string>
     <string name="chat_backend">שרת</string>
+
+    <!-- On-device health sync -->
+    <string name="chat_sync_health">סנכרון נתוני בריאות</string>
+    <string name="health_checking">מחפש מקור בריאות במכשיר…</string>
+    <string name="health_no_source">אין מקור בריאות במכשיר הזה.</string>
+    <string name="health_source">מקור: %1$s</string>
+    <string name="health_sync_button">סנכרן 7 ימים אחרונים</string>
+    <string name="health_syncing">מסנכרן…</string>
+    <string name="health_result">נשלחו %1$d, נכשלו %2$d.</string>
+    <string name="health_error">שגיאה: %1$s</string>
     <string name="chat_about">אודות</string>
     <string name="about_version">גרסה %1$s</string>
     <string name="chat_sign_out">התנתקות</string>

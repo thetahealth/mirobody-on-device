@@ -73,13 +73,17 @@ TEST_CASE("registry dispatches a non-auth tool", "[mcp]") {
 TEST_CASE("auth tool sees the injected UserInfo", "[mcp]") {
     UserInfo user;
     user.user_id = 123;   // authed() derives from a positive user_id
+    user.session_id = "sess-abc";
 
     rapidjson::Document none = parse("{}");
     Result r = registry().call("whoami", none, user);
 
     REQUIRE(r.success);
     rapidjson::Document data = parse(r.json);
-    REQUIRE(data["user_id"].GetInt64() == 123);
+    // whoami no longer echoes the internal users PK; it confirms auth + session.
+    REQUIRE(data["authenticated"].GetBool());
+    REQUIRE(std::string(data["session_id"].GetString()) == "sess-abc");
+    REQUIRE_FALSE(data.HasMember("user_id"));
 }
 
 TEST_CASE("unknown tool is an error, not a crash", "[mcp]") {

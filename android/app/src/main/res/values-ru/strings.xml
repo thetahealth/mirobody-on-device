@@ -26,6 +26,46 @@
     <string name="chat_message_hint">Сообщение</string>
     <string name="chat_history_cd">История</string>
     <string name="chat_select_model">Выбрать модель</string>
+    <string name="chat_currently_for">Сейчас для</string>
+    <string name="chat_subject_me">Я</string>
+
+    <string name="chat_attach_file">Прикрепить файл</string>
+    <string name="chat_attach_remove">Удалить вложение</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">Поделиться</string>
+    <string name="share_title">Поделиться этим разговором</string>
+    <string name="share_no_members">Сначала добавьте участников в круг заботы (Настройки → Круг заботы).</string>
+    <string name="share_access_view">Просмотр</string>
+    <string name="share_access_edit">Редактирование</string>
+    <string name="share_save">Сохранить</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">Круг заботы</string>
+    <string name="circle_title">Мои круги заботы</string>
+    <string name="circle_members">Участники</string>
+    <string name="circle_invites">Полученные приглашения</string>
+    <string name="circle_invite_hint">Пригласить по эл. почте</string>
+    <string name="circle_invite">Пригласить</string>
+    <string name="circle_accept">Принять</string>
+    <string name="circle_decline">Отклонить</string>
+    <string name="circle_remove">Удалить</string>
+    <string name="circle_remove_confirm">Удалить %1$s из этого круга?</string>
+    <string name="circle_pending">ожидает</string>
+    <string name="circle_owner">владелец</string>
+    <string name="circle_you">Я</string>
+    <string name="circle_role_member">Участник</string>
+    <string name="circle_role_maintainer">Модератор</string>
+    <string name="circle_no_members">Пока никого. Пригласите кого-нибудь по эл. почте ниже.</string>
+    <string name="circle_health_share">Делиться моими данными о здоровье</string>
+    <string name="circle_health_off">Выкл.</string>
+    <string name="circle_health_view">Может просматривать</string>
+    <string name="circle_health_edit">Просмотр и редактирование</string>
+    <string name="circle_no_circles">Пока нет кругов. Создайте круг ниже, чтобы приглашать людей.</string>
+    <string name="circle_new_name_hint">Название нового круга</string>
+    <string name="circle_create">Создать</string>
+    <string name="circle_delete_circle">Удалить круг</string>
+    <string name="circle_delete_confirm">Удалить «%1$s»? Участники потеряют доступ ко всему, чем поделились только через этот круг.</string>
     <string name="chat_no_providers">Нет доступных моделей</string>
     <string name="chat_language">Язык</string>
     <string name="chat_font_size">Размер шрифта</string>
@@ -35,6 +75,16 @@
     <string name="chat_font_size_large">Крупный</string>
     <string name="chat_font_size_larger">Очень крупный</string>
     <string name="chat_backend">Сервер</string>
+
+    <!-- On-device health sync -->
+    <string name="chat_sync_health">Синхронизировать данные о здоровье</string>
+    <string name="health_checking">Поиск источника данных о здоровье на устройстве…</string>
+    <string name="health_no_source">На этом устройстве нет источника данных о здоровье.</string>
+    <string name="health_source">Источник: %1$s</string>
+    <string name="health_sync_button">Синхронизировать за 7 дней</string>
+    <string name="health_syncing">Синхронизация…</string>
+    <string name="health_result">Отправлено %1$d, не удалось %2$d.</string>
+    <string name="health_error">Ошибка: %1$s</string>
     <string name="chat_about">О приложении</string>
     <string name="about_version">Версия %1$s</string>
     <string name="chat_sign_out">Выйти</string>

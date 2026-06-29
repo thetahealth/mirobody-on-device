@@ -29,22 +29,31 @@
 //                      POST /v2/link/token      (body {"user_id": ..., "provider"?})
 //                                               -> { link_token, link_web_url }
 //                      The hosted widget is launched at the returned link_web_url.
+//   * webhooks         delivered via Svix. Each request carries svix-id,
+//                      svix-timestamp and svix-signature headers; the signature is
+//                      base64(HMAC-SHA256("<svix-id>.<svix-timestamp>.<raw_body>"))
+//                      keyed by the base64-decoded portion of the endpoint signing
+//                      secret (the part after the "whsec_" prefix). svix-signature
+//                      is a space-separated list of "v1,<sig>" entries; a match on
+//                      any entry (constant-time) verifies. (docs.junction.com/
+//                      webhooks/introduction + docs.svix.com verification scheme.)
 //
-// Why authorize_url() stays a stub: Junction's connect flow is user-scoped — a
-// Link Token is minted for an already-created Junction user_id, and the consent
-// page lives at the server-returned `link_web_url` (no client-supplied
-// redirect_uri / state in the Vendor::authorize_url contract). The Vendor
-// interface has no user_id parameter here, so rather than fabricate a redirect
-// URL we surface a clear "not implemented" pointing at the link helpers; the
-// real flow runs through create_user()/create_link_token() on the SDK side.
+// authorize_url() mints a Link Token for an existing Junction user_id (carried by
+// the interface's user_id arg) and returns the hosted-widget link_web_url; an
+// optional provider pre-selects a data source. Create the user first via
+// create_user() (its own step). redirect_uri / state have no slot in the Link
+// Token request (the landing is configured Junction-side), so they are ignored.
 
 #include "health/vendor/vendor.hpp"
 
 #include "client/http_client.hpp"
+#include "storage/sign.hpp"   // hmac_sha256 / base64_encode / base64_decode
 
 #include <rapidjson/document.h>
 
+#include <array>
 #include <cctype>
+#include <cstddef>
 #include <string>
 #include <utility>
 #include <vector>
@@ -104,11 +113,82 @@ std::string json_escape(const std::string& s) {
     return out;
 }
 
+// Constant-time compare of two strings (length itself is not secret). Used to
+// compare webhook signatures without leaking match position via timing.
+bool ct_equal(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    unsigned char diff = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        diff |= static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]);
+    }
+    return diff == 0;
+}
+
+// Find a header value in a raw "Name: value\r\n..." block, matching `name`
+// case-insensitively (HTTP header names are case-insensitive). Returns the
+// trimmed value, or "" if absent.
+std::string header_value(const std::string& raw, const char* name) {
+    std::string lname(name);
+    for (char& c : lname) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    std::size_t pos = 0;
+    while (pos < raw.size()) {
+        std::size_t eol = raw.find('\n', pos);
+        std::string line = raw.substr(pos, eol == std::string::npos ? std::string::npos
+                                                                     : eol - pos);
+        pos = (eol == std::string::npos) ? raw.size() : eol + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+
+        std::size_t colon = line.find(':');
+        if (colon == std::string::npos) continue;
+
+        std::string key = line.substr(0, colon);
+        std::size_t ks = key.find_first_not_of(" \t");
+        std::size_t ke = key.find_last_not_of(" \t");
+        if (ks == std::string::npos) continue;
+        key = key.substr(ks, ke - ks + 1);
+        for (char& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (key != lname) continue;
+
+        std::string val = line.substr(colon + 1);
+        std::size_t vs = val.find_first_not_of(" \t");
+        std::size_t ve = val.find_last_not_of(" \t");
+        return vs == std::string::npos ? std::string() : val.substr(vs, ve - vs + 1);
+    }
+    return std::string();
+}
+
 //------------------------------------------------------------------------------
 
 class Junction : public VendorBase {
 public:
     explicit Junction(VendorConfig cfg) : VendorBase(make_info(), std::move(cfg)) {}
+
+    // Begin consent for an existing Junction user: mint a Link Token and return the
+    // hosted-widget URL to redirect the user to. `user_id` is the Junction user id
+    // (create one first via create_user()); `provider` optionally pre-selects a
+    // data source (empty lets the user choose in the widget). redirect_uri/state
+    // have no slot in the Link Token request — the post-connect landing is set on
+    // the Junction app side — so they are ignored here. Returns the link_web_url
+    // from POST /v2/link/token.
+    std::string authorize_url(const std::string& /*redirect_uri*/,
+                              const std::string& /*state*/,
+                              const std::string& user_id,
+                              const std::string& provider) override {
+        require_configured();
+        const std::string uid(user_id);
+        if (uid.empty()) {
+            throw VendorError(info_.id + ": authorize_url requires a user_id (the Junction "
+                              "user id; create one first via create_user())");
+        }
+        const std::string body = create_link_token(uid, provider);
+        rapidjson::Document doc;
+        if (doc.Parse(body.c_str()).HasParseError() || !doc.IsObject() ||
+            !doc.HasMember("link_web_url") || !doc["link_web_url"].IsString()) {
+            throw VendorError(info_.id + ": no link_web_url in link/token response");
+        }
+        return doc["link_web_url"].GetString();
+    }
 
     // Fetch `domain` for `user_id` over [start_iso, end_iso]. Wearable domains
     // hit GET /v2/summary/<resource>/<user_id>; the Labs domain lists the user's
@@ -133,7 +213,7 @@ public:
 
     // List the providers (device brands / labs) a user can connect, as Junction's
     // JSON: GET /v2/providers.
-    std::string list_providers() override {
+    std::string list_providers(const std::string& /*user_id*/) override {
         require_configured();
         return get_json(base_url() + "v2/providers", "list_providers (v2/providers)");
     }
@@ -141,7 +221,7 @@ public:
     // Disconnect / deregister the user. Junction deletes a user (and their linked
     // connections) via DELETE /v2/user/<user_id>. `user_id` is the Junction user
     // id. A non-2xx is surfaced as a VendorError.
-    void revoke(const std::string& user_id) override {
+    void revoke(const std::string& user_id, const std::string& /*provider*/) override {
         require_configured();
         const std::string uid(user_id);
         if (uid.empty()) {
@@ -156,9 +236,75 @@ public:
         }
     }
 
+    // Verify and return an inbound Junction webhook (delivered via Svix). The
+    // request carries svix-id / svix-timestamp / svix-signature headers; the
+    // signature is base64(HMAC-SHA256("<id>.<timestamp>.<raw_body>")) keyed by the
+    // base64-decoded portion of the endpoint signing secret — config.client_secret,
+    // the "whsec_..." value from the Junction dashboard (the "whsec_" prefix is
+    // stripped before decoding). svix-signature is a space-separated list of
+    // "v1,<base64sig>" entries; a constant-time match on any entry verifies. On
+    // success returns the body verbatim; any mismatch / malformed input throws.
+    std::string handle_webhook(const std::string& raw_headers,
+                               const std::string& body) override {
+        std::string secret = config().client_secret;
+        if (secret.empty()) {
+            throw VendorError(info_.id + ": handle_webhook requires the endpoint signing "
+                              "secret — set MIROBODY_VENDOR_JUNCTION_CLIENT_SECRET to the "
+                              "\"whsec_...\" value from the Junction dashboard");
+        }
+
+        const std::string id  = header_value(raw_headers, "svix-id");
+        const std::string ts  = header_value(raw_headers, "svix-timestamp");
+        const std::string sig = header_value(raw_headers, "svix-signature");
+        if (id.empty() || ts.empty() || sig.empty()) {
+            throw VendorError(info_.id + ": webhook missing svix-id/svix-timestamp/"
+                              "svix-signature header(s)");
+        }
+
+        // The signing key is the base64-decoded portion of the secret after the
+        // documented "whsec_" prefix.
+        const std::string prefix = "whsec_";
+        if (secret.compare(0, prefix.size(), prefix) == 0) {
+            secret = secret.substr(prefix.size());
+        }
+        const std::string key = storage::base64_decode(secret);
+
+        const std::string signed_content = id + "." + ts + "." + std::string(body);
+        std::array<unsigned char, 32> mac = storage::hmac_sha256(key, signed_content);
+        const std::string expected = storage::base64_encode(mac.data(), mac.size());
+
+        // svix-signature: space-separated "v<ver>,<base64sig>" entries; the body
+        // verifies if ANY entry matches our recomputed digest (constant-time).
+        bool ok = false;
+        std::size_t start = 0;
+        while (start <= sig.size()) {
+            std::size_t sp = sig.find(' ', start);
+            std::string entry = (sp == std::string::npos) ? sig.substr(start)
+                                                          : sig.substr(start, sp - start);
+            std::size_t comma = entry.find(',');
+            if (comma != std::string::npos && ct_equal(expected, entry.substr(comma + 1))) {
+                ok = true;
+                break;
+            }
+            if (sp == std::string::npos) break;
+            start = sp + 1;
+        }
+        if (!ok) {
+            throw VendorError(info_.id + ": webhook signature verification failed (svix-signature)");
+        }
+
+        rapidjson::Document doc;
+        if (doc.Parse(std::string(body).c_str()).HasParseError() || !doc.IsObject()) {
+            throw VendorError(info_.id + ": webhook body was not a JSON object");
+        }
+        return std::string(body);
+    }
+
     //--------------------------------------------------------------------------
-    // Link-flow helpers (not part of the Vendor interface; used by the SDK /
-    // connect path, since authorize_url() lacks a user_id parameter — see header)
+    // Link-flow helpers (not part of the Vendor interface). create_user() is the
+    // prerequisite step before authorize_url(); create_link_token() is what
+    // authorize_url() calls under the hood, exposed here for callers that want the
+    // full {link_token, link_web_url} JSON rather than just the URL.
     //--------------------------------------------------------------------------
 
     // Create a Junction user from your app's stable id. POST /v2/user with

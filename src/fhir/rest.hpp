@@ -51,9 +51,22 @@ private:
     void handle_instance(const server::Request& req, server::Response& res);  // GET / PUT / DELETE
     void handle_transaction(const server::Request& req, server::Response& res);
 
-    FhirStore       store_;
-    const jwt::Jwt& jwt_;
-    std::string     base_url_path_;  // uri_prefix + "/fhir", for Bundle fullUrl / Location
+    // Resolve the user whose records a read targets: the caller by default, or
+    // ?subject=<user_id> when the caller is authorized to read that circle
+    // member's data (circle::can_read_health). Returns false (and writes a 403
+    // OperationOutcome) when not authorized; on success sets *target.
+    bool resolve_read_subject(const server::Request& req, server::Response& res,
+                              std::int64_t* target);
+    // Same for writes (create / update / delete): the caller by default, or
+    // ?subject=<user_id> when the caller has Edit access to that member's data
+    // (circle::can_write_health). 403 + false when not authorized.
+    bool resolve_write_subject(const server::Request& req, server::Response& res,
+                               std::int64_t* target);
+
+    FhirStore           store_;
+    database::Database& db_;         // for cross-user read authorization (care circles)
+    const jwt::Jwt&     jwt_;
+    std::string         base_url_path_;  // uri_prefix + "/fhir", for Bundle fullUrl / Location
 };
 
 }}  // namespace mirobody::fhir

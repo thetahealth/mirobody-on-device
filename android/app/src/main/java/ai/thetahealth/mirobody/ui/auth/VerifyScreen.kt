@@ -93,7 +93,7 @@ fun VerifyScreen(
                         )
                     }
                 },
-                actions = { BackendOnlyMenu(currentLanguage = language) },
+                actions = { LoginSettingsMenu(currentLanguage = language) },
             )
         },
     ) { padding ->

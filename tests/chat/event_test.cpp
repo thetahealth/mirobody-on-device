@@ -10,6 +10,7 @@ using mirobody::chat::EndEvent;
 using mirobody::chat::UploadEvent;
 using mirobody::chat::ReplyEvent;
 using mirobody::chat::TranscriptEvent;
+using mirobody::chat::ConversationEvent;
 
 namespace {
 
@@ -68,6 +69,22 @@ TEST_CASE("TranscriptEvent done reports whether text was extracted", "[chat][eve
         TranscriptEvent(TranscriptEvent::Phase::Done, "scan.png", false).to_json());
     REQUIRE(miss.HasMember("extracted"));
     CHECK_FALSE(miss["extracted"].GetBool());
+}
+
+TEST_CASE("ConversationEvent carries the thread id as a precise string + a number", "[chat][event]") {
+    // A large id (past JS's 2^53 safe-integer range) must survive as a string so
+    // the client can echo it back without precision loss.
+    const std::int64_t big = 9007199254740993LL;   // 2^53 + 1
+    ConversationEvent ev(big);
+    CHECK(std::string(ev.type()) == "conversation");
+
+    rapidjson::Document d = parse(ev.to_json());
+    REQUIRE_FALSE(d.HasParseError());
+    CHECK(std::string(d["type"].GetString())    == "conversation");
+    // content is the exact decimal string (precision-safe for the client).
+    CHECK(std::string(d["content"].GetString()) == "9007199254740993");
+    REQUIRE(d.HasMember("conversation_id"));
+    CHECK(d["conversation_id"].GetInt64() == big);
 }
 
 TEST_CASE("to_sse wraps to_json in a Server-Sent Events data frame", "[chat][event]") {

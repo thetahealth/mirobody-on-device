@@ -17,8 +17,9 @@ extension Color {
     }
 }
 
-/// Brand blue (mirobody icon). Stable across light/dark.
-let brandBlue = Color(rgb: 0x3A78B5)
+/// Brand navy (mirobody / Theta Health). Stable across light/dark; matches the
+/// web client + Android brand color.
+let brandBlue = Color(rgb: 0x1E3A6B)
 
 /// Resolves the app palette for the active color scheme.
 struct MBColors {
@@ -27,18 +28,20 @@ struct MBColors {
         Color(rgb: scheme == .dark ? dark : light)
     }
 
-    var primary: Color              { pick(0x2F5E78, 0xA0CDE5) }
+    // Light = the "Theta Health" palette (deep navy on warm cream), matching the web
+    // client + Android. Dark tones unchanged.
+    var primary: Color              { pick(0x1E3A6B, 0xA0CDE5) }
     var onPrimary: Color            { pick(0xFFFFFF, 0x003549) }
-    var primaryContainer: Color     { pick(0xCFE5F2, 0x184D67) }
-    var background: Color           { pick(0xFBFCFD, 0x101315) }
+    var primaryContainer: Color     { pick(0xDCE4F4, 0x184D67) }
+    var background: Color           { pick(0xF2EFE9, 0x101315) }
     var onBackground: Color         { pick(0x1A1C1E, 0xE2E2E5) }
-    var surface: Color              { pick(0xFBFCFD, 0x101315) }
+    var surface: Color              { pick(0xF2EFE9, 0x101315) }
     var onSurface: Color            { pick(0x1A1C1E, 0xE2E2E5) }
-    var onSurfaceVariant: Color     { pick(0x44474A, 0xC4C7CB) }
+    var onSurfaceVariant: Color     { pick(0x52565C, 0xC4C7CB) }
     var surfaceContainerLowest: Color { pick(0xFFFFFF, 0x0A0D0F) }
-    var surfaceContainerLow: Color  { pick(0xF4F6F8, 0x181B1D) }
+    var surfaceContainerLow: Color  { pick(0xFAF7F1, 0x181B1D) }
     var outline: Color              { pick(0x74787C, 0x8E9194) }
-    var outlineVariant: Color       { pick(0xC4C7CB, 0x44474A) }
+    var outlineVariant: Color       { pick(0xDDD6C9, 0x44474A) }
     // Not in Color.kt (Android used the M3 default); standard M3 error tones.
     var error: Color                { pick(0xBA1A1A, 0xFFB4AB) }
 }

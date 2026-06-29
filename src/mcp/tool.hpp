@@ -83,6 +83,14 @@ struct UserInfo {
     std::int64_t user_id = 0;     // the caller's row id; 0 == unauthenticated
     std::string  session_id;
 
+    // The care-circle "currently for" subject: a member whose health the caller
+    // was authorized to *read* this turn (resolved + access-checked in the chat
+    // dispatcher; 0 == none / acting as self). Identity stays the caller's --
+    // this only lets health-read tools (family_health) default to the subject so
+    // "how is Mom doing?" works without the model restating the id. Tools that
+    // write or expose other data must keep using `user_id`, never this.
+    std::int64_t subject_user_id = 0;
+
     // A call is authenticated exactly when it carries a caller identity. Row
     // ids are positive, so a non-zero user_id marks an authenticated call.
     bool authed() const { return user_id > 0; }

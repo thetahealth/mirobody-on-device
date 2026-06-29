@@ -43,6 +43,8 @@
 "chat_font_size_large" = "Groß";
 "chat_font_size_larger" = "Sehr groß";
 "chat_backend" = "Backend";
+"chat_attach_file" = "Datei anhängen";
+"chat_attach_remove" = "Anhang entfernen";
 "chat_about" = "Über";
 "about_version" = "Version %1$@";
 "chat_sign_out" = "Abmelden";

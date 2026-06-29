@@ -76,7 +76,7 @@ Item {
                     width: del.width * 0.85 - 28
                     text: model.content
                     wrapMode: Text.Wrap
-                    color: Theme.onSurface
+                    color: Theme.onUserBubble
                     font.pointSize: Theme.baseSize
                 }
             }

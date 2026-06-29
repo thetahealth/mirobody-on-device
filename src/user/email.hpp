@@ -84,4 +84,19 @@ struct EmailValidatorOptions {
 std::unique_ptr<EmailCodeValidator> create_email_validator(
     const EmailValidatorOptions& opts, cache::Cache& cache);
 
+//------------------------------------------------------------------------------
+// One-off transactional mail
+//------------------------------------------------------------------------------
+
+// Send a single HTML email (arbitrary subject + body) over the same transport
+// the code validator would pick from `opts` -- SMTP when configured, else
+// Mandrill. Unlike the validator this stores nothing and has no cooldown: it is
+// for transactional mail such as the care-circle invite link. Returns nullopt on
+// success, or a human-readable error (e.g. "no email transport configured"), so
+// callers can treat delivery as best-effort.
+mirobody::optional<std::string> send_email(const EmailValidatorOptions& opts,
+                                           const std::string& to_email,
+                                           const std::string& subject,
+                                           const std::string& html_body);
+
 }}

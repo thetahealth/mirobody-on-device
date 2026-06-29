@@ -11,9 +11,11 @@ data class HistoryResponse(
 @Serializable
 data class SessionSummary(
     @SerialName("session_id") val sessionId: String = "",
-    val timestamp: String = "",
+    val timestamp: Long = 0L,
     val summary: String = "",
     @SerialName("query_user_id") val queryUserId: String = "",
+    val owned: Boolean = true,
+    @SerialName("shared_with_count") val sharedWithCount: Int = 0,
 )
 
 @Serializable

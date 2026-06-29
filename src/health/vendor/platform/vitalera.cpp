@@ -20,6 +20,31 @@
 //                         blood-pressure, oxygen-saturation, temperature, step-count,
 //                         calories, workouts), DRF pagination (count/next/previous)
 //   * FHIR                FHIR R5 resources (Patient, Observation, …)
+//   * list_providers      GET /api/connected-accounts/services/ — the provider
+//                         catalogue (entitlement-filtered to the caller's org).
+//                         Method + path are public; the response shape is in the
+//                         gated reference, so we return the JSON verbatim.
+//   * handle_webhook      outbound webhooks POST a JSON envelope
+//                         { event_type, timestamp, organization_id, data }; the
+//                         signature is in the `x-webhook-signature` header as
+//                         lowercase-hex HMAC-SHA256 over the RAW request body,
+//                         keyed by the webhook ENDPOINT secret. The body's
+//                         `timestamp` is NOT part of the signed string. This whole
+//                         scheme is public (docs-v2.vitalera.io/webhooks/overview).
+//                         The endpoint secret is a DIFFERENT credential from the
+//                         OAuth client_secret; since VendorConfig has one slot, it
+//                         rides on config.client_secret — so a deployment that also
+//                         mints tokens via client-credentials should set api_key to
+//                         a pre-issued bearer (the fetch path falls back to it when
+//                         client_id is empty), leaving client_secret for the webhook.
+//
+// authorize_url stays a stub: the connect flow is documented at the path level
+// (POST /api/connected-accounts/connect-session/ then a hosted GET
+// /api/connected-accounts/connect/?token=…, or per-provider POST
+// /api/connected-accounts/{service_id}/oauth/initiate/), but whether it accepts a
+// redirect_uri/state and what URL field it returns live in the gated field-level
+// reference — so a faithful authorize_url(redirect_uri, state) can't be built from
+// public docs yet.
 //
 // INFERRED — the field-level reference is gated (Vitalera issues it after sign-up
 // via info@vitalera.io), so these names are best-effort and centralized in the
@@ -34,10 +59,13 @@
 #include "health/vendor/vendor.hpp"
 
 #include "client/http_client.hpp"
+#include "storage/sign.hpp"   // hmac_sha256 / hex_encode
 
 #include <rapidjson/document.h>
 
+#include <array>
 #include <cctype>
+#include <cstddef>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -109,6 +137,58 @@ std::string json_escape(const std::string& s) {
     return out;
 }
 
+// Constant-time compare of two strings (length itself is not secret). Used to
+// compare webhook signatures without leaking match position via timing.
+bool ct_equal(const std::string& a, const std::string& b) {
+    if (a.size() != b.size()) return false;
+    unsigned char diff = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) {
+        diff |= static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]);
+    }
+    return diff == 0;
+}
+
+// Find a header value in a raw "Name: value\r\n..." block, matching `name`
+// case-insensitively (HTTP header names are case-insensitive). Returns the
+// trimmed value, or "" if absent.
+std::string header_value(const std::string& raw, const char* name) {
+    std::string lname(name);
+    for (char& c : lname) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    std::size_t pos = 0;
+    while (pos < raw.size()) {
+        std::size_t eol = raw.find('\n', pos);
+        std::string line = raw.substr(pos, eol == std::string::npos ? std::string::npos
+                                                                     : eol - pos);
+        pos = (eol == std::string::npos) ? raw.size() : eol + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+
+        std::size_t colon = line.find(':');
+        if (colon == std::string::npos) continue;
+
+        std::string key = line.substr(0, colon);
+        std::size_t ks = key.find_first_not_of(" \t");
+        std::size_t ke = key.find_last_not_of(" \t");
+        if (ks == std::string::npos) continue;
+        key = key.substr(ks, ke - ks + 1);
+        for (char& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (key != lname) continue;
+
+        std::string val = line.substr(colon + 1);
+        std::size_t vs = val.find_first_not_of(" \t");
+        std::size_t ve = val.find_last_not_of(" \t");
+        return vs == std::string::npos ? std::string() : val.substr(vs, ve - vs + 1);
+    }
+    return std::string();
+}
+
+// Lowercase a hex string in place-style (returns a copy). Incoming signatures
+// may be upper- or lower-case hex; our expected digest is lowercase.
+std::string to_lower(std::string s) {
+    for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
 //------------------------------------------------------------------------------
 
 class Vitalera : public VendorBase {
@@ -140,7 +220,7 @@ public:
     // is INFERRED within the confirmed auth/tokens family (the docs name a
     // deactivate op but not its exact route); reconcile against the gated
     // reference. Note this revokes the app's own token, not a per-patient link.
-    void revoke(const std::string& /*user_id*/) override {
+    void revoke(const std::string& /*user_id*/, const std::string& /*provider*/) override {
         require_configured();
         client::HttpRequest req;
         req.url     = base_url() + std::string(kAuthPath) + "deactivate/";
@@ -150,6 +230,48 @@ public:
         if (res.status < 200 || res.status >= 300) {
             throw VendorError(http_error("revoke (auth/tokens/deactivate)", res));
         }
+    }
+
+    // List the provider/service catalogue Vitalera exposes to the caller's org:
+    // GET /api/connected-accounts/services/ (entitlement-filtered). The method and
+    // path are public; the response shape lives in the gated reference, so we
+    // return the JSON verbatim.
+    std::string list_providers(const std::string& /*user_id*/) override {
+        require_configured();
+        return get_json(base_url() + "connected-accounts/services/",
+                        "list_providers (connected-accounts/services)");
+    }
+
+    // Verify and return an inbound Vitalera webhook. The signature is carried in
+    // the `x-webhook-signature` header as lowercase-hex HMAC-SHA256 over the RAW
+    // request body, keyed by the webhook endpoint secret (config.client_secret —
+    // see header). The body's own `timestamp` is NOT part of the signed string.
+    // On success returns the body verbatim; any mismatch / malformed input throws.
+    std::string handle_webhook(const std::string& raw_headers,
+                               const std::string& body) override {
+        const std::string secret = config().client_secret;
+        if (secret.empty()) {
+            throw VendorError(info_.id + ": handle_webhook requires the webhook endpoint "
+                              "secret — set MIROBODY_VENDOR_VITALERA_CLIENT_SECRET to your "
+                              "webhook secret (use _API_KEY for the fetch bearer so the "
+                              "client secret is free to hold the webhook secret)");
+        }
+        const std::string sig = header_value(raw_headers, "x-webhook-signature");
+        if (sig.empty()) {
+            throw VendorError(info_.id + ": webhook missing x-webhook-signature header");
+        }
+
+        std::array<unsigned char, 32> mac = storage::hmac_sha256(secret, std::string(body));
+        const std::string expected = storage::hex_encode(mac.data(), mac.size());
+        if (!ct_equal(expected, to_lower(sig))) {
+            throw VendorError(info_.id + ": webhook signature verification failed (x-webhook-signature)");
+        }
+
+        rapidjson::Document doc;
+        if (doc.Parse(std::string(body).c_str()).HasParseError() || !doc.IsObject()) {
+            throw VendorError(info_.id + ": webhook body was not a JSON object");
+        }
+        return std::string(body);
     }
 
 private:

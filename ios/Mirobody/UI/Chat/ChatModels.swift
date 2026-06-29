@@ -29,4 +29,6 @@ struct ChatMessage: Identifiable, Equatable {
     var streaming: Bool = false
     var error: String? = nil
     var costStats: CostStatistics? = nil
+    /// Display names of files attached to this (user) turn, shown as chips in the bubble.
+    var attachmentNames: [String] = []
 }

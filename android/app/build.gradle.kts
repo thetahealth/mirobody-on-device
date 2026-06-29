@@ -7,7 +7,9 @@ plugins {
 
 android {
     namespace = "ai.thetahealth.mirobody"
-    compileSdk = 35
+    // 36 (Android 16): required by androidx.health.connect:connect-client 1.1.0-rc03.
+    // compileSdk only governs which APIs compile; targetSdk/minSdk stay as-is.
+    compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     defaultConfig {

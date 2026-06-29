@@ -39,6 +39,46 @@
     <string name="chat_message_hint">Message</string>
     <string name="chat_history_cd">History</string>
     <string name="chat_select_model">Select model</string>
+    <string name="chat_currently_for">Currently for</string>
+    <string name="chat_subject_me">Me</string>
+
+    <string name="chat_attach_file">Attach file</string>
+    <string name="chat_attach_remove">Remove attachment</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">Share</string>
+    <string name="share_title">Share this conversation</string>
+    <string name="share_no_members">Add members to a care circle first (Settings → Care circle).</string>
+    <string name="share_access_view">View</string>
+    <string name="share_access_edit">Edit</string>
+    <string name="share_save">Save</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">Care circle</string>
+    <string name="circle_title">My care circles</string>
+    <string name="circle_members">Members</string>
+    <string name="circle_invites">Invitations received</string>
+    <string name="circle_invite_hint">Invite by email</string>
+    <string name="circle_invite">Invite</string>
+    <string name="circle_accept">Accept</string>
+    <string name="circle_decline">Decline</string>
+    <string name="circle_remove">Remove</string>
+    <string name="circle_remove_confirm">Remove %1$s from this circle?</string>
+    <string name="circle_pending">pending</string>
+    <string name="circle_owner">owner</string>
+    <string name="circle_you">Me</string>
+    <string name="circle_role_member">Member</string>
+    <string name="circle_role_maintainer">Maintainer</string>
+    <string name="circle_no_members">No one yet. Invite someone by email below.</string>
+    <string name="circle_health_share">Share my health data</string>
+    <string name="circle_health_off">Off</string>
+    <string name="circle_health_view">Can view</string>
+    <string name="circle_health_edit">Can view &amp; edit</string>
+    <string name="circle_no_circles">No circles yet. Create one below to invite people.</string>
+    <string name="circle_new_name_hint">New circle name</string>
+    <string name="circle_create">Create</string>
+    <string name="circle_delete_circle">Delete circle</string>
+    <string name="circle_delete_confirm">Delete “%1$s”? Members lose access to anything shared only through this circle.</string>
     <string name="chat_no_providers">No providers loaded</string>
     <string name="chat_language">Language</string>
     <string name="chat_font_size">Font size</string>

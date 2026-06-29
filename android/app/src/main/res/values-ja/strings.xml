@@ -26,6 +26,46 @@
     <string name="chat_message_hint">メッセージ</string>
     <string name="chat_history_cd">履歴</string>
     <string name="chat_select_model">モデルを選択</string>
+    <string name="chat_currently_for">現在の対象</string>
+    <string name="chat_subject_me">自分</string>
+
+    <string name="chat_attach_file">ファイルを添付</string>
+    <string name="chat_attach_remove">添付を削除</string>
+
+    <!-- Conversation sharing -->
+    <string name="chat_share">共有</string>
+    <string name="share_title">この会話を共有</string>
+    <string name="share_no_members">先にケアサークルにメンバーを追加してください（設定 → ケアサークル）。</string>
+    <string name="share_access_view">閲覧</string>
+    <string name="share_access_edit">編集</string>
+    <string name="share_save">保存</string>
+
+    <!-- Care circle -->
+    <string name="chat_care_circle">ケアサークル</string>
+    <string name="circle_title">マイケアサークル</string>
+    <string name="circle_members">メンバー</string>
+    <string name="circle_invites">受け取った招待</string>
+    <string name="circle_invite_hint">メールで招待</string>
+    <string name="circle_invite">招待</string>
+    <string name="circle_accept">承認</string>
+    <string name="circle_decline">辞退</string>
+    <string name="circle_remove">削除</string>
+    <string name="circle_remove_confirm">%1$s をこのサークルから削除しますか？</string>
+    <string name="circle_pending">保留中</string>
+    <string name="circle_owner">作成者</string>
+    <string name="circle_you">自分</string>
+    <string name="circle_role_member">メンバー</string>
+    <string name="circle_role_maintainer">管理者</string>
+    <string name="circle_no_members">まだ誰もいません。下からメールで招待してください。</string>
+    <string name="circle_health_share">自分の健康データを共有</string>
+    <string name="circle_health_off">オフ</string>
+    <string name="circle_health_view">閲覧可</string>
+    <string name="circle_health_edit">閲覧・編集可</string>
+    <string name="circle_no_circles">まだサークルがありません。下から作成して招待しましょう。</string>
+    <string name="circle_new_name_hint">新しいサークル名</string>
+    <string name="circle_create">作成</string>
+    <string name="circle_delete_circle">サークルを削除</string>
+    <string name="circle_delete_confirm">「%1$s」を削除しますか？このサークルだけで共有された内容には、メンバーがアクセスできなくなります。</string>
     <string name="chat_no_providers">利用可能なモデルがありません</string>
     <string name="chat_language">言語</string>
     <string name="chat_font_size">文字サイズ</string>
@@ -35,6 +75,16 @@
     <string name="chat_font_size_large">大</string>
     <string name="chat_font_size_larger">最大</string>
     <string name="chat_backend">バックエンド</string>
+
+    <!-- On-device health sync -->
+    <string name="chat_sync_health">健康データを同期</string>
+    <string name="health_checking">端末内の健康データソースを確認中…</string>
+    <string name="health_no_source">この端末には健康データソースがありません。</string>
+    <string name="health_source">ソース：%1$s</string>
+    <string name="health_sync_button">直近7日間を同期</string>
+    <string name="health_syncing">同期中…</string>
+    <string name="health_result">%1$d 件送信、%2$d 件失敗。</string>
+    <string name="health_error">エラー：%1$s</string>
     <string name="chat_about">バージョン情報</string>
     <string name="about_version">バージョン %1$s</string>
     <string name="chat_sign_out">ログアウト</string>

@@ -9,14 +9,28 @@
 // a consumer's behalf. The set is broad on purpose: a deployment may pull
 // wearable streams from one vendor and clinical records from another.
 //
-// STATUS: scaffold. Every concrete vendor today is a stub — it carries the
+// STATUS: partially implemented, per operation. Every vendor carries real
 // VendorInfo metadata extracted from README.md (positioning, compliance posture,
-// integration style, data domains) but its network operations throw
-// VendorError("... not implemented"). The metadata is real and queryable now;
-// the transport is filled in per vendor as the actual API reference and
-// credentials become available. See the <id>.cpp under src/health/vendor/ (sorted
-// into platform/ , phone/ , and device/) for where each one's real endpoints,
-// auth flow, and response mapping go.
+// integration style, data domains), queryable without credentials. On top of
+// that, each concrete vendor implements the operations whose wire contract is
+// confirmable from public docs / open-source SDKs — typically fetch(), and, where
+// documented, authorize_url() / list_providers() / handle_webhook() / revoke().
+//
+// The remaining operations stay inherited VendorBase stubs that throw
+// VendorError("... not implemented") — and that is deliberate, not unfinished
+// work. A stub is left for one of three reasons, recorded in each <id>.cpp header:
+//   * gated / undocumented — the contract (e.g. a webhook signature scheme) is not
+//     public, so implementing it would mean fabricating an unverifiable scheme;
+//   * contract mismatch — the documented endpoint needs an argument this interface
+//     lacks (e.g. authorize_url has no provider/user_id slot, list_providers no
+//     user_id), so it can't be honored faithfully without an interface change;
+//   * no such endpoint — the platform simply exposes no operation of that shape
+//     (e.g. no provider catalogue for a list_providers()).
+// Fabricating a contract is treated as worse than an honest "not implemented".
+//
+// See the <id>.cpp under src/health/vendor/ (sorted into platform/ , phone/ , and
+// device/) for each vendor's confirmed endpoints, auth flow, response mapping, and
+// the per-operation rationale for anything left a stub.
 
 #include "compat/cxx11.hpp"
 
@@ -186,15 +200,32 @@ public:
     // Static metadata for this vendor (never throws, no network).
     virtual const VendorInfo& info() const = 0;
 
-    // Begin consumer-mediated consent: the URL to redirect a user to so they can
-    // authorize access (device account or hospital patient portal). `state` is
-    // echoed back to `redirect_uri` for CSRF protection / correlation.
+    // Begin consumer-mediated consent and return the entry point the caller hands
+    // the user — usually the URL to redirect to (a device account or hospital
+    // patient portal), but for vendors whose consent is per-provider it may be the
+    // vendor's connect-URLs JSON or a hosted-widget payload (see the vendor).
+    //   * redirect_uri — where the vendor returns the user afterwards.
+    //   * state        — your correlation / CSRF value, echoed back where the
+    //                    vendor supports it.
+    //   * user_id      — the end user this consent is for: the vendor's own user id
+    //                    for user-scoped flows (a link/connect token is minted for
+    //                    an already-provisioned user), or your app's user id for
+    //                    vendors that provision the user as part of the flow. Empty
+    //                    when the vendor needs no user binding up front.
+    //   * provider     — a single data source to connect, for vendors whose
+    //                    authorize endpoint is per-provider; empty lets the user
+    //                    choose in the hosted widget.
+    // A vendor ignores the arguments it has no use for.
     virtual std::string authorize_url(const std::string& redirect_uri,
-                                      const std::string& state) = 0;
+                                      const std::string& state,
+                                      const std::string& user_id,
+                                      const std::string& provider) = 0;
 
     // The data sources (device brands / labs / health systems) a connected user
-    // can link, as the vendor's JSON.
-    virtual std::string list_providers() = 0;
+    // can link, as the vendor's JSON. `user_id` is supplied for vendors that only
+    // expose a user-scoped connections list; empty for vendors with a global
+    // provider catalogue (which ignore it).
+    virtual std::string list_providers(const std::string& user_id) = 0;
 
     // Fetch `domain` data for `user_id` over [start_iso, end_iso], as the
     // vendor's JSON. Empty bounds mean "the vendor's default window".
@@ -209,8 +240,11 @@ public:
     virtual std::string handle_webhook(const std::string& raw_headers,
                                        const std::string& body) = 0;
 
-    // Revoke this user's authorization / disconnect them from the vendor.
-    virtual void revoke(const std::string& user_id) = 0;
+    // Revoke a user's authorization / disconnect them from the vendor. `provider`
+    // disconnects a single data source for vendors that revoke per-source; empty
+    // revokes the whole user (vendors with only a whole-user disconnect ignore it).
+    virtual void revoke(const std::string& user_id,
+                        const std::string& provider) = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -229,10 +263,11 @@ public:
 
     const VendorInfo& info() const override { return info_; }
 
-    std::string authorize_url(const std::string&, const std::string&) override {
+    std::string authorize_url(const std::string&, const std::string&,
+                              const std::string&, const std::string&) override {
         return not_implemented("authorize_url");
     }
-    std::string list_providers() override {
+    std::string list_providers(const std::string&) override {
         return not_implemented("list_providers");
     }
     std::string fetch(const std::string&, DataDomain,
@@ -242,7 +277,7 @@ public:
     std::string handle_webhook(const std::string&, const std::string&) override {
         return not_implemented("handle_webhook");
     }
-    void revoke(const std::string&) override {
+    void revoke(const std::string&, const std::string&) override {
         not_implemented("revoke");
     }
 

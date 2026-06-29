@@ -12,6 +12,8 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var selected: ProviderInfo?
     @Published private(set) var error: String?
     @Published private(set) var language = "en"
+    /// Files staged in the composer for the next turn (cleared on send).
+    @Published private(set) var attachments: [ChatAttachment] = []
 
     private let repo: ChatRepository
     private let settings: SettingsStore
@@ -49,16 +51,30 @@ final class ChatViewModel: ObservableObject {
         settings.setSelectedProviderName(provider.name)
     }
 
+    func addAttachment(_ attachment: ChatAttachment) {
+        attachments.append(attachment)
+    }
+
+    func removeAttachment(_ id: ChatAttachment.ID) {
+        attachments.removeAll { $0.id == id }
+    }
+
     func send() {
         let question = input.trimmingCharacters(in: .whitespaces)
-        guard !question.isEmpty, !sending, let selected else { return }
+        let turnAttachments = attachments
+        // Allow an attachment-only turn (no text), matching the web composer.
+        guard (!question.isEmpty || !turnAttachments.isEmpty), !sending, let selected else { return }
 
-        let userMsg = ChatMessage(id: "u-\(UUID().uuidString)", role: .user, text: question)
+        let userMsg = ChatMessage(
+            id: "u-\(UUID().uuidString)", role: .user, text: question,
+            attachmentNames: turnAttachments.map { $0.fileName }
+        )
         let assistantId = "a-\(UUID().uuidString)"
         let assistantMsg = ChatMessage(id: assistantId, role: .assistant, streaming: true)
         messages.append(userMsg)
         messages.append(assistantMsg)
         input = ""
+        attachments = []   // consumed by this turn
         sending = true
         error = nil
 
@@ -69,7 +85,8 @@ final class ChatViewModel: ObservableObject {
                 question: question,
                 agentCode: selected.agentCode,
                 provider: selected.code,
-                language: language
+                language: language,
+                attachments: turnAttachments
             )
             for await event in stream {
                 applyEvent(targetId: assistantId, event: event)

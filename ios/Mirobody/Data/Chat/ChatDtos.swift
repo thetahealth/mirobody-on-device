@@ -13,6 +13,9 @@ struct ChatStreamRequest: Encodable {
     var language: String = "en"
     var timezone: String = "Asia/Shanghai"
     var scene: String? = nil
+    // Opaque care-circle member handle for the "currently for" subject (whose health
+    // the AI's family_health tool should default to). Nil/omitted = self.
+    var subject: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case question
@@ -25,6 +28,7 @@ struct ChatStreamRequest: Encodable {
         case language
         case timezone
         case scene
+        case subject
     }
 }
 
@@ -50,6 +54,16 @@ struct FileRef: Encodable {
     }
 }
 
+/// A file the user attached to a chat turn, read into memory at pick time. Sent as
+/// a multipart `file` part to /api/chat (mirrors the web client's FormData upload);
+/// the server stores it and references it on the turn. Mirrors `ChatAttachment.kt`.
+struct ChatAttachment: Identifiable {
+    let id = UUID()
+    let fileName: String
+    let mimeType: String
+    let data: Data
+}
+
 // MARK: - History (mirror data/chat/dto/HistoryDto.kt)
 
 struct HistoryResponse: Decodable {
@@ -64,9 +78,12 @@ struct HistoryResponse: Decodable {
 
 struct SessionSummary: Decodable, Identifiable {
     let sessionId: String
-    let timestamp: String
+    /// Epoch milliseconds (UTC); 0 when absent.
+    let timestamp: Int64
     let summary: String
     let queryUserId: String
+    let owned: Bool
+    let sharedWithCount: Int
 
     var id: String { sessionId }
 
@@ -75,13 +92,17 @@ struct SessionSummary: Decodable, Identifiable {
         case timestamp
         case summary
         case queryUserId = "query_user_id"
+        case owned
+        case sharedWithCount = "shared_with_count"
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? ""
-        timestamp = try c.decodeIfPresent(String.self, forKey: .timestamp) ?? ""
+        timestamp = try c.decodeIfPresent(Int64.self, forKey: .timestamp) ?? 0
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
         queryUserId = try c.decodeIfPresent(String.self, forKey: .queryUserId) ?? ""
+        owned = try c.decodeIfPresent(Bool.self, forKey: .owned) ?? true
+        sharedWithCount = try c.decodeIfPresent(Int.self, forKey: .sharedWithCount) ?? 0
     }
 }
 

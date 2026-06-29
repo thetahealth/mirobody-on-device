@@ -48,6 +48,8 @@
 "chat_font_size_large" = "كبير";
 "chat_font_size_larger" = "أكبر";
 "chat_backend" = "الخادم";
+"chat_attach_file" = "إرفاق ملف";
+"chat_attach_remove" = "إزالة المرفق";
 "chat_about" = "حول";
 "about_version" = "الإصدار %1$@";
 "chat_sign_out" = "تسجيل الخروج";

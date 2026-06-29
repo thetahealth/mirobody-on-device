@@ -168,21 +168,21 @@ per-deployment (self-hosted or contract-gated), so the client refuses rather tha
 
 | ID | base_url | Auth | Implemented | Stubbed (undocumented) |
 | --- | --- | --- | --- | --- |
-| **rook** | default `api.rook-connect.com` (sandbox `…review`) | Basic (uuid:secret) | `fetch`, `authorize_url` | `handle_webhook`, `list_providers`, `revoke` |
-| **spike** | default `app-api.spikeapi.com/v3` | HMAC → JWT bearer | `fetch`, Nutrition-AI image/label, `handle_webhook` | `revoke`, `authorize_url`, `list_providers` |
-| **terra** | default `api.tryterra.co/v2` | `dev-id` + `x-api-key` | `authorize_url` (Connect widget), `fetch`, `handle_webhook` (HMAC `terra-signature`) | `list_providers`, `revoke` |
-| **junction** | default `api.us.junction.com` (EU/sandbox via override) | `X-Vital-API-Key` | `fetch` (wearables + labs), `list_providers`, `revoke`, link helpers | `authorize_url`, `handle_webhook` |
-| **wefitter** | default `api.wefitter.com/api/v1.1` | Basic → JWT bearer | `fetch`, `revoke` | `authorize_url`, `list_providers`, `handle_webhook` |
+| **rook** | default `api.rook-connect.com` (sandbox `…review`) | Basic (uuid:secret) | `fetch`, `authorize_url`, `list_providers` (user-scoped), `revoke` (per data source) | `handle_webhook` (gated HMAC) |
+| **spike** | default `app-api.spikeapi.com/v3` | HMAC → JWT bearer | `fetch`, Nutrition-AI image/label, `handle_webhook`, `authorize_url` (per provider), `revoke` (per provider) | `list_providers` (no catalogue endpoint) |
+| **terra** | default `api.tryterra.co/v2` | `dev-id` + `x-api-key` | `authorize_url` (Connect widget), `fetch`, `handle_webhook` (HMAC `terra-signature`), `list_providers`, `revoke` | — |
+| **junction** | default `api.us.junction.com` (EU/sandbox via override) | `X-Vital-API-Key` | `fetch` (wearables + labs), `list_providers`, `revoke`, `authorize_url` (Link Token), `handle_webhook` (Svix), link helpers | — |
+| **wefitter** | default `api.wefitter.com/api/v1.1` | Basic → JWT bearer | `fetch`, `revoke`, `authorize_url` (per-profile connections), `list_providers` (per-profile) | `handle_webhook` (no public signature scheme) |
 | **lexisnexis** | **required** | bearer | deployer-driven `fetch` | all others — no public API (sales-gated) |
 | **thryve** | default `api.thryve.de` (EU) | dual Basic headers | `fetch`, `authorize_url`, `revoke` | `list_providers`, `handle_webhook` |
 | **validic** | default `api.v2.validic.com` | org-id path + token query | `fetch`, `provision_user` | EHR write-back, `authorize_url`, `list_providers`, `handle_webhook`, `revoke` |
 | **human_api** | default `api.humanapi.co/v1/human` | bearer | `fetch` | `authorize_url` (client-side JS), `list_providers`, `handle_webhook`, `revoke` |
-| **vitalera** | default `api.vitalera.io/api` | JWT bearer | `fetch` (native + FHIR R5 Clinical), `revoke` | `authorize_url`, `list_providers`, `handle_webhook` |
-| **open_wearables** | **required** (self-hosted) | `X-Open-Wearables-API-Key` | `fetch`, `list_providers` | `authorize_url`, `revoke`, `handle_webhook` |
+| **vitalera** | default `api.vitalera.io/api` | JWT bearer | `fetch` (native + FHIR R5 Clinical), `revoke`, `list_providers`, `handle_webhook` (HMAC `x-webhook-signature`) | `authorize_url` (params gated) |
+| **open_wearables** | **required** (self-hosted) | `X-Open-Wearables-API-Key` | `fetch`, `list_providers`, `authorize_url` (per provider) | `revoke`, `handle_webhook` (undocumented) |
 | **redox** | **required** (embeds slug/env) | bearer (out-of-band signed JWT) | `fetch` (FHIR R4) | streaming/message API, others |
 | **particle_health** | default `api.particlehealth.com` | client-creds → JWT | `fetch` (FHIR R4 `$everything`) | `handle_webhook` (ADT stream), `authorize_url`, `list_providers`, `revoke` |
 | **healthconnect** | **required** | OAuth2 bearer | `fetch` (FHIR R4 `Observation`) | real-time sync, consent, others — no public API |
-| **metriport** | default `api.metriport.com` (sandbox/self-host via override) | `x-api-key` | `fetch` (Medical consolidated FHIR + Devices) | `authorize_url`, `list_providers`, `handle_webhook`, `revoke` |
+| **metriport** | default `api.metriport.com` (sandbox/self-host via override) | `x-api-key` | `fetch` (Medical consolidated FHIR + Devices), `authorize_url` (Connect widget), `handle_webhook` (HMAC `x-metriport-signature`), `revoke` | `list_providers` (no catalogue endpoint) |
 
 **Notes.** `vitalera`, `healthconnect`, `redox`, `particle_health` and `metriport` (Medical) return
 FHIR resources; the rest return each vendor's native JSON. Several vendors' consent flows are
@@ -205,9 +205,9 @@ API get a client:
 | ID | Dir | base_url | Auth | Implemented | Stubbed / notes |
 | --- | --- | --- | --- | --- | --- |
 | **huawei** | `phone/` | default `health-api.cloud.huawei.com` | OAuth2 bearer (Account Kit) | `fetch` (`sampleSet:polymerize`) | consent OAuth, subscription webhooks |
-| **fitbit** | `device/` | default `api.fitbit.com` | OAuth2 bearer | `fetch` (per-domain time-series GETs) | `authorize_url`, `handle_webhook`, `revoke` |
-| **withings** | `device/` | default `wbsapi.withings.net` | OAuth2 bearer | `fetch` (form `action` services) | `authorize_url`, `handle_webhook`, `revoke` |
-| **garmin** | `device/` | n/a (push) | OAuth1.0a (partner-gated) | — | pull doesn't fit Garmin's push model; `fetch` explains it, `handle_webhook` is the real path once partner creds exist |
+| **fitbit** | `device/` | default `api.fitbit.com` | OAuth2 bearer | `fetch` (per-domain time-series GETs), `authorize_url` (OAuth2 code URL), `revoke` (`/oauth2/revoke`, Basic), `handle_webhook` (HMAC-SHA1 `X-Fitbit-Signature`) | — |
+| **withings** | `device/` | default `wbsapi.withings.net` | OAuth2 bearer | `fetch` (form `action` services), `authorize_url` (OAuth2 code URL) | `handle_webhook` (no inbound signature), `revoke` (no token-revoke endpoint) |
+| **garmin** | `device/` | `apis.garmin.com` (push) | OAuth2.0 + PKCE (partner-gated) | `revoke` (deregister hook) | `fetch` (push model + partner-gated spec), `authorize_url` (PKCE needs a stateful verifier — see ehr_connect), `handle_webhook` (unsigned push) |
 
 ### Direct EHR systems — SMART on FHIR (`ehr/`)
 

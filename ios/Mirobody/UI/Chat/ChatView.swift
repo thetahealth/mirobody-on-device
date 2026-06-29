@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Chat screen — mirrors `ui/chat/ChatScreen.kt`. History is presented as a sheet
 /// (the iOS-idiomatic stand-in for Android's modal navigation drawer).
@@ -17,6 +18,7 @@ struct ChatView: View {
     @State private var showHealth = false
     @State private var showAbout = false
     @State private var showSignOut = false
+    @State private var showFileImporter = false
 
     init(container: AppContainer) {
         _vm = StateObject(wrappedValue: ChatViewModel(
@@ -107,31 +109,88 @@ struct ChatView: View {
     // MARK: Input bar
 
     private var inputBar: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField(L("chat_message_hint", lang), text: $vm.input, axis: .vertical)
-                .mbFont(.bodyLarge)
-                .foregroundColor(colors.onSurface)
-                .lineLimit(1...5)
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .background(colors.surfaceContainerLow)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+        VStack(spacing: 8) {
+            if !vm.attachments.isEmpty { attachmentChips }
+            HStack(alignment: .bottom, spacing: 8) {
+                Button { showFileImporter = true } label: {
+                    Image(systemName: "paperclip")
+                        .font(.system(size: 20))
+                        .foregroundColor(colors.onSurfaceVariant)
+                }
                 .disabled(vm.sending)
-                .onSubmit(vm.send)
-            Button(action: vm.send) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundColor(canSend ? colors.primary : colors.onSurfaceVariant.opacity(0.4))
+                .accessibilityLabel(L("chat_attach_file", lang))
+                TextField(L("chat_message_hint", lang), text: $vm.input, axis: .vertical)
+                    .mbFont(.bodyLarge)
+                    .foregroundColor(colors.onSurface)
+                    .lineLimit(1...5)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
+                    .background(colors.surfaceContainerLow)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .disabled(vm.sending)
+                    .onSubmit(vm.send)
+                Button(action: vm.send) {
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundColor(canSend ? colors.primary : colors.onSurfaceVariant.opacity(0.4))
+                }
+                .disabled(!canSend)
             }
-            .disabled(!canSend)
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .frame(maxWidth: contentMaxWidth)
         .frame(maxWidth: .infinity)
         .background(colors.background)
+        .fileImporter(
+            isPresented: $showFileImporter,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            guard case .success(let urls) = result else { return }
+            for url in urls {
+                if let att = Self.readAttachment(url) { vm.addAttachment(att) }
+            }
+        }
+    }
+
+    /// Staged attachment chips above the composer, removable until the turn is sent.
+    private var attachmentChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(vm.attachments) { att in
+                    HStack(spacing: 6) {
+                        Image(systemName: "doc")
+                            .font(.system(size: 14)).foregroundColor(colors.onSurfaceVariant)
+                        Text(att.fileName)
+                            .mbFont(.bodySmall).foregroundColor(colors.onSurface).lineLimit(1)
+                        Button { vm.removeAttachment(att.id) } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 11)).foregroundColor(colors.onSurfaceVariant)
+                        }
+                        .accessibilityLabel(L("chat_attach_remove", lang))
+                    }
+                    .padding(.leading, 10).padding(.trailing, 6).padding(.vertical, 6)
+                    .background(colors.surfaceContainerLow)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+
+    /// Reads a picked file URL (security-scoped) into an in-memory attachment.
+    private static func readAttachment(_ url: URL) -> ChatAttachment? {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        let mime = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+        return ChatAttachment(fileName: url.lastPathComponent, mimeType: mime, data: data)
     }
 
     private var canSend: Bool {
-        !vm.sending && !vm.input.trimmingCharacters(in: .whitespaces).isEmpty && vm.selected != nil
+        !vm.sending
+            && (!vm.input.trimmingCharacters(in: .whitespaces).isEmpty || !vm.attachments.isEmpty)
+            && vm.selected != nil
     }
 
     // MARK: Toolbar menus
@@ -192,8 +251,9 @@ struct ChatView: View {
 
 /// Font-size picker with live preview — mirrors `FontSizeDialog` in ChatScreen.kt.
 /// Preview is applied immediately by writing the offset (which drives `mbFontScale`);
-/// Cancel restores the value captured on appear.
-private struct FontSizeDialog: View {
+/// Cancel restores the value captured on appear. Module-internal so the pre-auth
+/// `LoginSettingsMenu` can reuse it too.
+struct FontSizeDialog: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.mbColors) private var colors
     @Environment(\.dismiss) private var dismiss
