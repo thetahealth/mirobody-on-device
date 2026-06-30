@@ -80,6 +80,23 @@
     <string name="circle_delete_circle">Delete circle</string>
     <string name="circle_delete_confirm">Delete “%1$s”? Members lose access to anything shared only through this circle.</string>
     <string name="chat_no_providers">No providers loaded</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">On-device private AI</string>
+    <string name="chat_ondevice_desc">Gemma 4 runs entirely on your device. Your messages never leave the phone and work offline. This needs a one-time download of about 2.5 GB and a device with enough memory.</string>
+    <string name="chat_ondevice_download">Download model</string>
+    <string name="chat_ondevice_downloading">Downloading…</string>
+    <string name="chat_ondevice_continue_background">Continue</string>
+    <string name="chat_ondevice_ready">Ready — runs offline</string>
+    <string name="chat_ondevice_absent">Download required (~2.5 GB)</string>
+    <string name="chat_ondevice_failed">Download failed</string>
+    <string name="chat_ondevice_retry">Retry download</string>
+    <string name="chat_ondevice_delete">Delete model</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">Polish draft on-device</string>
+    <string name="chat_polish_rephrase">Rephrase</string>
+    <string name="chat_polish_shorten">Make it shorter</string>
+    <string name="chat_polish_professional">More professional</string>
+    <string name="chat_polish_friendly">More friendly</string>
     <string name="chat_language">Language</string>
     <string name="chat_font_size">Font size</string>
     <string name="chat_font_size_smaller">Smaller</string>

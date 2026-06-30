@@ -20,6 +20,12 @@ Full parity with the web client's main flow:
     OpenAI-style `choices[0].delta.content` chunks, including the resumable
     `{session_id}` control chunk.
 - **Provider picker** — `POST /api/providers`, restored/persisted selection.
+- **On-device private LLM** *(optional)* — a synthetic **"Gemma 4 · On-device"**
+  provider runs the model fully locally (no server, works offline), emitting the
+  same reply stream so the chat UI is unchanged. The ~2.5 GB `.litertlm` model is
+  downloaded on demand (`ModelDownloader`). The engine (`LocalLmEngine`, Gemma 4
+  via LiteRT-LM C++) is compiled only with `-DMIROBODY_ONDEVICE_LLM=ON`; without
+  it the option still appears but reports the feature isn't built in.
 - **Local conversation persistence** — the running conversation is mirrored to a
   per-user JSON file under `QStandardPaths::AppDataLocation`
   (`conversation-<userid>.json`, keyed by the JWT `sub`), the desktop stand-in
@@ -47,6 +53,8 @@ qt/
   apiclient.{hpp,cpp}   HTTP envelope + SSE streaming (the net.js analogue)
   chatmodel.{hpp,cpp}   QAbstractListModel of the transcript
   appcontroller.{hpp,cpp}  settings, login, providers, streaming, persistence
+  modeldownloader.{hpp,cpp}  on-device model download (Hugging Face) + progress
+  locallmengine.{hpp,cpp}  on-device Gemma 4 engine (LiteRT-LM; stub unless enabled)
   qml/
     Main.qml            top bar + login/chat loader + shared dialogs
     LoginPage.qml  ChatPage.qml  MessageDelegate.qml
@@ -80,6 +88,12 @@ installed.
 
 The `MIROBODY_QT_VERSION` cache variable sets the version shown in the About
 dialog (defaults to `dev`).
+
+**On-device LLM (optional).** Add `-DMIROBODY_ONDEVICE_LLM=ON
+-DLITERT_LM_SDK_DIR=<dir with include/ and lib/>` to compile the real Gemma 4
+engine. LiteRT-LM ships no CMake/prebuilt package, so build its C++ library from
+source (Bazel) first. Without the flag the client still builds and links — the
+on-device provider is present but inert.
 
 ## Run
 

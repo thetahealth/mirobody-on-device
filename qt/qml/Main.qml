@@ -63,7 +63,13 @@ ApplicationWindow {
                 textRole: "name"
                 valueRole: "name"
                 displayText: currentIndex >= 0 ? currentText : I18n.t("selectModel")
-                onActivated: app.setProvider(currentValue)
+                onActivated: {
+                    app.setProvider(currentValue);
+                    // On-device provider chosen but model not downloaded → prompt.
+                    var p = app.providers[currentIndex];
+                    if (p && p.code === "__ondevice_gemma4__" && app.onDeviceModel.status !== "ready")
+                        onDeviceDialog.open();
+                }
                 Component.onCompleted: currentIndex = indexOfValue(app.provider)
                 Connections {
                     target: app
@@ -102,6 +108,68 @@ ApplicationWindow {
     }
     Component { id: loginComponent; LoginPage {} }
     Component { id: chatComponent;  ChatPage {} }
+
+    // On-device model manager: explains the privacy trade-off and drives the
+    // ~2.5 GB Gemma 4 download. Bound to app.onDeviceModel (ModelDownloader).
+    Dialog {
+        id: onDeviceDialog
+        title: "On-device private AI"
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(parent ? parent.width - 64 : 420, 420)
+        standardButtons: Dialog.Close
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 12
+
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.onSurface
+                text: "Gemma 4 runs entirely on your device. Your messages never leave " +
+                      "the computer and work offline. This needs a one-time download of " +
+                      "about 2.5 GB and enough free memory."
+            }
+
+            ProgressBar {
+                Layout.fillWidth: true
+                visible: app.onDeviceModel.status === "downloading"
+                value: app.onDeviceModel.progress
+            }
+
+            Text {
+                Layout.fillWidth: true
+                color: app.onDeviceModel.status === "failed" ? "#c0392b" : Theme.onSurfaceVar
+                text: {
+                    switch (app.onDeviceModel.status) {
+                    case "ready": return "Ready — runs offline.";
+                    case "downloading": return Math.round(app.onDeviceModel.progress * 100) + "%";
+                    case "failed": return "Download failed.";
+                    default: return "Download required (~2.5 GB).";
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Button {
+                    text: app.onDeviceModel.status === "downloading" ? "Cancel download"
+                        : (app.onDeviceModel.status === "failed" ? "Retry" : "Download model")
+                    visible: app.onDeviceModel.status !== "ready"
+                    onClicked: app.onDeviceModel.status === "downloading"
+                        ? app.onDeviceModel.cancel() : app.onDeviceModel.start()
+                }
+                Button {
+                    text: "Delete model"
+                    visible: app.onDeviceModel.status === "ready"
+                    onClicked: app.onDeviceModel.remove()
+                }
+                Item { Layout.fillWidth: true }
+            }
+        }
+    }
 
     // --- shared dialogs / drawer ------------------------------------------
     LanguageDialog { id: languageDialog }

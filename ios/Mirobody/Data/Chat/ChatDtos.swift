@@ -131,6 +131,23 @@ struct ProviderInfo: Decodable, Hashable, Identifiable {
         code = try c.decodeIfPresent(String.self, forKey: .code) ?? ""
     }
     enum CodingKeys: String, CodingKey { case name, code }
+
+    init(name: String, code: String) {
+        self.name = name
+        self.code = code
+    }
+
+    // MARK: On-device (private) provider — client-only, no server round-trip.
+
+    /// Sentinel `code` marking the synthetic on-device provider. When selected, chat
+    /// routes to `OnDeviceLlmEngine` instead of the SSE stream. Mirrors Android.
+    static let onDeviceCode = "__ondevice_gemma4__"
+    /// Stable display name (kept non-localized so the persisted selection survives a
+    /// UI-language change).
+    static let onDeviceName = "Gemma 4 · On-device"
+    static let onDevice = ProviderInfo(name: onDeviceName, code: onDeviceCode)
+
+    var isOnDevice: Bool { code == ProviderInfo.onDeviceCode }
 }
 
 // MARK: - SSE chunk + cost stats (mirror data/chat/dto/SseEvent.kt)

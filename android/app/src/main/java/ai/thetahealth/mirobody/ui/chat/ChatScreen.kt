@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -34,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -53,6 +56,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -96,6 +100,8 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import ai.thetahealth.mirobody.data.chat.dto.ChatAttachment
 import ai.thetahealth.mirobody.data.chat.dto.CostStatistics
 import ai.thetahealth.mirobody.data.chat.dto.ProviderInfo
+import ai.thetahealth.mirobody.data.llm.MlKitTextService
+import ai.thetahealth.mirobody.data.llm.OnDeviceModelStatus
 import ai.thetahealth.mirobody.data.circle.dto.HealthSharer
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import ai.thetahealth.mirobody.ui.LocalLayoutInfo
@@ -134,6 +140,8 @@ fun ChatScreen(
                     container.settings,
                     container.errorBus,
                     container.chatHistoryStore,
+                    container.modelManager,
+                    container.mlKitTextService,
                 )
             }
         },
@@ -164,6 +172,24 @@ fun ChatScreen(
         }
     }
 
+    // On-device model management dialog. Opens when the user picks the on-device
+    // provider (or tries to send) before the model has been downloaded.
+    var showModelDialog by remember { mutableStateOf(false) }
+    val onProviderSelected: (ProviderInfo) -> Unit = { provider ->
+        vm.onProviderSelected(provider)
+        if (provider.isOnDevice && state.onDeviceModel !is OnDeviceModelStatus.Ready) {
+            showModelDialog = true
+        }
+    }
+    if (showModelDialog) {
+        OnDeviceModelDialog(
+            status = state.onDeviceModel,
+            onDownload = vm::downloadOnDeviceModel,
+            onDelete = vm::deleteOnDeviceModel,
+            onDismiss = { showModelDialog = false },
+        )
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
@@ -190,7 +216,7 @@ fun ChatScreen(
                 navigationIcon = {
                     BrandLogo(baseUrl = baseUrl, onClick = { scope.launch { drawerState.open() } })
                 },
-                title = { ProviderMenu(state, vm::onProviderSelected, vm::loadProviders) },
+                title = { ProviderMenu(state, onProviderSelected, vm::loadProviders) },
                 actions = {
                     val fontOffset by container.settings.fontSizeOffset.collectAsState(initial = 0)
                     SettingsMenu(
@@ -257,13 +283,31 @@ fun ChatScreen(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            // On-device draft rewrite (Gemini Nano) — only where supported.
+                            if (state.polishAvailable) {
+                                PolishButton(
+                                    enabled = !state.sending && state.input.isNotBlank(),
+                                    polishing = state.polishing,
+                                    onPolish = vm::polishDraft,
+                                )
+                            }
                             ChatInputField(
                                 value = state.input,
                                 onValueChange = vm::onInputChange,
                                 enabled = !state.sending,
                                 canSend = !state.sending && state.selected != null &&
                                     (state.input.isNotBlank() || state.attachments.isNotEmpty()),
-                                onSend = vm::send,
+                                onSend = {
+                                    // For the on-device provider, prompt to download the
+                                    // model first instead of sending into a dead engine.
+                                    if (state.selected?.isOnDevice == true &&
+                                        state.onDeviceModel !is OnDeviceModelStatus.Ready
+                                    ) {
+                                        showModelDialog = true
+                                    } else {
+                                        vm.send()
+                                    }
+                                },
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -840,7 +884,23 @@ private fun ProviderMenu(
             } else {
                 state.providers.forEach { provider ->
                     DropdownMenuItem(
-                        text = { Text(provider.name) },
+                        text = {
+                            if (provider.isOnDevice) {
+                                Column {
+                                    Text(provider.name)
+                                    Text(
+                                        text = onDeviceStatusLabel(state.onDeviceModel),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            } else {
+                                Text(provider.name)
+                            }
+                        },
+                        leadingIcon = if (provider.isOnDevice) {
+                            { Icon(Icons.Outlined.Lock, contentDescription = null) }
+                        } else null,
                         onClick = {
                             onSelect(provider)
                             expanded = false
@@ -850,6 +910,156 @@ private fun ProviderMenu(
             }
         }
     }
+}
+
+/**
+ * Composer affordance that rewrites the draft on-device via Gemini Nano (ML Kit).
+ * Tapping opens a small tone menu; while rewriting it shows a spinner.
+ */
+@Composable
+private fun PolishButton(
+    enabled: Boolean,
+    polishing: Boolean,
+    onPolish: (MlKitTextService.Tone) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    IconButton(
+        onClick = { expanded = true },
+        enabled = enabled && !polishing,
+    ) {
+        if (polishing) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.AutoFixHigh,
+                contentDescription = stringResource(R.string.chat_polish),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+        val tones = listOf(
+            MlKitTextService.Tone.Rephrase to R.string.chat_polish_rephrase,
+            MlKitTextService.Tone.Shorten to R.string.chat_polish_shorten,
+            MlKitTextService.Tone.Professional to R.string.chat_polish_professional,
+            MlKitTextService.Tone.Friendly to R.string.chat_polish_friendly,
+        )
+        tones.forEach { (tone, label) ->
+            DropdownMenuItem(
+                text = { Text(stringResource(label)) },
+                onClick = {
+                    expanded = false
+                    onPolish(tone)
+                },
+            )
+        }
+    }
+}
+
+/** One-line status shown under the on-device provider in the picker. */
+@Composable
+private fun onDeviceStatusLabel(status: OnDeviceModelStatus): String = when (status) {
+    is OnDeviceModelStatus.Ready -> stringResource(R.string.chat_ondevice_ready)
+    is OnDeviceModelStatus.Downloading ->
+        "${stringResource(R.string.chat_ondevice_downloading)} ${(status.fraction * 100).toInt()}%"
+    is OnDeviceModelStatus.Failed -> stringResource(R.string.chat_ondevice_failed)
+    is OnDeviceModelStatus.Absent -> stringResource(R.string.chat_ondevice_absent)
+}
+
+/**
+ * Manage the on-device Gemma 4 model: explains the privacy trade-off, drives the
+ * (resumable) download with progress, and offers delete to reclaim storage.
+ */
+@Composable
+private fun OnDeviceModelDialog(
+    status: OnDeviceModelStatus,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+        title = { Text(stringResource(R.string.chat_ondevice_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.chat_ondevice_desc))
+                Spacer(Modifier.height(12.dp))
+                when (status) {
+                    is OnDeviceModelStatus.Downloading -> {
+                        if (status.totalBytes > 0) {
+                            LinearProgressIndicator(
+                                progress = { status.fraction },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "${formatBytes(status.downloadedBytes)} / ${formatBytes(status.totalBytes)}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                    is OnDeviceModelStatus.Failed -> Text(
+                        status.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    is OnDeviceModelStatus.Ready -> Text(
+                        stringResource(R.string.chat_ondevice_ready),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    is OnDeviceModelStatus.Absent -> Unit
+                }
+            }
+        },
+        confirmButton = {
+            when (status) {
+                is OnDeviceModelStatus.Ready -> TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.common_done))
+                }
+                is OnDeviceModelStatus.Downloading -> TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.chat_ondevice_continue_background))
+                }
+                is OnDeviceModelStatus.Failed -> TextButton(onClick = onDownload) {
+                    Text(stringResource(R.string.chat_ondevice_retry))
+                }
+                is OnDeviceModelStatus.Absent -> TextButton(onClick = onDownload) {
+                    Text(stringResource(R.string.chat_ondevice_download))
+                }
+            }
+        },
+        dismissButton = {
+            if (status is OnDeviceModelStatus.Ready) {
+                TextButton(onClick = { onDelete(); onDismiss() }) {
+                    Text(
+                        stringResource(R.string.chat_ondevice_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            }
+        },
+    )
+}
+
+/** Human-readable byte count (e.g. "2.5 GB"), locale-agnostic. */
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    var value = bytes.toDouble()
+    var i = 0
+    while (value >= 1024 && i < units.lastIndex) {
+        value /= 1024
+        i++
+    }
+    return if (i == 0) "$bytes B" else String.format(java.util.Locale.US, "%.1f %s", value, units[i])
 }
 
 @Composable

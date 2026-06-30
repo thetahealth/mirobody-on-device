@@ -42,6 +42,10 @@ qt_add_executable(mirobody_qt
     chatmodel.hpp
     appcontroller.cpp
     appcontroller.hpp
+    modeldownloader.cpp
+    modeldownloader.hpp
+    locallmengine.cpp
+    locallmengine.hpp
 )
 
 # Qt headers are C++17; keep this requirement local to the Qt target so the rest
@@ -93,6 +97,25 @@ target_link_libraries(mirobody_qt PRIVATE
     Qt6::QuickControls2
     Qt6::Network
 )
+
+# On-device private LLM (Gemma 4 via LiteRT-LM C++). OFF by default: LiteRT-LM has no
+# supported CMake/prebuilt-library path (it is Bazel-only), so locallmengine.cpp builds
+# as a stub and the app still compiles/links. To enable, build a LiteRT-LM C++ library
+# from source (Bazel) and configure with:
+#   -DMIROBODY_ONDEVICE_LLM=ON -DLITERT_LM_SDK_DIR=<dir with include/ and lib/>
+# Confirm the exact library name(s) below against what your LiteRT-LM build produces
+# (and any abseil/flatbuffers transitive libs it needs).
+option(MIROBODY_ONDEVICE_LLM "Build on-device LLM (Gemma 4 via LiteRT-LM C++)" OFF)
+if(MIROBODY_ONDEVICE_LLM)
+    if(NOT DEFINED LITERT_LM_SDK_DIR)
+        message(FATAL_ERROR
+            "MIROBODY_ONDEVICE_LLM=ON requires -DLITERT_LM_SDK_DIR=<LiteRT-LM SDK dir (include/, lib/)>")
+    endif()
+    target_compile_definitions(mirobody_qt PRIVATE MIROBODY_ONDEVICE_LLM)
+    target_include_directories(mirobody_qt PRIVATE "${LITERT_LM_SDK_DIR}/include")
+    target_link_directories(mirobody_qt PRIVATE "${LITERT_LM_SDK_DIR}/lib")
+    target_link_libraries(mirobody_qt PRIVATE litert_lm)
+endif()
 
 # On Windows, make this a GUI app (no console window) for release builds.
 set_target_properties(mirobody_qt PROPERTIES

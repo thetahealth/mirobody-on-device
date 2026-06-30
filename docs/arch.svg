@@ -62,6 +62,7 @@
       <text x="352" y="212">Qwen · DeepSeek · Azure OpenAI</text>
       <text x="352" y="224">Realtime: OpenAI Realtime · Gemini Live</text>
       <text x="352" y="236">Embeddings: vector clients</text>
+      <text x="352" y="246" font-weight="bold" fill="#2f7d4a">On-device: Gemma 4 · LiteRT-LM (native apps)</text>
       <text x="352" y="256" font-size="9.5" font-weight="bold" fill="#5e2e80">chat — agent runtime</text>
       <text x="352" y="269">provider pick → system prompt → streamed turn</text>
       <text x="352" y="289" font-size="9.5" font-weight="bold" fill="#5e2e80">mcp / memory</text>

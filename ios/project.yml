@@ -36,6 +36,14 @@ packages:
     url: https://github.com/gonzalezreal/swift-markdown-ui
     minVersion: 2.3.0
     maxVersion: 3.0.0
+  # On-device private LLM: LiteRT-LM runs Gemma 4 (.litertlm) fully on-device. The
+  # ~2.5 GB model is downloaded at runtime by ModelManager, not bundled. The engine
+  # in Data/LLM/LiteRtLlmEngine.swift is `#if canImport(LiteRTLM)`-guarded, so the
+  # app still builds (on-device chat inert) if this package is removed.
+  LiteRTLM:
+    url: https://github.com/google-ai-edge/LiteRT-LM
+    minVersion: 0.12.0
+    maxVersion: 1.0.0
 
 settings:
   base:
@@ -128,6 +136,8 @@ targets:
         product: FirebaseCore
       - package: MarkdownUI
         product: MarkdownUI
+      - package: LiteRTLM
+        product: LiteRTLM
       # --- Embedded server (uncomment after building mirobody.xcframework) ---
       # - framework: Frameworks/mirobody.xcframework
       #   embed: false

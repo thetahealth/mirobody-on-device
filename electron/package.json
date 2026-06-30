@@ -13,7 +13,8 @@
     "electron-builder": "^25.0.0"
   },
   "dependencies": {
-    "koffi": "^2.9.0"
+    "koffi": "^2.9.0",
+    "node-llama-cpp": "^3.0.0"
   },
   "build": {
     "appId": "ai.thetahealth.mirobody",
@@ -21,7 +22,8 @@
     "files": [
       "main.js",
       "mirobody.js",
-      "preload.js"
+      "preload.js",
+      "ondevice.js"
     ],
     "extraResources": [
       { "from": "../res/sql", "to": "res/sql" },

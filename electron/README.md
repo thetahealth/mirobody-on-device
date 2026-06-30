@@ -11,10 +11,11 @@ with no `electron-rebuild` step — unlike a native N-API addon.
 
 ```
 electron/
-  main.js        # start embedded server, wait for it, open the window
+  main.js        # start embedded server, wait for it, open the window; on-device LLM IPC
   mirobody.js    # koffi wrapper over the 4 functions in src/mirobody.h
-  preload.js     # context-isolated; exposes a tiny desktop marker
-  package.json   # electron + electron-builder + koffi; packaging config
+  ondevice.js    # main-process on-device LLM: Gemma 4 (GGUF) via node-llama-cpp + model download
+  preload.js     # context-isolated; desktop marker + window.ondevice bridge
+  package.json   # electron + electron-builder + koffi + node-llama-cpp; packaging config
 ```
 
 ## Prerequisites (build the two artifacts it loads)
@@ -48,9 +49,28 @@ npm start
 `main.js` reads the library from `../build-shared`, resources from `../res`, and
 the repo-root [`config.example.yml`](../config.example.yml) directly — no
 packaging needed. Sign in with the demo credentials it defines
-(`demo1@mirobody.ai` / `777777`); add an LLM key there to enable chat. Per-machine
+(`demo1@mirobody.ai` / `777777`); add an LLM key there to enable cloud chat, or pick
+the **on-device** provider (no key needed — see below). Per-machine
 overrides (paths, port, loopback host) come from env vars set in `main.js`, which
 the config store honors above the file.
+
+## On-device LLM (private chat, desktop-only)
+
+The renderer is the **shared** web client (`htdoc/`), sandboxed with no Node access,
+so the on-device model runs in the **main process** and is bridged to the page via
+`preload.js` (`window.ondevice`). The chat picker then offers **"Gemma 4 · On-device"**
+— private, offline, no LLM key needed. Because it's gated on that bridge, it appears
+only in the desktop app, never when `htdoc/` is served to a plain browser.
+
+- **Engine** (`ondevice.js`): Gemma 4 (GGUF) via **node-llama-cpp**, loaded lazily
+  (ESM `import()`); it streams tokens back as the same `reply` chunks the SSE path
+  emits, so the chat UI is unchanged. Missing dependency ⇒ graceful "unavailable".
+- **Model**: the GGUF is **not bundled** — downloaded on demand from Hugging Face
+  (`createModelDownloader`, with progress) into Electron's `userData`. Confirm the
+  `MODEL_URI` in `ondevice.js` points at a real Gemma 4 GGUF before shipping.
+- **Dependency**: `node-llama-cpp` (in `package.json`). `npm install` fetches a
+  prebuilt native binary and electron-builder bundles it. Unlike koffi it's a native
+  N-API addon, so a major Node/Electron bump may need a rebuild.
 
 ## Package (electron-builder)
 

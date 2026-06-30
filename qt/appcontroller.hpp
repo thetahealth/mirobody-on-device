@@ -16,10 +16,14 @@
 #include <memory>
 
 #include "chatmodel.hpp"
+// Full definition required: ModelDownloader* is exposed as a Q_PROPERTY, so moc needs
+// the complete type to register its metatype (a forward declaration fails to compile).
+#include "modeldownloader.hpp"
 
 class ApiClient;
 class SseStream;
 class QSettings;
+class LocalLmEngine;
 
 class AppController : public QObject {
     Q_OBJECT
@@ -34,6 +38,9 @@ class AppController : public QObject {
     Q_PROPERTY(ChatModel* chat READ chat CONSTANT)
     Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
     Q_PROPERTY(QStringList baseUrlPresets READ baseUrlPresets CONSTANT)
+    // The on-device model downloader (status/progress + start/cancel/remove), exposed
+    // to QML for the download affordance. Bind app.onDeviceModel.status / .progress.
+    Q_PROPERTY(ModelDownloader* onDeviceModel READ onDeviceModel CONSTANT)
 public:
     explicit AppController(QObject* parent = nullptr);
     ~AppController() override;
@@ -49,6 +56,7 @@ public:
     ChatModel*    chat() const { return chat_; }
     QString       appVersion() const;
     QStringList   baseUrlPresets() const;
+    ModelDownloader* onDeviceModel() const { return downloader_; }
 
     // --- login -----------------------------------------------------------
     Q_INVOKABLE void sendCode(const QString& email);
@@ -100,10 +108,16 @@ private:
     void finishTurn(int assistantRow, const QString& provider);
     void failTurn(int userRow, int assistantRow, const QString& errorText);
 
+    // On-device turn (Gemma 4 via LiteRT-LM), mirroring the SSE handler in sendMessage.
+    void sendOnDeviceMessage(const QString& question, int assistantRow);
+    void appendOnDeviceProvider();   // push the synthetic on-device entry into providers_
+
     ApiClient* api_  = nullptr;
     ChatModel* chat_ = nullptr;
     std::unique_ptr<QSettings> settings_;
     SseStream* stream_ = nullptr;   // current in-flight chat stream, if any
+    ModelDownloader* downloader_ = nullptr;
+    LocalLmEngine*   localEngine_ = nullptr;
 
     bool         loggedIn_   = false;
     QString      email_;

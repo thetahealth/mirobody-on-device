@@ -19,6 +19,9 @@ import ai.thetahealth.mirobody.data.config.ServerConfigStore
 import ai.thetahealth.mirobody.data.health.HealthApi
 import ai.thetahealth.mirobody.data.health.HealthRepository
 import ai.thetahealth.mirobody.data.health.HealthSourceFactory
+import ai.thetahealth.mirobody.data.llm.LiteRtLlmEngine
+import ai.thetahealth.mirobody.data.llm.MlKitTextService
+import ai.thetahealth.mirobody.data.llm.ModelManager
 import ai.thetahealth.mirobody.data.net.AuthInterceptor
 import ai.thetahealth.mirobody.data.net.BaseUrlInterceptor
 import ai.thetahealth.mirobody.data.net.ErrorBus
@@ -78,9 +81,20 @@ class AppContainer(context: Context) {
 
     val authRepository: AuthRepository = AuthRepository(authApi, settings)
 
+    // On-device private LLM (Gemma 4 via LiteRT-LM). The model file is downloaded on
+    // demand by ModelManager; the engine loads it lazily on first local turn.
+    val modelManager: ModelManager = ModelManager(appContext)
+
+    private val onDeviceEngine: LiteRtLlmEngine = LiteRtLlmEngine(modelManager)
+
+    // Layered on-device GenAI (Gemini Nano via ML Kit) for bounded tasks like rewriting
+    // a draft. Available only on AICore-capable devices; the UI hides it otherwise.
+    val mlKitTextService: MlKitTextService = MlKitTextService(appContext)
+
     val chatRepository: ChatRepository = ChatRepository(
         api = chatApi,
         streamClient = ChatStreamClient(okHttp, NetworkFactory.json),
+        onDeviceEngine = onDeviceEngine,
     )
 
     val chatHistoryStore: ChatHistoryStore = ChatHistoryStore(appContext, NetworkFactory.json)

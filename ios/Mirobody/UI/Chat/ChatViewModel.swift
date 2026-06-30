@@ -14,34 +14,52 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var language = "en"
     /// Files staged in the composer for the next turn (cleared on send).
     @Published private(set) var attachments: [ChatAttachment] = []
+    /// State of the on-device model file, driving the on-device provider's UI.
+    @Published private(set) var onDeviceStatus: OnDeviceModelStatus = .absent
 
     private let repo: ChatRepository
     private let settings: SettingsStore
     private let errorBus: ErrorBus
+    private let modelManager: ModelManager
     private var streamTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
 
-    init(repo: ChatRepository, settings: SettingsStore, errorBus: ErrorBus) {
+    init(repo: ChatRepository, settings: SettingsStore, errorBus: ErrorBus, modelManager: ModelManager) {
         self.repo = repo
         self.settings = settings
         self.errorBus = errorBus
+        self.modelManager = modelManager
         self.language = settings.language
+        self.onDeviceStatus = modelManager.status
         settings.$language.sink { [weak self] lang in self?.language = lang }.store(in: &cancellables)
+        modelManager.$status.sink { [weak self] st in self?.onDeviceStatus = st }.store(in: &cancellables)
         loadProviders()
     }
 
+    /// Start (or resume) the on-device model download.
+    func downloadOnDeviceModel() { modelManager.startDownload() }
+    /// Pause the in-flight download (resumable).
+    func pauseOnDeviceModel() { modelManager.pauseDownload() }
+    /// Remove the on-device model to reclaim storage.
+    func deleteOnDeviceModel() { modelManager.delete() }
+
     func loadProviders() {
         Task {
+            let savedName = settings.selectedProviderName
             do {
-                let list = try await repo.listProviders()
-                let savedName = settings.selectedProviderName
-                let restored = list.first { $0.name == savedName }
+                // Always append the on-device provider alongside the server's.
+                let list = try await repo.listProviders() + [ProviderInfo.onDevice]
                 providers = list
-                if selected == nil { selected = restored ?? list.first }
+                if selected == nil { selected = list.first { $0.name == savedName } ?? list.first }
                 error = nil
             } catch {
                 errorBus.emit(error)
                 self.error = localizedMessage(error.toAppError(), language: language)
+                // The server is unreachable, but on-device chat still works offline —
+                // keep it available rather than leaving the picker empty.
+                let list = [ProviderInfo.onDevice]
+                providers = list
+                if selected == nil { selected = list.first { $0.name == savedName } ?? list.first }
             }
         }
     }
@@ -80,14 +98,24 @@ final class ChatViewModel: ObservableObject {
 
         streamTask?.cancel()
         streamTask = Task {
-            let stream = repo.chat(
-                sessionId: sessionId,
-                question: question,
-                agentCode: selected.agentCode,
-                provider: selected.code,
-                language: language,
-                attachments: turnAttachments
-            )
+            let stream: AsyncStream<ChatStreamEvent>
+            if selected.isOnDevice {
+                // Offline path: hand the settled transcript (incl. this new question,
+                // excluding the in-flight placeholder) to the on-device engine.
+                let turns = messages
+                    .filter { $0.id != assistantId && !$0.text.isEmpty }
+                    .map { ChatTurn(fromUser: $0.role == .user, text: $0.text) }
+                stream = repo.chatOnDevice(history: turns)
+            } else {
+                stream = repo.chat(
+                    sessionId: sessionId,
+                    question: question,
+                    agentCode: selected.agentCode,
+                    provider: selected.code,
+                    language: language,
+                    attachments: turnAttachments
+                )
+            }
             for await event in stream {
                 applyEvent(targetId: assistantId, event: event)
             }

@@ -19,12 +19,14 @@ struct ChatView: View {
     @State private var showAbout = false
     @State private var showSignOut = false
     @State private var showFileImporter = false
+    @State private var showOnDeviceModel = false
 
     init(container: AppContainer) {
         _vm = StateObject(wrappedValue: ChatViewModel(
             repo: container.chatRepository,
             settings: container.settings,
-            errorBus: container.errorBus
+            errorBus: container.errorBus,
+            modelManager: container.modelManager
         ))
     }
 
@@ -56,6 +58,16 @@ struct ChatView: View {
         .sheet(isPresented: $showFontSize) { sheetEnv { FontSizeDialog() } }
         .sheet(isPresented: $showBackend) { sheetEnv { BaseUrlDialog() } }
         .sheet(isPresented: $showHealth) { sheetEnv { HealthSyncView(container: container) } }
+        .sheet(isPresented: $showOnDeviceModel) {
+            sheetEnv {
+                OnDeviceModelView(
+                    status: vm.onDeviceStatus,
+                    onDownload: vm.downloadOnDeviceModel,
+                    onPause: vm.pauseOnDeviceModel,
+                    onDelete: { vm.deleteOnDeviceModel(); showOnDeviceModel = false }
+                )
+            }
+        }
         .alert(L("chat_about", lang), isPresented: $showAbout) {
             Button(L("common_close", lang), role: .cancel) {}
         } message: {
@@ -205,7 +217,16 @@ struct ChatView: View {
                 }
             } else {
                 ForEach(vm.providers) { provider in
-                    Button(provider.name) { vm.onProviderSelected(provider) }
+                    Button {
+                        vm.onProviderSelected(provider)
+                        if provider.isOnDevice && !vm.onDeviceStatus.isReady { showOnDeviceModel = true }
+                    } label: {
+                        if provider.isOnDevice {
+                            Label(provider.name, systemImage: "lock.fill")
+                        } else {
+                            Text(provider.name)
+                        }
+                    }
                 }
             }
         } label: {

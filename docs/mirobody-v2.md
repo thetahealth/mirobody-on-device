@@ -244,8 +244,9 @@ style: |
   <line x1="564" y1="199" x2="594" y2="199" stroke="#2f7d4a" stroke-width="2.5" marker-end="url(#fg)"/>
   <rect x="596" y="156" width="112" height="86" rx="12" fill="#f3e8f7" stroke="#8a4fb0" stroke-width="2.5"/>
   <path d="M652 166 L654.5 171.5 L660 174 L654.5 176.5 L652 182 L649.5 176.5 L644 174 L649.5 171.5 Z" fill="#8a4fb0"/>
-  <text x="652" y="201" text-anchor="middle" font-size="15" font-weight="bold" fill="#5e2e80">AI model</text>
-  <text x="652" y="220" text-anchor="middle" font-size="8.5" fill="#8a4fb0">OpenAI · Gemini · …</text>
+  <text x="652" y="197" text-anchor="middle" font-size="15" font-weight="bold" fill="#5e2e80">AI model</text>
+  <text x="652" y="214" text-anchor="middle" font-size="8.5" font-weight="bold" fill="#2f7d4a">on-device · Gemma</text>
+  <text x="652" y="227" text-anchor="middle" font-size="8.5" fill="#8a4fb0">or OpenAI · Gemini</text>
   <line x1="710" y1="199" x2="740" y2="199" stroke="#2f7d4a" stroke-width="2.5" marker-end="url(#fg)"/>
   <g>
     <path d="M678 66 H808 A12 12 0 0 1 820 78 V100 A12 12 0 0 1 808 112 H788 L778 130 L770 112 H678 A12 12 0 0 1 666 100 V78 A12 12 0 0 1 678 66 Z" fill="#f3e8f7" stroke="#8a4fb0"/>
@@ -426,9 +427,10 @@ style: |
 
   <!-- ===== Column 3: LLM ===== -->
   <rect x="700" y="150" width="220" height="80" rx="10" fill="#f3e8f7" stroke="#8a4fb0"/>
-  <text x="810" y="178" text-anchor="middle" font-size="15" font-weight="bold" fill="#234">LLM providers</text>
-  <text x="810" y="200" text-anchor="middle" font-size="10" fill="#456">OpenAI · Gemini · MiroThinker</text>
-  <text x="810" y="217" text-anchor="middle" font-size="10" fill="#456">Qwen · DeepSeek</text>
+  <text x="810" y="172" text-anchor="middle" font-size="14" font-weight="bold" fill="#234">LLM providers</text>
+  <text x="810" y="190" text-anchor="middle" font-size="10" font-weight="bold" fill="#2f7d4a">on-device · Gemma</text>
+  <text x="810" y="206" text-anchor="middle" font-size="10" fill="#456">OpenAI · Gemini · MiroThinker</text>
+  <text x="810" y="221" text-anchor="middle" font-size="10" fill="#456">Qwen · DeepSeek</text>
 
   <!-- ===== Flows (bidirectional, horizontal curves on box edges) ===== -->
   <!-- Web <-> Server -->
@@ -449,7 +451,7 @@ style: |
 
 **Frontend**
 
-- **Native** (Android · iOS · Electron · Qt) — embed `mirobody` and keep all health data on-device. **<span style="color:#c0392b">Private by default</span>** — nothing leaves but the chat turn.
+- **Native** (Android · iOS · Electron · Qt) — embed `mirobody` and keep all health data on-device. **<span style="color:#c0392b">Private by default</span>** — and with an **on-device LLM (Gemma)**, even the chat turn can stay on the device.
 - **Web** (HTML · Miniapp) — UI only, talks to a `mirobody` server. **<span style="color:#c0392b">Maximum flexibility</span>** — zero install, runs anywhere, instant updates.
 
 </div>

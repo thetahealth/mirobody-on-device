@@ -10,6 +10,10 @@ import ai.thetahealth.mirobody.data.chat.dto.CostStatistics
 import ai.thetahealth.mirobody.data.chat.dto.ProviderInfo
 import ai.thetahealth.mirobody.data.circle.CircleRepository
 import ai.thetahealth.mirobody.data.circle.dto.HealthSharer
+import ai.thetahealth.mirobody.data.llm.ChatTurn
+import ai.thetahealth.mirobody.data.llm.MlKitTextService
+import ai.thetahealth.mirobody.data.llm.ModelManager
+import ai.thetahealth.mirobody.data.llm.OnDeviceModelStatus
 import ai.thetahealth.mirobody.data.net.ErrorBus
 import ai.thetahealth.mirobody.data.settings.SettingsStore
 import java.util.UUID
@@ -80,6 +84,14 @@ data class ChatUiState(
     // The server-side thread id for the current conversation, learned from the
     // `conversation` SSE event. Empty until the first turn lands; powers sharing.
     val conversationId: String = "",
+    // State of the on-device model file (download/ready), driving the on-device
+    // provider's UI affordances. Mirrors ModelManager.status.
+    val onDeviceModel: OnDeviceModelStatus = OnDeviceModelStatus.Absent,
+    // Whether Gemini Nano (ML Kit) can rewrite on this device; gates the composer
+    // "Polish" affordance. False on hardware without AICore.
+    val polishAvailable: Boolean = false,
+    // A rewrite is in flight (composer "Polish" shows a spinner, send is blocked).
+    val polishing: Boolean = false,
 )
 
 class ChatViewModel(
@@ -88,6 +100,8 @@ class ChatViewModel(
     private val settings: SettingsStore,
     private val errorBus: ErrorBus,
     private val history: ChatHistoryStore,
+    private val modelManager: ModelManager,
+    private val mlKit: MlKitTextService,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatUiState(sessionId = UUID.randomUUID().toString()))
@@ -109,6 +123,41 @@ class ChatViewModel(
         viewModelScope.launch {
             settings.language.collect { lang -> _state.update { it.copy(language = lang) } }
         }
+        viewModelScope.launch {
+            modelManager.status.collect { st -> _state.update { it.copy(onDeviceModel = st) } }
+        }
+        // Probe Gemini Nano support once; the composer "Polish" button only shows if true.
+        viewModelScope.launch {
+            val supported = runCatching { mlKit.isRewriteSupported() }.getOrDefault(false)
+            _state.update { it.copy(polishAvailable = supported) }
+        }
+    }
+
+    /**
+     * Rewrite the current draft on-device (Gemini Nano) in the given [tone], replacing
+     * the composer text in place. No-op while empty or already polishing.
+     */
+    fun polishDraft(tone: MlKitTextService.Tone) {
+        val s = _state.value
+        val draft = s.input.trim()
+        if (draft.isEmpty() || s.polishing) return
+        _state.update { it.copy(polishing = true) }
+        viewModelScope.launch {
+            mlKit.polish(draft, tone, s.language)
+                .onSuccess { rewritten -> _state.update { it.copy(input = rewritten) } }
+                .onFailure { t -> errorBus.emit(t) }
+            _state.update { it.copy(polishing = false) }
+        }
+    }
+
+    /** Start (or resume) the on-device model download. Safe to call when already running. */
+    fun downloadOnDeviceModel() {
+        viewModelScope.launch { runCatching { modelManager.download() } }
+    }
+
+    /** Remove the on-device model to reclaim storage. */
+    fun deleteOnDeviceModel() {
+        modelManager.delete()
     }
 
     /** Mirror the current conversation to local storage (best-effort, off the UI path). */
@@ -119,20 +168,33 @@ class ChatViewModel(
 
     fun loadProviders() {
         viewModelScope.launch {
+            val savedName = settings.selectedProviderName.first()
             runCatching { repo.listProviders() }
-                .onSuccess { list ->
-                    val savedName = settings.selectedProviderName.first()
+                .onSuccess { remote ->
+                    // Always append the on-device provider so it's selectable alongside
+                    // the server's providers.
+                    val list = remote + ProviderInfo.onDevice
                     val restored = list.firstOrNull { it.name == savedName }
                     _state.update {
                         it.copy(
                             providers = list,
                             selected = it.selected ?: restored ?: list.firstOrNull(),
+                            error = null,
                         )
                     }
                 }
                 .onFailure { t ->
                     errorBus.emit(t)
-                    _state.update { it.copy(error = t.message) }
+                    // The server is unreachable, but on-device chat still works offline —
+                    // keep it available rather than leaving the picker empty.
+                    val list = listOf(ProviderInfo.onDevice)
+                    _state.update {
+                        it.copy(
+                            providers = list,
+                            selected = it.selected ?: list.firstOrNull { p -> p.name == savedName } ?: list.first(),
+                            error = t.message,
+                        )
+                    }
                 }
         }
     }
@@ -214,15 +276,25 @@ class ChatViewModel(
         streamJob?.cancel()
         streamJob = viewModelScope.launch {
             runCatching {
-                repo.chat(
-                    sessionId = s.sessionId,
-                    question = question,
-                    agentCode = selected.agentCode,
-                    provider = selected.code,
-                    language = s.language,
-                    subject = s.subject,
-                    attachments = attachments,
-                ).collect { event -> applyEvent(assistantMsg.id, event) }
+                val flow = if (selected.isOnDevice) {
+                    // Offline path: hand the settled transcript (incl. this new question,
+                    // excluding the in-flight placeholder) to the on-device engine.
+                    val turns = _state.value.messages
+                        .filter { it.id != assistantMsg.id && it.text.isNotBlank() }
+                        .map { ChatTurn(fromUser = it.role == Role.User, text = it.text) }
+                    repo.chatOnDevice(turns)
+                } else {
+                    repo.chat(
+                        sessionId = s.sessionId,
+                        question = question,
+                        agentCode = selected.agentCode,
+                        provider = selected.code,
+                        language = s.language,
+                        subject = s.subject,
+                        attachments = attachments,
+                    )
+                }
+                flow.collect { event -> applyEvent(assistantMsg.id, event) }
             }.onFailure { t ->
                 errorBus.emit(t)
                 updateMessage(assistantMsg.id) { it.copy(streaming = false, error = t.message) }

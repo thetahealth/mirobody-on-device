@@ -5,8 +5,9 @@
 // only the server lives inside this process instead of a separate binary.
 const path = require('path');
 const http = require('http');
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain } = require('electron');
 const { MiroServer } = require('./mirobody');
+const ondevice = require('./ondevice');
 
 // Fixed loopback port (the C API reports the configured port, not an ephemeral
 // one — see mirobody.js). Override with MIROBODY_PORT if it clashes.
@@ -133,6 +134,31 @@ function createWindow(port) {
   });
 }
 
+// On-device private LLM (Gemma 4 via node-llama-cpp), bridged to the sandboxed
+// renderer's window.ondevice (see preload.js). The engine runs here in main; the
+// renderer only sends a history and receives streamed reply chunks.
+function wireOnDeviceIpc() {
+  ipcMain.handle('ondevice:status', () => ondevice.status());
+  ipcMain.handle('ondevice:delete', () => ondevice.remove());
+  ipcMain.on('ondevice:download', (e) => {
+    ondevice.download((p) => {
+      if (!e.sender.isDestroyed()) e.sender.send('ondevice:download:progress', p);
+    });
+  });
+  ipcMain.on('ondevice:download:cancel', () => { ondevice.cancelDownload(); });
+  ipcMain.on('ondevice:generate', (e, { id, history }) => {
+    const send = (channel, payload) => { if (!e.sender.isDestroyed()) e.sender.send(channel, payload); };
+    ondevice.generate(id, Array.isArray(history) ? history : [], {
+      // Wrap each delta as the same SSE reply chunk the server emits, so the
+      // renderer reuses its existing parseAgentChunk/onmessage handlers verbatim.
+      onChunk: (text) => send('ondevice:chunk', { id, data: JSON.stringify({ type: 'reply', content: text }) }),
+      onDone: () => send('ondevice:done', { id }),
+      onError: (reason) => send('ondevice:error', { id, reason: String(reason) }),
+    });
+  });
+  ipcMain.on('ondevice:cancel', (e, { id }) => { ondevice.cancel(id); });
+}
+
 app.whenReady().then(async () => {
   let port;
   try {
@@ -143,6 +169,7 @@ app.whenReady().then(async () => {
     return;
   }
 
+  wireOnDeviceIpc();
   await waitForHttp(port);
   createWindow(port);
 

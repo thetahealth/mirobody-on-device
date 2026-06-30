@@ -156,6 +156,17 @@ dependencies {
     implementation(libs.androidx.health.connect)
     implementation(libs.hms.health)
 
+    // On-device private LLM: LiteRT-LM runs Gemma 4 entirely on-device (no network,
+    // no server). The ~2.5 GB .litertlm model is downloaded at runtime by ModelManager.
+    implementation(libs.litertlm.android)
+
+    // On-device GenAI utilities via Gemini Nano (AICore) — used by MlKitTextService for
+    // draft rewriting/summarization where the device supports it. Degrades gracefully.
+    implementation(libs.mlkit.genai.rewriting)
+    implementation(libs.mlkit.genai.summarization)
+    // ML Kit GenAI returns Guava ListenableFuture; this adds the coroutine await() for it.
+    implementation(libs.kotlinx.coroutines.guava)
+
     implementation(libs.coil.compose)
     implementation(libs.coil.svg)
 

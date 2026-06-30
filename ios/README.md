@@ -65,6 +65,23 @@ and the app reaches it at `http://localhost:8080`. The bridge forces loopback, s
 no iOS local-network privacy prompt. With the flag off, none of the native symbols
 are referenced — the app is a pure client.
 
+## On-device LLM (private chat)
+
+The provider picker includes **"Gemma 4 · On-device"** — chat that runs entirely on
+device (no network, no server), emitting the same event stream so the chat UI is
+unchanged (`Data/LLM/`). It stays available even when the backend is unreachable.
+
+- **Engine** (`LiteRtLlmEngine`): Gemma 4 (E2B) via **LiteRT-LM**'s Swift API, added
+  as the `LiteRTLM` Swift Package in [`project.yml`](project.yml). The engine is
+  wrapped in `#if canImport(LiteRTLM)`, so the app still builds if the package is
+  removed (on-device turns then report it isn't built in). Re-run `xcodegen generate`
+  after changing packages.
+- **Model**: the ~2.5 GB `.litertlm` file is **not bundled** — `ModelManager`
+  downloads it on demand from Hugging Face (`URLSession`, resumable, with progress)
+  into Application Support; a sheet drives download / delete.
+- Android's ML Kit **"Polish draft"** (Gemini Nano) has no iOS counterpart — ML Kit
+  GenAI is Android-only.
+
 ## Google sign-in setup (one time; email login needs none of this)
 
 The Android `google-services.json` registers an **Android** app only, so two
@@ -164,6 +181,7 @@ ios/
       Net/                    # ApiClient (URLSession), envelope, error taxonomy, JSONValue
       Auth/                   # DTOs, AuthRepository, Firebase Google sign-in
       Chat/                   # DTOs, SSE stream client, ChatRepository
+      LLM/                    # On-device LLM: LiteRtLlmEngine (LiteRT-LM), ModelManager
       Config/                 # /mirobody.json model + store
       Health/                 # HealthKitRepository, FHIR mapper (Apple Health → /fhir)
       Settings/               # UserDefaults-backed settings
@@ -191,6 +209,7 @@ ios/
 | Coil `AsyncImage` (+ SVG)       | `AsyncImage` + `SVGWebView` (`WKWebView`)      |
 | Firebase Auth (OAuth web flow)  | FirebaseAuth (`OAuthProvider("google.com")`)   |
 | Health Connect / HMS Health Kit | HealthKit (`HealthKitRepository`)              |
+| On-device LLM: LiteRT-LM (`litertlm-android`) | LiteRT-LM Swift (`LiteRTLM` SPM) |
 
 ## Known gaps vs. Android
 

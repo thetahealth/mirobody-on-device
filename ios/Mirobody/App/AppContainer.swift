@@ -21,6 +21,9 @@ final class AppContainer: ObservableObject {
     let chatRepository: ChatRepository
     let serverConfigStore: ServerConfigStore
     let healthRepository: HealthKitRepository
+    /// On-device private LLM (Gemma 4 via LiteRT-LM). The model file is downloaded on
+    /// demand by `modelManager`; the engine loads it lazily on the first local turn.
+    let modelManager: ModelManager
 
     init() {
         let settings = SettingsStore()
@@ -38,7 +41,13 @@ final class AppContainer: ObservableObject {
         self.wechatAuthRepository = WeChatAuthRepository(api: apiClient, settings: settings)
         self.githubAuthRepository = GitHubAuthRepository(api: apiClient, settings: settings)
         self.xAuthRepository = XAuthRepository(api: apiClient, settings: settings)
-        self.chatRepository = ChatRepository(api: apiClient, settings: settings)
+        let modelManager = ModelManager()
+        self.modelManager = modelManager
+        self.chatRepository = ChatRepository(
+            api: apiClient,
+            settings: settings,
+            onDeviceEngine: LiteRtLlmEngine(models: modelManager)
+        )
         self.serverConfigStore = ServerConfigStore(api: apiClient, settings: settings)
         // On-device Apple Health ingestion: reads HealthKit and POSTs FHIR
         // Observations to the embedded server's /fhir endpoint.

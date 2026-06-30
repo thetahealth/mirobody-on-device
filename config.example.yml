@@ -886,8 +886,30 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 #   - 'gemini' -> Google's text-embedding-001 (free via the GOOGLE_API_KEY
 #     block above; recommended for getting started).
 #   - 'qwen'   -> Qwen3 embedding via DashScope (needs DASHSCOPE_API_KEY).
+#   - 'gemma'  -> EmbeddingGemma served locally over an OpenAI-compatible
+#     endpoint (Ollama / llama.cpp). Fully on-device, no API key, no data
+#     leaves the host — pairs with on-device chat. Vectors are 768-dim
+#     (vs 1024 for gemini/qwen), so use one provider consistently per deployment.
 # Default: gemini.
 EMBEDDING_PROVIDER: 'gemini'
+
+# 'gemma' provider settings (only used when EMBEDDING_PROVIDER: 'gemma').
+# Point at a local OpenAI-compatible embeddings server; Ollama's default is below
+# (run e.g. `ollama pull embeddinggemma` first).
+# EMBEDDING_GEMMA_BASE_URL: 'http://localhost:11434/v1'   # falls back to OLLAMA_BASE_URL
+# EMBEDDING_GEMMA_MODEL: 'embeddinggemma'
+# EMBEDDING_GEMMA_API_KEY: ''        # usually empty for a local server
+# EMBEDDING_GEMMA_DIM: 0             # 0 = model native (768); set 512/256/128 for MRL truncation
+
+# On-device chat model, server-hosted. Set a base URL to expose "Base/gemma-4-e2b"
+# in the provider picker: the same Gemma 4 E2B the native apps run on-device,
+# served here over a local OpenAI-compatible endpoint (Ollama / llama.cpp / vLLM).
+# Handy for trying the model from the Android/iOS clients without the on-device
+# download. The provider is hidden until GEMMA_CHAT_BASE_URL (or OLLAMA_BASE_URL)
+# is set. Set GEMMA_CHAT_MODEL to the name your runtime serves (e.g. the Ollama tag).
+# GEMMA_CHAT_BASE_URL: 'http://localhost:11434/v1'   # falls back to OLLAMA_BASE_URL
+# GEMMA_CHAT_MODEL: 'gemma-4-e2b'
+# GEMMA_CHAT_API_KEY: ''             # usually empty for a local server
 
 #-----------------------------------------------------------------------------
 # Sentry (crash / error reporting).

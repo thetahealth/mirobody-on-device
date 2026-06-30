@@ -41,6 +41,115 @@ const buildSettingsMenu = require("./topbar").buildSettingsMenu;
 var t = i18n.t;
 
 //----------------------------------------------------------------------------
+// On-device provider (desktop only). The Electron preload exposes window.ondevice
+// (see electron/preload.js + electron/ondevice.js); a plain browser has no bridge,
+// so the on-device option never appears there. Name/code match the other clients.
+
+var ONDEVICE_NAME = "Gemma 4 · On-device";
+var ONDEVICE_CODE = "__ondevice_gemma4__";
+
+function onDeviceBridge() {
+    return (typeof window !== "undefined") ? window.ondevice : null;
+}
+function isOnDeviceProvider(name) {
+    return !!onDeviceBridge() && name === ONDEVICE_NAME;
+}
+
+// Modal to download / manage the on-device model. Mirrors the Android/iOS/Qt
+// affordance; reuses the app's overlay+card pattern (see modals.js). English-only
+// for now — localize via i18n strings in a follow-up.
+function showOnDeviceModal() {
+    var bridge = onDeviceBridge();
+    if (!bridge) { return; }
+
+    var backdrop = ui.dom("div", {
+        position: "fixed", inset: "0", background: "rgba(0, 0, 0, 0.4)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px", zIndex: "1000"
+    });
+    var card = ui.dom("div", {
+        background: color.background, borderRadius: "14px", padding: "20px 22px",
+        width: "100%", maxWidth: "420px",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
+        display: "flex", flexDirection: "column", gap: "12px"
+    });
+    card.appendChild(ui.setText(ui.dom("div", {
+        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
+    }), "On-device private AI"));
+    card.appendChild(ui.setText(ui.dom("div", {
+        fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.4"
+    }), "Gemma 4 runs entirely on this computer. Your messages never leave the "
+       + "device and work offline. This needs a one-time model download and enough "
+       + "free memory."));
+
+    var statusLine = ui.dom("div", { fontSize: "0.85rem", color: color.onSurfaceVar });
+    card.appendChild(statusLine);
+
+    var track = ui.dom("div", {
+        height: "6px", borderRadius: "3px", background: color.outlineVar,
+        overflow: "hidden", display: "none"
+    });
+    var fill = ui.dom("div", { height: "100%", width: "0%", background: color.primary });
+    track.appendChild(fill);
+    card.appendChild(track);
+
+    var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end", gap: "8px" });
+    card.appendChild(actions);
+
+    var unsub = null;
+    function dismiss() {
+        if (unsub) { unsub(); unsub = null; }
+        if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
+    }
+
+    function render(status, progress) {
+        ui.clear(actions);
+        var downloading = status === "downloading";
+        ui.setStyle(track, { display: downloading ? "block" : "none" });
+        if (downloading && typeof progress === "number") {
+            fill.style.width = Math.round(progress * 100) + "%";
+        }
+        if (status === "ready") {
+            ui.setText(statusLine, "Ready — runs offline.");
+            actions.appendChild(button("Delete model", false, { click: function () {
+                bridge.deleteModel().then(function () { render("absent"); });
+            } }));
+            actions.appendChild(button("Done", true, { click: dismiss }));
+        } else if (downloading) {
+            ui.setText(statusLine, "Downloading… "
+                + (typeof progress === "number" ? Math.round(progress * 100) + "%" : ""));
+            actions.appendChild(button("Cancel", false, { click: function () {
+                bridge.cancelDownload();
+            } }));
+        } else {
+            ui.setText(statusLine, status === "failed"
+                ? "Download failed." : "Download required.");
+            actions.appendChild(button("Close", false, { click: dismiss }));
+            actions.appendChild(button(status === "failed" ? "Retry" : "Download model", true, {
+                click: function () { bridge.startDownload(); render("downloading", 0); }
+            }));
+        }
+    }
+
+    // Live progress updates pushed from the main process.
+    unsub = bridge.onDownloadProgress(function (p) {
+        if (!p) { return; }
+        render(p.status, p.progress);
+        if (p.status === "ready") {
+            // Reflect readiness and let the user dismiss.
+        }
+    });
+
+    bridge.getStatus().then(function (s) { render((s && s.status) || "absent"); });
+
+    backdrop.addEventListener("click", function (evt) {
+        if (evt.target === backdrop) { dismiss(); }
+    });
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+}
+
+//----------------------------------------------------------------------------
 
 function buildChat() {
     var wrap = ui.dom("section", {
@@ -84,6 +193,12 @@ function buildChat() {
         } else {
             localStorage.removeItem(PROVIDER_KEY);
         }
+        // Picking the on-device provider before the model is downloaded → prompt.
+        if (isOnDeviceProvider(state.provider)) {
+            onDeviceBridge().getStatus().then(function (s) {
+                if (!s || s.status !== "ready") { showOnDeviceModal(); }
+            });
+        }
     });
 
     function setProviderOptions(items) {
@@ -94,10 +209,19 @@ function buildChat() {
             if (!items[i] || !items[i].name) {
                 continue;
             }
+            if (items[i].name === ONDEVICE_NAME) { continue; }   // re-added below
             names.push(items[i].name);
             var opt = ui.dom("option", null, { value: items[i].name });
             ui.setText(opt, items[i].name);
             providerSelect.appendChild(opt);
+        }
+
+        // Desktop only: always offer the on-device provider (runs locally, offline).
+        if (onDeviceBridge()) {
+            names.push(ONDEVICE_NAME);
+            var odOpt = ui.dom("option", null, { value: ONDEVICE_NAME });
+            ui.setText(odOpt, ONDEVICE_NAME);
+            providerSelect.appendChild(odOpt);
         }
 
         if (names.length === 0) {
@@ -1103,59 +1227,78 @@ function buildChat() {
                               subject: subjectId };
             }
 
-            net.stream(
-                "/api/chat",
-                agentBody,
-                function (chunk) { // onmessage
-                    if (handled) { return; }
-                    var ev = parseAgentChunk(chunk);
-                    if (ev.conversation) {
-                        // The server's thread id for this turn; remember it so the
-                        // next turn continues the same thread and Share targets it.
-                        if (ev.conversation.id) { state.currentConversationId = ev.conversation.id; }
+            var streamOnMessage = function (chunk) { // onmessage
+                if (handled) { return; }
+                var ev = parseAgentChunk(chunk);
+                if (ev.conversation) {
+                    // The server's thread id for this turn; remember it so the
+                    // next turn continues the same thread and Share targets it.
+                    if (ev.conversation.id) { state.currentConversationId = ev.conversation.id; }
+                    return;
+                }
+                if (ui.isString(ev.reply)) {
+                    acc += ev.reply;
+                    streamRender(bubble, acc);
+                    bubble.style.animation = ""; // stop the cursor blink once text streams
+                    log.scrollTop = log.scrollHeight;
+                } else if (ui.isString(ev.thinking)) {
+                    appendThinking(ev.thinking);
+                } else if (ev.upload) {
+                    appendUpload(ev.upload);
+                } else if (ev.transcript) {
+                    appendTranscript(ev.transcript);
+                } else if (ev.tool) {
+                    appendToolCall(ev.tool);
+                } else if (ev.cost) {
+                    assistantCost = ev.cost;
+                    addFooter();   // cost is the last event; don't wait for stream close
+                } else if (ev.error) {
+                    handled = true;
+                    settleUploads();
+                    settleTools();
+                    onStreamError(bubble, "Error: " + ev.error, finish);
+                }
+            };
+            var streamOnComplete = function () { // oncomplete
+                if (handled) { return; }
+                handled = true;
+                settleUploads();
+                settleTools();
+                addFooter();
+                finish(acc);
+            };
+            var streamOnError = function (reason) { // onerror
+                if (handled) { return; }
+                handled = true;
+                settleUploads();
+                settleTools();
+                // A 401 on the stream bounces to login centrally (see net.js),
+                // so this path only handles genuine stream/transport errors.
+                onStreamError(bubble, acc || ("Error: " + (ui.isString(reason) ? reason : "request failed")), finish);
+            };
+
+            // On-device (desktop): drive the local engine instead of the server SSE.
+            // It emits the same {type:"reply"} chunk strings, so the handlers above
+            // are reused verbatim; completion/errors arrive on the same callbacks.
+            if (isOnDeviceProvider(turnProvider)) {
+                var history = [];
+                for (var hi = 0; hi < state.messages.length; hi ++) {
+                    var hm = state.messages[hi];
+                    if (hm && hm.content) { history.push({ role: hm.role, content: hm.content }); }
+                }
+                onDeviceBridge().getStatus().then(function (s) {
+                    if (!s || s.status !== "ready") {
+                        handled = true;
+                        onStreamError(bubble, "Error: on-device model not downloaded.", finish);
+                        showOnDeviceModal();
                         return;
                     }
-                    if (ui.isString(ev.reply)) {
-                        acc += ev.reply;
-                        streamRender(bubble, acc);
-                        bubble.style.animation = ""; // stop the cursor blink once text streams
-                        log.scrollTop = log.scrollHeight;
-                    } else if (ui.isString(ev.thinking)) {
-                        appendThinking(ev.thinking);
-                    } else if (ev.upload) {
-                        appendUpload(ev.upload);
-                    } else if (ev.transcript) {
-                        appendTranscript(ev.transcript);
-                    } else if (ev.tool) {
-                        appendToolCall(ev.tool);
-                    } else if (ev.cost) {
-                        assistantCost = ev.cost;
-                        addFooter();   // cost is the last event; don't wait for stream close
-                    } else if (ev.error) {
-                        handled = true;
-                        settleUploads();
-                        settleTools();
-                        onStreamError(bubble, "Error: " + ev.error, finish);
-                    }
-                },
-                function () { // oncomplete
-                    if (handled) { return; }
-                    handled = true;
-                    settleUploads();
-                    settleTools();
-                    addFooter();
-                    finish(acc);
-                },
-                function (reason) { // onerror
-                    if (handled) { return; }
-                    handled = true;
-                    settleUploads();
-                    settleTools();
-                    // A 401 on the stream bounces to login centrally (see net.js),
-                    // so this path only handles genuine stream/transport errors.
-                    onStreamError(bubble, acc || ("Error: " + (ui.isString(reason) ? reason : "request failed")), finish);
-                }
-            );
+                    onDeviceBridge().generate(history, streamOnMessage, streamOnComplete, streamOnError);
+                });
+                return;
+            }
+
+            net.stream("/api/chat", agentBody, streamOnMessage, streamOnComplete, streamOnError);
             return;
         }
 

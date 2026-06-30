@@ -323,6 +323,28 @@ ClientMap load_clients(const mirobody::Config& cfg) {
         clients["mirothinker-1.7"] = mirobody::llm::make_client<mirobody::llm::MiroThinkerClient>(opt);
     }
 
+    // gemma-4-e2b -- the same model the native apps run on-device (Gemma 4 E2B),
+    // served here over a local OpenAI-compatible endpoint (Ollama / llama.cpp /
+    // vLLM). Lets the mobile clients chat with a server-hosted copy -- handy for
+    // checking the model's behaviour without the ~2.5 GB on-device download.
+    // Registered only when a base URL is configured, so it never shows as a broken
+    // provider by default (the built-ins above are always-on and error at call).
+    {
+        const std::string base = cfg.store.get_str("GEMMA_CHAT_BASE_URL",
+                                     cfg.store.get_str("OLLAMA_BASE_URL", ""));
+        if (!base.empty()) {
+            mirobody::llm::OpenAIChatOptions opt;
+            opt.api_key       = cfg.store.get_str("GEMMA_CHAT_API_KEY");  // usually empty for a local server
+            opt.base_url      = base;   // OpenAI-compatible /v1 root; client appends /chat/completions
+            opt.model         = cfg.store.get_str("GEMMA_CHAT_MODEL", "gemma-4-e2b");
+            opt.input_price   = 0.0;    // local inference -- no per-token cost
+            opt.output_price  = 0.0;
+            opt.tools_json    = openai_tools;     // tool use depends on the serving stack
+            opt.tool_executor = &run_tool_for_user;
+            clients["gemma-4-e2b"] = mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt);
+        }
+    }
+
     return clients;
 }
 

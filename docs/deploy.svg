@@ -56,9 +56,10 @@
 
   <!-- ===== Column 3: LLM ===== -->
   <rect x="700" y="150" width="220" height="80" rx="10" fill="#f3e8f7" stroke="#8a4fb0"/>
-  <text x="810" y="178" text-anchor="middle" font-size="15" font-weight="bold" fill="#234">LLM providers</text>
-  <text x="810" y="200" text-anchor="middle" font-size="10" fill="#456">OpenAI · Gemini · MiroThinker</text>
-  <text x="810" y="217" text-anchor="middle" font-size="10" fill="#456">Qwen · DeepSeek</text>
+  <text x="810" y="172" text-anchor="middle" font-size="14" font-weight="bold" fill="#234">LLM providers</text>
+  <text x="810" y="190" text-anchor="middle" font-size="10" font-weight="bold" fill="#2f7d4a">on-device · Gemma</text>
+  <text x="810" y="206" text-anchor="middle" font-size="10" fill="#456">OpenAI · Gemini · MiroThinker</text>
+  <text x="810" y="221" text-anchor="middle" font-size="10" fill="#456">Qwen · DeepSeek</text>
 
   <!-- ===== Flows (bidirectional, horizontal curves on box edges) ===== -->
   <!-- Web <-> Server -->

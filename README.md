@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/where-your-data-comes-from.svg" alt="Where your data comes from — wearables, phone health, lab results, clinic records, and everyday photo/voice logging all flow into mirobody, which normalizes everything to FHIR R4, then an AI model (OpenAI, Gemini, …) answers your questions in plain language." width="920">
+  <img src="docs/where-your-data-comes-from.svg" alt="Where your data comes from — wearables, phone health, lab results, clinic records, and everyday photo/voice logging all flow into mirobody, which normalizes everything to FHIR R4, then an AI model — on-device Gemma, or OpenAI / Gemini — answers your questions in plain language." width="920">
 </p>
 
 <p align="center">
@@ -27,6 +27,9 @@ up the core:
 - **LLM clients** ([src/llm/](src/llm/)) - one streaming
   [`llm::Client`](src/llm/client.hpp) per provider (OpenAI, Google Gemini, and
   MiroThinker today), with new providers slotting in behind the same contract.
+  The native apps (Android · iOS · Qt · Electron) additionally offer a fully
+  **on-device** option — Gemma 4 via LiteRT-LM (llama.cpp on Electron) — so chat
+  can run with no server and no network at all.
 - **MCP tools** ([src/mcp/](src/mcp/) + [res/mcp_tools/](res/mcp_tools/)) -
   server-side tools exposed over a Model Context Protocol endpoint for clients
   to discover and call.
@@ -1035,10 +1038,13 @@ entity / data controller responsible for the final compliance posture.
   opt-in and off by default, and the AI assistant is **read-only** over another
   member's data (see [Care circles](#care-circles)).
 
-- **HIPAA — choose a BAA-covered LLM.** The one place PHI can leave is the LLM
-  call. The public AI Studio / OpenAI-direct endpoints are not covered by a
-  Business Associate Agreement, so for PHI route the same models through their
-  BAA-eligible enterprise surfaces — both already supported:
+- **HIPAA — keep the LLM on-device, or choose a BAA-covered one.** The one place
+  PHI can leave is the LLM call — so the native apps can run the model **fully
+  on-device** (Gemma 4; pick the "On-device" provider), in which case nothing
+  leaves at all. When you do use a hosted model, the public AI Studio /
+  OpenAI-direct endpoints are not covered by a Business Associate Agreement, so
+  for PHI route the same models through their BAA-eligible enterprise surfaces —
+  both already supported:
   - **Google Gemini via Vertex AI** — set `GOOGLE_GENAI_USE_VERTEXAI=1` with
     `GCP_PROJECT` / `VERTEX_LOCATION` and an OAuth access token; calls go to
     Google Cloud (covered by Google's BAA) instead of AI Studio.

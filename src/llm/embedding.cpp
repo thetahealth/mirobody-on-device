@@ -45,6 +45,8 @@ struct Provider {
     std::vector<std::string> headers;   // beyond Content-Type (set by HttpRequest)
     int batch_limit = 1;
     Kind kind = Kind::Gemini;
+    std::string model;                  // model name for the OpenAI-compatible body
+    int dimensions = kDimensions;       // requested output dim; <=0 => omit (model native)
     std::string error;                  // non-empty => misconfigured
 };
 
@@ -118,22 +120,44 @@ Provider make_provider(const Config& cfg, const std::string& name) {
         }
         p.url = base + "/embeddings";
         p.headers.push_back("Authorization: Bearer " + key);
+        p.model = "text-embedding-v4";
         p.batch_limit = 10;
         p.kind = Kind::OpenAiCompatible;
         return p;
+    } else if (name == "gemma" || name == "embeddinggemma") {
+        // EmbeddingGemma (Google's open 308M text embedder) served locally over an
+        // OpenAI-compatible /embeddings endpoint (Ollama, llama.cpp server, ...).
+        // Fully local — pairs with the on-device chat path; no text leaves the host.
+        const std::string base = trim_trailing_slash(
+            cfg.store.get_str("EMBEDDING_GEMMA_BASE_URL",
+                cfg.store.get_str("OLLAMA_BASE_URL", "http://localhost:11434/v1")));
+        p.url = base + "/embeddings";
+        // Local servers usually need no key; attach one only if configured.
+        const std::string key = cfg.store.get_str("EMBEDDING_GEMMA_API_KEY");
+        if (!key.empty()) { p.headers.push_back("Authorization: Bearer " + key); }
+        p.model = cfg.store.get_str("EMBEDDING_GEMMA_MODEL", "embeddinggemma");
+        // EmbeddingGemma is natively 768-dim. Default to the model's native size
+        // (0 => omit a dimensions override); set EMBEDDING_GEMMA_DIM to request a
+        // Matryoshka-truncated size (512 / 256 / 128) if the endpoint honours it.
+        p.dimensions = static_cast<int>(cfg.store.get_int("EMBEDDING_GEMMA_DIM", 0));
+        // One input per request, for broad endpoint compatibility (memory recall
+        // embeds a single text at a time anyway). Array-capable servers can batch.
+        p.batch_limit = 1;
+        p.kind = Kind::OpenAiCompatible;
+        return p;
     }
-    p.error = "unknown embedding provider: '" + name + "' (available: gemini, qwen)";
+    p.error = "unknown embedding provider: '" + name + "' (available: gemini, qwen, gemma)";
     return p;
 }
 
-std::string build_body(Kind kind, const std::vector<std::string>& chunk) {
+std::string build_body(const Provider& p, const std::vector<std::string>& chunk) {
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> w(buf);
     auto str = [&](const std::string& s) {
         w.String(s.c_str(), static_cast<rapidjson::SizeType>(s.size()));
     };
 
-    if (kind == Kind::Gemini) {
+    if (p.kind == Kind::Gemini) {
         // {"requests":[{"model":"models/gemini-embedding-001",
         //   "content":{"parts":[{"text":"..."}]},"output_dimensionality":1024}, ...]}
         w.StartObject();
@@ -149,12 +173,12 @@ std::string build_body(Kind kind, const std::vector<std::string>& chunk) {
             w.StartObject(); w.Key("text"); str(chunk[i]); w.EndObject();
             w.EndArray();
             w.EndObject();
-            w.Key("output_dimensionality"); w.Int(kDimensions);
+            w.Key("output_dimensionality"); w.Int(p.dimensions);
             w.EndObject();
         }
         w.EndArray();
         w.EndObject();
-    } else if (kind == Kind::VertexPredict) {
+    } else if (p.kind == Kind::VertexPredict) {
         // {"instances":[{"content":"..."}],"parameters":{"outputDimensionality":1024}}
         w.StartObject();
         w.Key("instances");
@@ -164,17 +188,18 @@ std::string build_body(Kind kind, const std::vector<std::string>& chunk) {
         }
         w.EndArray();
         w.Key("parameters");
-        w.StartObject(); w.Key("outputDimensionality"); w.Int(kDimensions); w.EndObject();
+        w.StartObject(); w.Key("outputDimensionality"); w.Int(p.dimensions); w.EndObject();
         w.EndObject();
     } else {
-        // {"model":"text-embedding-v4","input":["...", ...],"dimensions":1024}
+        // {"model":"<model>","input":["...", ...],"dimensions":<n>} — `dimensions`
+        // omitted when <=0 so the model's native size is used (e.g. EmbeddingGemma 768).
         w.StartObject();
-        w.Key("model"); w.String("text-embedding-v4");
+        w.Key("model"); str(p.model);
         w.Key("input");
         w.StartArray();
         for (std::size_t i = 0; i < chunk.size(); ++i) { str(chunk[i]); }
         w.EndArray();
-        w.Key("dimensions"); w.Int(kDimensions);
+        if (p.dimensions > 0) { w.Key("dimensions"); w.Int(p.dimensions); }
         w.EndObject();
     }
     return std::string(buf.GetString(), buf.GetSize());
@@ -328,7 +353,7 @@ EmbeddingResult text_embedding(const Config& cfg, const std::vector<std::string>
             unique.begin() + static_cast<std::ptrdiff_t>(
                 std::min(unique.size(), i + static_cast<std::size_t>(p.batch_limit))));
 
-        std::string body = build_body(p.kind, chunk);
+        std::string body = build_body(p, chunk);
         std::string resp, err;
         if (!post_chunk(p, body, cfg, &resp, &err)) {
             result.error = err;

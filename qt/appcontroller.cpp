@@ -1,6 +1,8 @@
 #include "appcontroller.hpp"
 
 #include "apiclient.hpp"
+#include "modeldownloader.hpp"
+#include "locallmengine.hpp"
 
 #include <QSettings>
 #include <QLocale>
@@ -25,6 +27,11 @@ const char* kLanguageKey = "mirobody-language";
 const char* kFontKey     = "mirobody-font-offset";
 
 const char* kDefaultModel = "gemini-2.5-flash";
+
+// Synthetic, client-only provider that runs Gemma 4 fully on-device (no server).
+// Mirrors ProviderInfo.onDevice on Android/iOS.
+const char* kOnDeviceName = "Gemma 4 \xC2\xB7 On-device"; // "Gemma 4 · On-device" (UTF-8)
+const char* kOnDeviceCode = "__ondevice_gemma4__";
 
 // The ten languages the app offers (config.js LANGUAGES); the picker shows
 // these and the chosen code rides on each agent request.
@@ -72,6 +79,11 @@ AppController::AppController(QObject* parent)
 
     api_->setBaseUrl(baseUrl_);
     api_->setToken(token);
+
+    // On-device private LLM (Gemma 4 via LiteRT-LM): the downloader fetches the model
+    // on demand; the engine loads it lazily on the first local turn.
+    downloader_  = new ModelDownloader(this);
+    localEngine_ = new LocalLmEngine(this);
 
     if (!token.isEmpty()) {
         loggedIn_ = true;
@@ -232,6 +244,9 @@ void AppController::loadProviders() {
                 m.insert("name", name);
                 providers_.push_back(m);
             }
+            // Always offer the on-device provider alongside the server's.
+            appendOnDeviceProvider();
+            names << QString::fromUtf8(kOnDeviceName);
             // Restore the cached selection if still on offer, else default to the
             // first provider (config/chat.js setProviderOptions).
             if (!names.isEmpty() && !names.contains(provider_)) {
@@ -240,7 +255,13 @@ void AppController::loadProviders() {
             emit providersChanged();
         },
         [this](const QString&, int code) {
-            if (code == 401) signOut();
+            if (code == 401) { signOut(); return; }
+            // Server unreachable, but on-device chat still works offline — keep it.
+            if (providers_.isEmpty()) {
+                appendOnDeviceProvider();
+                if (provider_.isEmpty()) setProvider(QString::fromUtf8(kOnDeviceName));
+                emit providersChanged();
+            }
         });
 }
 
@@ -260,6 +281,12 @@ void AppController::sendMessage(const QString& text) {
     const QString turnProvider = provider_;
 
     setStreaming(true);
+
+    // --- On-device mode: route to the local engine, no server ------------
+    if (turnProvider == QString::fromUtf8(kOnDeviceName)) {
+        sendOnDeviceMessage(q, assistantRow);
+        return;
+    }
 
     // --- Agent mode: a provider ("Agent/provider") is selected ------------
     if (!turnProvider.isEmpty()) {
@@ -389,7 +416,68 @@ void AppController::stopStreaming() {
         stream_->abort();
         stream_ = nullptr;
     }
+    if (localEngine_) localEngine_->cancel();
     setStreaming(false);
+}
+
+//------------------------------------------------------------------------------
+// On-device chat (Gemma 4 via LiteRT-LM) — emits the same reply/finish/fail flow
+// the SSE path does, so ChatModel updates identically.
+//------------------------------------------------------------------------------
+
+void AppController::appendOnDeviceProvider() {
+    QVariantMap m;
+    m.insert("code", QString::fromUtf8(kOnDeviceCode));
+    m.insert("name", QString::fromUtf8(kOnDeviceName));
+    providers_.push_back(m);
+}
+
+void AppController::sendOnDeviceMessage(const QString& question, int assistantRow) {
+    Q_UNUSED(question);
+    const QString turnProvider = QString::fromUtf8(kOnDeviceName);
+    if (!downloader_->isReady()) {
+        failTurn(assistantRow - 1, assistantRow,
+                 QStringLiteral("Error: on-device model not downloaded yet."));
+        return;
+    }
+
+    // Conversation context: every row up to and including the new user turn (i.e.
+    // all but the empty assistant placeholder at assistantRow).
+    QVariantList history;
+    const QVariantList snap = chat_->snapshot();
+    for (int i = 0; i < assistantRow && i < snap.size(); ++i) {
+        const QVariantMap m = snap.at(i).toMap();
+        history.push_back(QVariantMap{
+            {QStringLiteral("role"), m.value("role").toString()},
+            {QStringLiteral("content"), m.value("content").toString()},
+        });
+    }
+
+    auto acc   = std::make_shared<QString>();
+    auto conns = std::make_shared<QList<QMetaObject::Connection>>();
+    auto cleanup = [this, conns]() {
+        for (const auto& c : *conns) disconnect(c);
+        conns->clear();
+    };
+
+    conns->push_back(connect(localEngine_, &LocalLmEngine::replyChunk, this,
+        [this, assistantRow, acc](const QString& delta) {
+            *acc += delta;
+            chat_->setContent(assistantRow, *acc);
+        }));
+    conns->push_back(connect(localEngine_, &LocalLmEngine::finished, this,
+        [this, assistantRow, turnProvider, cleanup]() {
+            cleanup();
+            finishTurn(assistantRow, turnProvider);
+        }));
+    conns->push_back(connect(localEngine_, &LocalLmEngine::failed, this,
+        [this, assistantRow, acc, cleanup](const QString& reason) {
+            cleanup();
+            failTurn(assistantRow - 1, assistantRow,
+                     acc->isEmpty() ? (QStringLiteral("Error: ") + reason) : *acc);
+        }));
+
+    localEngine_->generate(downloader_->modelPath(), history);
 }
 
 //------------------------------------------------------------------------------
