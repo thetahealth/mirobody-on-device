@@ -5,7 +5,7 @@
       <path d="M0 0 L10 5 L0 10 z" fill="#7a8aa0"/>
     </marker>
   </defs>
-  <text x="480" y="-8" text-anchor="middle" font-size="16" fill="#456">Invite the people you trust — then <tspan font-weight="bold" fill="#4072b8">choose what to share.</tspan></text>
+  <text x="480" y="-8" text-anchor="middle" font-size="16" fill="#456">Invite the people you trust — then choose what to share.</text>
   <!-- ============ LEFT: how it works (3 steps) ============ -->
   <text x="120" y="40" text-anchor="middle" font-size="11" font-weight="bold" fill="#5a6b7a">HOW IT WORKS</text>
   <circle cx="48" cy="86" r="13" fill="#4072b8"/>
@@ -84,5 +84,5 @@
   <text x="712" y="304" font-size="12.5" font-weight="bold" fill="#5e2e80">Then the AI can answer</text>
   <text x="712" y="328" font-size="11" fill="#5e2e80">“How is my family doing?”</text>
   <text x="712" y="348" font-size="9" fill="#5a6b7a">reads only what members chose to share</text>
-  <text x="480" y="404" text-anchor="middle" font-size="13" fill="#234">Invite-only, acceptance required — <tspan font-weight="bold" fill="#4072b8">every share is your choice.</tspan></text>
+  <text x="480" y="404" text-anchor="middle" font-size="13" fill="#234">Invite-only, acceptance required — every share is your choice.</text>
 </svg>
