@@ -37,7 +37,14 @@ CREATE TABLE IF NOT EXISTS user_vendor_accounts (
     vendor_id        TEXT    NOT NULL,                 -- stable vendor key: 'vitalera', 'terra', ...
     external_user_id TEXT    NOT NULL,                 -- the vendor's id for this user (consent/provision output)
     created_at       INTEGER NOT NULL,                 -- unix milliseconds (app-stamped)
+    updated_at       INTEGER,                          -- last modification, unix ms (bind / verify / token write)
     verified_at      INTEGER,                          -- ownership confirmed, unix ms; NULL = pending (no fetch allowed)
+    -- Per-user OAuth tokens, Fernet-encrypted at rest (VENDOR_TOKEN_ENCRYPTION_KEY).
+    -- NULL until stored; the server pulls each user's data with these and refreshes
+    -- the access token via the vendor's refresh grant when it expires.
+    access_token     TEXT,                             -- encrypted OAuth access token
+    refresh_token    TEXT,                             -- encrypted OAuth refresh token (may be absent)
+    token_expires_at INTEGER,                          -- access token expiry, unix ms; NULL = unknown/non-expiring
     -- PK covers per-(user,vendor) lookup; the UNIQUE both enforces single
     -- ownership and indexes the reverse (vendor account -> user) lookup.
     PRIMARY KEY (user_id, vendor_id),

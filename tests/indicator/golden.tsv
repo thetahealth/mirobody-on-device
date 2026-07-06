@@ -1,0 +1,36 @@
+# Golden resolve cases for src/indicator. One per line:
+#   <term> <TAB> <expected_canonical_LOINC_code> <TAB> <note>
+# The harness (resolve_test.cpp) reports two numbers per the M1 milestone:
+#   recall  = expected code appears anywhere in the full match set
+#             (i.e. the analyte/surface was recognized — isolates the RECALL stage)
+#   top-1   = expected code is the #1 ranked result
+#             (isolates the RANKING stage — moves once the M3 rerank port lands)
+# Grow this file with every deterministic error found; each line is a locked
+# regression once it passes.
+
+# ── clean analyte names (en + zh): recall should pass now; top-1 awaits rerank ──
+blood glucose	2339-0	Glucose in Blood
+葡萄糖	2339-0	glucose (zh component)
+Glucose	2339-0	glucose (en)
+血红蛋白	718-7	Hemoglobin in Blood
+Hemoglobin	718-7	hemoglobin (en)
+肌酐	2160-0	Creatinine in Ser/Plas
+Creatinine	2160-0	creatinine (en)
+甘油三酯	2571-8	Triglyceride in Ser/Plas
+促甲状腺激素	3016-3	Thyrotropin / TSH
+丙氨酸氨基转移酶	1742-6	ALT in Ser/Plas
+钙	17861-6	Calcium in Ser/Plas
+Calcium	17861-6	calcium (en)
+
+# ── organism / microbiology (the bacteria/virus pain set) ──
+烟曲霉	101250-9	Aspergillus fumigatus (works at M1)
+Aspergillus fumigatus	101250-9	en organism name
+
+# ── colloquial / abbreviation / reordered: expect MISS at M1 (M2 alias/curated) ──
+platelet count	777-3	count vs '#' wording gap
+血小板	777-3	platelets (zh component, count vs presence)
+HbA1c	4548-4	abbreviation, needs alias
+丙肝抗体	16128-1	colloquial Hep C Ab (curated)
+新型冠状病毒	94500-6	SARS-CoV-2 colloquial (M2)
+乙型肝炎病毒表面抗原	5196-1	HBsAg phrasing gap (M2)
+白色念珠菌	14227-3	Candida albicans phrasing gap (M2)

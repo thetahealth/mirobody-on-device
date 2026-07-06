@@ -26,6 +26,8 @@
 
 #include "client/http_client.hpp"
 
+#include <rapidjson/document.h>
+
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
@@ -179,7 +181,73 @@ public:
         return url;
     }
 
+    // Withings token exchange is a form POST to {base}/v2/oauth2 with
+    // action=requesttoken, wrapped in the standard {status, body:{...}} envelope
+    // (not the plain OAuth2 JSON), so it doesn't use the shared helper.
+    TokenSet exchange_code(const std::string& code, const std::string& redirect_uri) override {
+        return token_action("authorization_code", "code", code, redirect_uri);
+    }
+    TokenSet refresh(const std::string& refresh_token) override {
+        return token_action("refresh_token", "refresh_token", refresh_token, std::string());
+    }
+
 private:
+    // POST action=requesttoken and unwrap the {status, body:{access_token,...}}
+    // envelope. `grant_type` selects exchange vs refresh; (param_name, param_value)
+    // carries the code or the refresh token.
+    TokenSet token_action(const std::string& grant_type, const char* param_name,
+                          const std::string& param_value, const std::string& redirect_uri) {
+        if (config().client_id.empty() || config().client_secret.empty()) {
+            throw VendorError(info_.id + ": token exchange needs WITHINGS_CLIENT_ID + WITHINGS_CLIENT_SECRET");
+        }
+        std::string body = "action=requesttoken&grant_type=" + url_encode(grant_type) +
+                           "&client_id=" + url_encode(config().client_id) +
+                           "&client_secret=" + url_encode(config().client_secret) +
+                           "&" + param_name + "=" + url_encode(param_value);
+        if (!redirect_uri.empty()) body += "&redirect_uri=" + url_encode(redirect_uri);
+
+        client::HttpRequest rq;
+        rq.url          = base_url() + "/v2/oauth2";
+        rq.body         = std::move(body);
+        rq.content_type = "application/x-www-form-urlencoded";
+        rq.headers      = { "Accept: application/json" };
+        rq.request_timeout_ms = 30000;
+
+        client::HttpResponse res = client::HttpClient().post(rq);
+        if (res.status < 200 || res.status >= 300) {
+            throw VendorError(info_.id + ": token request failed (HTTP " +
+                              std::to_string(res.status) + "): " + res.body.substr(0, 300));
+        }
+        rapidjson::Document d;
+        d.Parse(res.body.c_str(), res.body.size());
+        if (d.HasParseError() || !d.IsObject()) {
+            throw VendorError(info_.id + ": token response was not valid JSON");
+        }
+        // Withings signals errors with a non-zero top-level `status`.
+        if (!d.HasMember("status") || !d["status"].IsInt() || d["status"].GetInt() != 0 ||
+            !d.HasMember("body") || !d["body"].IsObject()) {
+            throw VendorError(info_.id + ": token request error: " + res.body.substr(0, 200));
+        }
+        const rapidjson::Value& b = d["body"];
+        TokenSet t;
+        if (b.HasMember("access_token") && b["access_token"].IsString()) {
+            t.access_token.assign(b["access_token"].GetString(), b["access_token"].GetStringLength());
+        }
+        if (b.HasMember("refresh_token") && b["refresh_token"].IsString()) {
+            t.refresh_token.assign(b["refresh_token"].GetString(), b["refresh_token"].GetStringLength());
+        }
+        if (b.HasMember("expires_in")) {
+            const rapidjson::Value& e = b["expires_in"];
+            if (e.IsInt64())    t.expires_in = e.GetInt64();
+            else if (e.IsInt())  t.expires_in = e.GetInt();
+            else if (e.IsUint()) t.expires_in = e.GetUint();
+        }
+        if (t.access_token.empty()) {
+            throw VendorError(info_.id + ": token response has no access_token");
+        }
+        return t;
+    }
+
     static void require_window(std::int64_t s, std::int64_t e) {
         if (s < 0 || e < 0) {
             throw VendorError("withings: this domain needs ISO-8601 start/end bounds "

@@ -30,6 +30,8 @@ add_executable(mirobody_tests
     transcode/document_test.cpp
     fhir/units_test.cpp
     fhir/resource_test.cpp
+    indicator/normalize_test.cpp
+    indicator/resolve_test.cpp
 )
 
 # Link the self-registering MCP tool and agent objects directly into the test

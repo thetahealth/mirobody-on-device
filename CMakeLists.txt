@@ -58,6 +58,11 @@ find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(WebP CONFIG REQUIRED)
 
+# zlib — used by src/indicator/lexicon.cpp to (de)compress the lexicon artifact.
+# Already present transitively via libpng; required explicitly so lexicon.cpp can
+# include <zlib.h> and link ZLIB::ZLIB directly.
+find_package(ZLIB REQUIRED)
+
 # Document transcoder (src/transcode/document). xlnt reads .xlsx; the
 # xlnt-community fork (the one vcpkg ships) consumes cleanly at C++11, so
 # document.cpp builds as part of the C++11 core like the rest of the tree. CSV
@@ -207,7 +212,10 @@ set(MIROBODY_CORE_SOURCES
     src/user/email.cpp
     src/health/vendor_link.cpp
     src/health/vendor_service.cpp
+    src/health/vendor_fhir.cpp
+    src/health/werun.cpp
     src/health/ehr_connect.cpp
+    src/health/timeseries/ingest.cpp
     src/chat/service.cpp
     src/chat/chat.cpp
     src/chat/history.cpp
@@ -251,7 +259,13 @@ set(MIROBODY_CORE_SOURCES
     src/fhir/resource.cpp
     src/fhir/store.cpp
     src/fhir/rest.cpp
+    src/indicator/normalize.cpp
+    src/indicator/word.cpp
+    src/indicator/lexicon.cpp
+    src/indicator/resolve.cpp
+    src/indicator/sources.cpp
     src/health/vendor/vendor.cpp
+    src/health/vendor/oauth2.cpp
     src/health/vendor/registry.cpp
     src/health/vendor/platform/rook.cpp
     src/health/vendor/platform/spike.cpp
@@ -272,6 +286,10 @@ set(MIROBODY_CORE_SOURCES
     src/health/vendor/device/fitbit.cpp
     src/health/vendor/device/withings.cpp
     src/health/vendor/device/garmin.cpp
+    src/health/vendor/device/dexcom.cpp
+    src/health/vendor/device/oura.cpp
+    src/health/vendor/device/whoop.cpp
+    src/health/vendor/device/polar.cpp
     src/health/vendor/ehr/ehr.cpp
     src/health/vendor/ehr/directory.cpp
     src/llm/event.cpp
@@ -377,6 +395,7 @@ target_link_libraries(mirobody_core PUBLIC
     TIFF::TIFF
     WebP::webp
     WebP::webpdecoder
+    ZLIB::ZLIB
     ${_MIROBODY_DB_LINK}
 )
 
@@ -654,7 +673,7 @@ endif()
 
 option(MIROBODY_BUILD_TOOLS "Build debug CLIs under cli/" ON)
 if(MIROBODY_BUILD_TOOLS AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
-    foreach(_tool mirothinker openai_chat openai_responses gemini gemini_live openai_realtime google_jwt firebase_jwt jwt_keygen mcp agent aws_s3 aliyun_oss azure_blob vendor image document fhir file_parser file_rekey)
+    foreach(_tool mirothinker openai_chat openai_responses gemini gemini_live openai_realtime google_jwt firebase_jwt jwt_keygen mcp agent aws_s3 aliyun_oss azure_blob vendor image document fhir indicator file_parser file_rekey)
         add_executable(${_tool} cli/${_tool}.cpp)
         target_link_libraries(${_tool} PRIVATE mirobody_core)
         target_include_directories(${_tool} PRIVATE cli)

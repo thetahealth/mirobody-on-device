@@ -83,6 +83,15 @@ Python (ctypes/cffi), and so on.
 
 ![Mirobody v2 architecture at a glance — one C ABI, three functional groups (Health / AI / System), pluggable backends](docs/arch.svg)
 
+Health data flows the same way with or without a backend. With a server, device
+uploads land in a transient `health_ingest_staging` inbox that a background worker
+drains into Postgres (hot: `health_indicators` + `health_facts`) and Parquet (cold,
+raw), while `fhir_resources` keeps the FHIR-truth summary `Observation`s. Fully
+on-device, the same `mirobody_core` pipeline runs inline into a local SQLite file
+with the identical schema — no inbox, worker, or cold tier.
+
+![Mirobody v2 health data flow — with a backend, devices upload batches into a transient staging inbox that a background worker drains into Postgres (hot: health_indicators + health_facts) and Parquet (cold, raw), while fhir_resources holds the summary Observations; fully on-device the same mirobody_core ingest pipeline runs inline into SQLite with the same schema.](docs/health-data-flow.svg)
+
 ## Quick start
 
 The default desktop database backend is `POSTGRESQL`, so these install

@@ -39,6 +39,9 @@ var handlingRedirect = auth.consumeWeChatRedirect() || auth.consumeGitHubRedirec
 // Not a token-exchange redirect, so it doesn't suppress the render below.
 require("./ehr").consumeEhrRedirect();
 
+// Same for a vendor OAuth connect redirect (?vendor=connected|expired|error).
+require("./vendors").consumeVendorRedirect();
+
 // Restore any locally-persisted conversation before the first paint so the chat
 // panel comes up with prior messages (and scrolled to the latest). Best-effort:
 // if IndexedDB is unavailable we just render an empty conversation.

@@ -310,9 +310,11 @@ bool Server::start() {
     fhir_service_ = std::unique_ptr<fhir::FhirService>(
         new fhir::FhirService(*router_, cfg_, *db_, *jwt_));
     vendor_service_ = std::unique_ptr<health::VendorService>(
-        new health::VendorService(*router_, cfg_, *db_, *jwt_));
+        new health::VendorService(*router_, cfg_, *db_, *cache_, *jwt_));
     ehr_connect_service_ = std::unique_ptr<health::EhrConnectService>(
         new health::EhrConnectService(*router_, cfg_, *db_, *cache_, *jwt_));
+    werun_service_ = std::unique_ptr<health::WeRunService>(
+        new health::WeRunService(*router_, cfg_, *db_, *jwt_));
 
     // Build each registered agent's provider LLM clients from config. Agents
     // self-register at load time (res/agents/*.cpp); this populates their
@@ -439,6 +441,7 @@ void Server::teardown() {
     // Reverse of construction order: the router owns handlers capturing the
     // user service, which borrows db_/cache_/jwt_. Release outermost first.
     router_.reset();
+    werun_service_.reset();
     ehr_connect_service_.reset();
     vendor_service_.reset();
     fhir_service_.reset();

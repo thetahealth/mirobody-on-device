@@ -17,134 +17,258 @@ ownership, then it becomes usable. The link lives in the `user_vendor_accounts`
 table (`res/sql/<dialect>/1_health.sql`); a `UNIQUE(vendor_id, external_user_id)`
 constraint is the ownership backstop — two users can't both claim one account.
 
-The module is the HTTP front end (`vendor_service.*`) and the machinery behind it
-(`vendor_link.*`), sitting on top of the per-vendor clients in [`vendor/`](vendor/),
-plus a separate `ehr_connect.*` service for the SMART-on-FHIR EHR connect flow.
 Everything is `namespace mirobody::health` and mirrors the shape of
-`fhir::FhirService` / `user::UserService`.
+`fhir::FhirService` / `user::UserService`. The pieces:
 
-## `vendor_service.{hpp,cpp}` — `VendorService`
+| File | Type | Responsibility |
+| --- | --- | --- |
+| [`vendor_service.{hpp,cpp}`](vendor_service.hpp) | HTTP front end | wires the `/vendors/*` routes onto the `Router` |
+| [`vendor_link.{hpp,cpp}`](vendor_link.hpp) | machinery | storage, config, the verified-gated fetch path (no HTTP) |
+| [`vendor_fhir.{hpp,cpp}`](vendor_fhir.hpp) | mapping | vendor-native fetch JSON → FHIR R4 `Observation` bodies |
+| [`ehr_connect.{hpp,cpp}`](ehr_connect.hpp) | HTTP front end | the browser-driven SMART-on-FHIR EHR connect flow |
+| [`werun.{hpp,cpp}`](werun.hpp) | HTTP front end | WeChat WeRun step ingestion (decrypt → FHIR) |
+| [`vendor/`](vendor/) | clients | one `vendor::Vendor` per source, resolved by id |
+
+## `vendor_service` — `VendorService`
 
 The route owner. Constructing it borrows the `Config`, `Database`, and `Jwt` and
-wires three routes onto the `Router`; a caller instantiates it once at startup.
-Every route requires a bearer JWT (medical data) and is scoped to the
-authenticated user. Responses use the project envelope (`{"code","msg","data"}`),
-and `{id}` is a vendor key from the registry.
+wires three routes; instantiate once at startup. Every route requires a bearer JWT
+(medical data), is scoped to the authenticated user, uses the project envelope
+(`{"code","msg","data"}`), and takes `{id}` as a vendor key from the registry.
 
-- **`POST /vendors/{id}/bind`** — record the user's external account id as a
-  PENDING link (`upsert_pending`). Re-binding replaces the id and clears any
-  prior verification.
-- **`POST /vendors/{id}/bind/verify`** — prove ownership via the vendor's
-  consent/claim flow (`verify_consent`); on success the link is marked VERIFIED.
-- **`GET /vendors/{id}/data?domain=&start=&end=`** — fetch data for the verified
-  link over a time range (`fetch_for_user`).
+| Route | What it does | Backing |
+| --- | --- | --- |
+| `GET /vendors` | list the user's connected vendors: `[{id, verified, has_token, updated_at}]` (no secrets) | `VendorLinkStore::list` |
+| `GET /vendors/icons` | icon bundle `{id: "data:…;base64,…"}` — vendor site favicons fetched once on a background thread, held in memory (public; one same-origin request, no third-party calls from the browser) | `VendorService::build_icons` |
+| `GET /vendors/{id}/authorize` | build the vendor's OAuth authorize URL + stash single-use state; returns `{authorize_url}` (needs `VENDOR_REDIRECT_URI` + the vendor's `<ID>_CLIENT_ID`) | `Vendor::authorize_url` |
+| `GET /vendors/callback?code=&state=` | vendor's browser redirect back (no bearer; user from `state`): exchange code → store tokens (encrypted) → mark verified; `302` to the app with `?vendor=<status>` | `oauth_connect` |
+| `POST /vendors/{id}/bind` | record the external account id as a PENDING link (re-binding replaces the id + clears verification) | `upsert_pending` |
+| `POST /vendors/{id}/bind/verify` | prove ownership (`verify_consent`) → mark VERIFIED. Body `{code, redirect_uri}`: the server exchanges the OAuth code and stores that user's tokens (encrypted). Empty `code` → configured-credential probe | `verify_consent` |
+| `GET /vendors/{id}/data?domain=&start=&end=` | fetch data for the verified link over a time range (raw vendor JSON), using the user's stored token (auto-refreshed if expired) or the configured credential | `fetch_for_user` |
+| `POST /vendors/{id}/sync?domain=&start=&end=` | fetch → map to FHIR `Observation`s → persist via `FhirStore` (no `domain` ⇒ all the vendor's domains); returns `{posted, failed}` | `fetch_for_user` + `vendor_json_to_observations` |
+| `POST /vendors/{id}/unlink` | disconnect: best-effort revoke at the vendor, then delete the link row + stored tokens (GDPR/PIPL erasure). Idempotent | `unlink_for_user` |
 
-## `vendor_link.{hpp,cpp}` — storage, config, and the fetch path
+### Per-user vendor tokens — connect, refresh, encryption
+
+Each user connects their own vendor account over OAuth2, and the server pulls that
+user's data with that user's token — refreshing it as needed. This is the whole
+lifecycle.
+
+**Connect (two entry points, same result).** The user authorizes at the vendor and
+the server exchanges the returned authorization `code` (`Vendor::exchange_code`),
+which both proves ownership and yields the access + refresh tokens:
+
+- **Web** — `GET /vendors/{id}/authorize` builds the vendor's consent URL and stashes
+  a single-use `state → {user, vendor}` in the cache; the browser is sent there; the
+  vendor redirects back to `GET /vendors/callback`, which runs `oauth_connect`
+  (exchange → store tokens → mark verified) and `302`s to the app with `?vendor=…`.
+- **API** — `POST /vendors/{id}/bind/verify {code, redirect_uri}` does the same
+  exchange via `verify_consent`. (With no `code`, `verify_consent` instead does a
+  credential *probe* — a small read with the configured credential — for the
+  self-hosted / single-user model.)
+
+**Storage.** Tokens live in `user_vendor_accounts` — `access_token`, `refresh_token`
+(both Fernet ciphertext), and `token_expires_at` (unix ms; `0`/NULL = non-expiring,
+e.g. Polar). The access token is stored even when a refresh token exists (it saves a
+refresh round-trip); for no-refresh, non-expiring vendors (Polar) it is the *only*
+durable credential, so the column can't be dropped.
+
+**Refresh (in `fetch_for_user`, one refresh max per call).** On every `/data` /
+`/sync`:
+
+- **Proactive** — if the stored access token has expired or is within 60 s of it
+  (`token_expires_at`), refresh via `Vendor::refresh` before the fetch.
+- **Reactive** — if the fetch is rejected `401/403` even though our clock said the
+  token was still valid (early revocation / early expiry), refresh once and retry.
+- Either way the **rotated tokens are re-persisted** (a vendor that returns a new
+  refresh token replaces the old; one that doesn't keeps it). Vendors with no refresh
+  grant / non-expiring tokens (Polar) skip refresh; a failed refresh falls through to
+  a `401` and the user re-connects.
+
+**Deletion.** `/vendors/{id}/unlink` best-effort revokes at the vendor then deletes
+the row (`unlink_for_user` → `remove`); re-binding also clears the token columns. So
+tokens don't linger after a disconnect (GDPR/PIPL erasure).
+
+#### Encryption at rest & key rotation (`VENDOR_TOKEN_ENCRYPTION_KEY`)
+
+Tokens are bearer secrets, so they are **only ever stored encrypted** — Fernet
+(AES-128-CBC + HMAC, via `config/fernet.hpp`), keyed by `VENDOR_TOKEN_ENCRYPTION_KEY`.
+It is a **list** of Fernet keys with the same contract as `FILE_ENCRYPTION_KEY`:
+
+- **Write** — the **last** key encrypts (`token_encrypt` in `vendor_link.cpp`).
+- **Read** — **every** key is tried until one decrypts (`token_decrypt`); a token
+  encrypted under any listed key still decrypts. A ciphertext that no current key can
+  decrypt yields `""` → treated as "no token" → the link needs re-connect.
+- **Default = `FILE_ENCRYPTION_KEY`.** When `VENDOR_TOKEN_ENCRYPTION_KEY` is unset it
+  falls back to `FILE_ENCRYPTION_KEY` (config.cpp) — a vendor token is user data at
+  rest just like an upload, so a deployment that already encrypts uploads gets
+  per-user token encryption for free. Set `VENDOR_TOKEN_ENCRYPTION_KEY` only to rotate
+  the token key independently of the file key.
+- **Neither key set ⇒ DB token storage is disabled**: connect still proves ownership
+  but persists nothing (a plaintext token is never written), and fetch falls back to
+  the configured `<ID>_*` credential.
+
+  There is deliberately **no encryption-free token store**: process-local memory
+  wouldn't survive a restart or reach a second instance, and a shared store (DB row or
+  Redis) would put a plaintext bearer secret at rest (Redis persistence/replicas/
+  `MONITOR` included). The only thing that is both cross-instance and encrypted-at-rest
+  is the shared DB under a key — which is exactly the has-key path. So **multi-instance,
+  multi-user, refresh-capable pulls require a key** (this one or `FILE_ENCRYPTION_KEY`);
+  no key ⇒ effectively single-instance / the shared credential.
+
+**To rotate the key (zero downtime):**
+
+1. Generate a new 44-char URL-safe base64 Fernet key (same format as
+   `FILE_ENCRYPTION_KEY` / `CONFIG_ENCRYPTION_KEY`).
+2. **Append** it to `VENDOR_TOKEN_ENCRYPTION_KEY` as the **last** entry and restart.
+   On boot, `reencrypt_vendor_tokens` migrates **every** stored token from the old key
+   to the new one in a single pass (before the server serves requests, so it never
+   races DB access; the token table is small). New writes already use the new key.
+3. That boot leaves no token under the old key, so **drop the old key** and restart
+   again — done. Back to one key ⇒ the startup pass is skipped.
+
+The migration runs **only mid-rotation** (≥2 keys listed); a normal single-key boot
+skips it entirely (zero cost). It detects "already under the newest key" by a
+trial-decrypt with just that key, so it re-writes only the rows that actually moved
+keys. Dropping a key before its tokens are migrated isn't catastrophic — those users
+simply re-connect.
+
+**No leakage.** Tokens are never logged or returned by the API; `Config::print` masks
+the encryption key like other secrets, and `GET /vendors` exposes only a `has_token`
+boolean, never the token.
+
+## `vendor_link` — storage, config, and the fetch path
 
 The seam between the central `Config`, the `user_vendor_accounts` table, and the
 vendor clients. No HTTP here — `VendorService` calls into it.
 
-- **`VendorLinkStore`** — CRUD over `user_vendor_accounts`: `get`,
-  `upsert_pending`, `mark_verified`. Borrows the `Database` (not owned), one per
-  use site, like `fhir::FhirStore`.
-- **`vendor_config(cfg, vendor_id)`** — build a `vendor::VendorConfig` from the
-  per-vendor `MIROBODY_VENDOR_<ID>_*` env convention, overlaid with any
-  credentials the central `Config` carries (today: Vitalera's `VITALERA_API_KEY`,
-  used as a pre-issued bearer).
-- **`fetch_for_user(...)`** — resolve the user's **verified** external id, build
-  the vendor client from config, and call `Vendor::fetch`. Returns `""` with a
-  reason when the user has no link, the link is unverified, the vendor is
-  unknown, or the vendor call throws.
-- **`verify_consent(...)`** — **the verification seam.** Proves an external id
-  belongs to the caller before the link is marked verified. **Status: stub** —
-  Vitalera's patient-linking lives in its gated "Monitoreds (Patients)" API, so
-  this returns "not implemented" until that contract is wired in. The rest of the
-  bind flow is already built around this signature, so filling it in is localized.
+| Symbol | Role |
+| --- | --- |
+| `VendorLinkStore` | CRUD over `user_vendor_accounts` (`get` / `upsert_pending` / `mark_verified`); borrows the `Database` (not owned), like `fhir::FhirStore` |
+| `vendor_config(cfg, id)` | build a `vendor::VendorConfig` from the per-vendor `MIROBODY_VENDOR_<ID>_*` env convention, overlaid with central `Config` credentials (Vitalera's pre-issued bearer; Dexcom's `client_id`/`secret` + `environment`→base_url) |
+| `fetch_for_user(...)` | resolve the user's **verified** external id → build the client → call `Vendor::fetch`, using the user's stored (decrypted) token, auto-refreshing + re-persisting it when expired, else the configured credential. Returns `""` + a reason when there is no link, it is unverified, the vendor is unknown, or the call throws |
+| `verify_consent(...)` | **the verification seam** — with an OAuth `code`: exchange it (`Vendor::exchange_code`, proves ownership) and `save_tokens` (encrypted); without a code: fall back to a **credential probe** (read a small recent window; any successful domain read passes). Token crypto uses the `VENDOR_TOKEN_ENCRYPTION_KEY` Fernet keys |
 
-## `ehr_connect.{hpp,cpp}` — `EhrConnectService` (SMART on FHIR)
+## `vendor_fhir` — vendor JSON → FHIR `Observation`
+
+Device-brand clients (`oura`, `whoop`, …) return each vendor's **own** JSON, not
+FHIR. `vendor_json_to_observations(vendor_id, domain, json, subject_ref)` turns that
+into FHIR R4 `Observation` bodies, so `/vendors/{id}/sync` can persist them through
+`fhir::FhirStore` — the same write path the on-device apps and EHR connect use.
+
+A reading is mapped only when it has a confident LOINC code + UCUM unit; metrics
+without one (sleep scores, strain, HRV) are **deferred** — left unmapped and
+documented — rather than mapped to a wrong code (the same honesty rule the vendor
+clients follow). Currently mapped:
+
+| Vendor | Domain | Reading | LOINC | Unit (UCUM) | Category |
+| --- | --- | --- | --- | --- | --- |
+| `oura` | HeartRate | `data[].bpm` | `8867-4` Heart rate | `/min` | vital-signs |
+| `oura` | Activity | `data[].steps` | `55423-8` Steps (24h) | `{steps}` | activity |
+| `whoop` | HeartRate | recovery `resting_heart_rate` | `40443-4` Heart rate --resting | `/min` | vital-signs |
+| `whoop` | HeartRate | recovery `spo2_percentage` | `59408-5` Oxygen saturation | `%` | vital-signs |
+| `dexcom` | Glucose | `records[].value` @ `systemTime` | `2339-0` Glucose in Blood | `mg/dL` / `mmol/L` (from the response `unit`) | laboratory |
+| `werun` | (steps) | `stepInfoList[].step` @ `timestamp` | `55423-8` Steps (24h) | `{steps}` | activity |
+
+Deferred (no confident code yet): Oura/WHOOP **sleep** durations, WHOOP **strain**
+(cycle), HRV. Adding a metric is one row in `vendor_fhir.cpp` — the pipeline (map →
+`upsert`) is already wired for every source, including WeChat WeRun (see below).
+
+## `ehr_connect` — `EhrConnectService` (SMART on FHIR)
 
 The browser-driven flow that connects a user's EHR (Epic, Oracle Health/Cerner, …)
 and pulls their records. Here mirobody is an OAuth **client** of the EHR (distinct
 from `src/oauth`, where it is the authorization *server*). It is the one health
 source a **web page** can collect — Apple/Samsung/Xiaomi are on-device-only and
-need the native apps. Routes (under `HTTP_URI_PREFIX`):
+need the native apps. Routes are under `HTTP_URI_PREFIX`.
 
-- **`GET /health/ehr/providers?q=&source=`** — search the Service Base URL
-  directories ([`vendor/ehr/directory.hpp`](vendor/ehr/directory.hpp)) for tenants
-  (org name → FHIR base URL).
-- **`POST /health/ehr/authorize` `{fhir_base_url}`** — SMART discovery
-  (`/.well-known/smart-configuration`) + PKCE; stashes the verifier/state in the
-  cache and returns the `authorize_url` for the browser to redirect to.
-- **`GET /health/ehr/callback?code=&state=`** — the EHR's redirect back (no
-  bearer; the user is recovered from the single-use `state`). Exchanges the code
-  at the tenant's token endpoint, caches the access token per user, and `302`s
-  back to the app with `?ehr=<status>`.
-- **`POST /health/ehr/sync`** — uses the cached token to fetch Observations via
-  the [`ehr`](vendor/ehr/ehr.cpp) vendor client and persists each through the FHIR
-  store.
+| Route | What it does |
+| --- | --- |
+| `GET /health/ehr/providers?q=&source=` | search the Service Base URL directories ([`vendor/ehr/directory.hpp`](vendor/ehr/directory.hpp)) for tenants (org name → FHIR base URL) |
+| `POST /health/ehr/authorize {fhir_base_url}` | SMART discovery (`/.well-known/smart-configuration`) + PKCE; cache the verifier/state; return the `authorize_url` to redirect to |
+| `GET /health/ehr/callback?code=&state=` | the EHR's redirect back (no bearer; user recovered from the single-use `state`); exchange the code, cache the token per user, `302` back to the app with `?ehr=<status>` |
+| `POST /health/ehr/sync` | use the cached token to fetch Observations via the [`ehr`](vendor/ehr/ehr.cpp) client and persist each through the FHIR store |
 
 Configured by the `SMART_FHIR_*` keys (client_id / redirect_uri / scope; see
 `config.example.yml`). The web client drives it from Settings → **Connect EHR**
 ([htdoc/src/ehr.js](../../htdoc/src/ehr.js)).
+
+## `werun` — `WeRunService` (WeChat steps)
+
+WeChat's only health surface is **WeRun daily steps** — and it is not Bluetooth. A
+Mini Program calls `wx.getWeRunData()`, which returns the last ~31 days of daily
+steps as an AES-128-CBC-encrypted blob; this service decrypts it and persists the
+steps as FHIR `Observation`s. It reuses the existing Mini Program credentials
+(`WECHAT_APPID` / `WECHAT_SECRET`), so no new config.
+
+| Route | What it does |
+| --- | --- |
+| `POST /wechat/werun` `{code, encryptedData, iv}` | exchange `code` via jscode2session → decrypt the blob with the session_key → map `stepInfoList` to FHIR steps (`vendor_json_to_observations("werun", …)`) → persist via `FhirStore`; returns `{posted, failed}` |
+
+The **session_key is never stored**: the Mini Program sends a fresh `wx.login()`
+`code` with the blob, exchanged use-once at decrypt time. The user is taken from the
+bearer JWT; the decrypted payload's `watermark.appid` is checked against our app so a
+blob captured from another app is rejected. Steps map to LOINC `55423-8` (see the
+`vendor_fhir` table above).
 
 ## [`vendor/`](vendor/) — the vendor clients
 
 One `vendor::Vendor` per source behind a common authorize / fetch / webhook
 contract, resolved by id through the [registry](vendor/registry.hpp). The shared
 `vendor.hpp` / `registry.*` stay at the `vendor/` root; the per-vendor clients are
-sorted into [`vendor/platform/`](vendor/platform/) (B2B aggregators),
-[`vendor/phone/`](vendor/phone/) (smartphone-vendor stores),
-[`vendor/device/`](vendor/device/) (consumer device brands), and
-[`vendor/ehr/`](vendor/ehr/) (direct EHR systems via SMART on FHIR — one generic
-client plus an [`EhrDirectory`](vendor/ehr/directory.hpp) loader that discovers
-each tenant's FHIR base URL from public Service Base URL lists). Each vendor's
-transport is implemented against the platform's public API; undocumented
-operations stay explicit stubs. See [`vendor/README.md`](vendor/README.md) for
-the cross-platform comparison the metadata is drawn from and the per-vendor
-implementation-status table.
+sorted by source type:
+
+| Dir | Holds | Examples |
+| --- | --- | --- |
+| [`device/`](vendor/device/) | consumer device brands with their own API | Dexcom, Fitbit, Garmin, Oura, Polar, WHOOP, Withings |
+| [`ehr/`](vendor/ehr/) | direct EHR systems via SMART on FHIR | one generic client + [`EhrDirectory`](vendor/ehr/directory.hpp) loader |
+| [`phone/`](vendor/phone/) | smartphone-vendor stores that expose a cloud API | Huawei Health Kit |
+| [`platform/`](vendor/platform/) | B2B data aggregators | Terra, Validic, Thryve, Rook, Spike, Metriport, … |
+
+Each vendor's transport is implemented against the platform's public API;
+undocumented operations stay explicit stubs. See [`vendor/README.md`](vendor/README.md)
+for the cross-platform comparison, the per-vendor implementation-status table, and
+the individual-developer **access-model** table (free self-serve vs partner-gated).
 
 ## Device-native health platforms (Apple / Samsung / Google / Huawei / Xiaomi / …)
 
-The phone-OS and smartphone-vendor health stores are a different shape from the
-aggregators above: their data is read **on the device** through a platform SDK,
-not fetched server-to-server. They split two ways:
+The phone-OS and smartphone-vendor health stores are a different shape: their data
+is read **on the device** through a platform SDK, not fetched server-to-server. The
+host app reads samples on-device, maps them to FHIR `Observation`s, and **POSTs them
+to this server's FHIR R4 endpoint** (`src/fhir`, whose write model mirrors Android
+Health Connect) — the on-device ingestion path, no route here. Implemented in the
+apps: Health Connect + HMS Health Kit on Android, Apple HealthKit on iOS (see
+[`android/README.md`](../../android/README.md) / [`ios/README.md`](../../ios/README.md)).
 
-- **On-device only — no server REST API.** **Apple Health (HealthKit)**,
-  **Samsung Health**, **Google Health Connect**, **Xiaomi / Mi Fitness**, and the
-  smaller Chinese OEM apps (**Honor Health**, **OPPO / HeyTap Health**,
-  **vivo Health**) expose no server-callable API for third parties — Samsung's old
-  partner cloud is deprecated in favor of writing into Health Connect, and Google
-  Fit's REST API is shutting down. So none of these gets a `vendor::Vendor`.
-  Instead the host app reads samples on-device and maps them to FHIR
-  `Observation`s, which it **POSTs to this server's FHIR R4 endpoint** (`src/fhir`,
-  whose write model is itself built to mirror Android Health Connect). That is the
-  on-device ingestion path — no extra route here. It is implemented in the host
-  apps: Health Connect + HMS Health Kit on Android and Apple HealthKit on iOS (see
-  [`android/README.md`](../../android/README.md) and
-  [`ios/README.md`](../../ios/README.md)). (On Android these OEMs
-  increasingly converge on **Health Connect** as the single read surface, so the
-  app often integrates Health Connect once rather than each OEM SDK.)
-- **On-device *plus* cloud REST.** **Huawei Health Kit** is the exception: besides
-  its on-device SDK it offers a Health Kit *Cloud* REST API, so it gets a real
-  fetch vendor — [`vendor/phone/huawei.cpp`](vendor/phone/huawei.cpp), registered as
-  `huawei`. It reads via the documented `sampleSet:polymerize` query using a
-  Huawei Account Kit OAuth token; the consent flow and subscription webhooks stay
-  stubs until the deployer's client credentials are wired in.
+| Platform | Server-callable API? | How its data reaches mirobody |
+| --- | --- | --- |
+| Apple Health (HealthKit) | ❌ on-device only | iOS app reads → FHIR `Observation` → POST FHIR R4 |
+| Google Health Connect | ❌ on-device only | Android app reads → FHIR R4 |
+| Samsung Health | ❌ (partner cloud deprecated) | writes into Health Connect → Android app → FHIR R4 |
+| Xiaomi / Mi Fitness, Honor, OPPO/HeyTap, vivo | ❌ on-device only | via Health Connect / OEM SDK on Android → FHIR R4 |
+| **Huawei Health Kit** | ✅ **cloud REST** | server `fetch` via [`vendor/phone/huawei.cpp`](vendor/phone/huawei.cpp) (`sampleSet:polymerize`, Account Kit OAuth) |
+
+On Android these OEMs increasingly converge on **Health Connect** as the single read
+surface, so the app often integrates Health Connect once rather than each OEM SDK.
+
+## Direct device-brand clients ([`vendor/device/`](vendor/device/))
 
 Device *brands* with their own OAuth REST APIs are normally reached through the
-aggregators above (Terra, Validic, Thryve, Rook, Spike), so most need no
-dedicated client. Three have direct clients for talking to them without an
-aggregator:
+aggregators above, so most need no dedicated client. Those below have a direct one —
+useful because an individual developer who owns the device can usually self-serve
+free credentials and skip the (paid) aggregators. The **individual-dev access** column
+is the quick lens; [`vendor/README.md`](vendor/README.md) has the authoritative
+access-model and endpoint-status tables.
 
-- [`vendor/device/fitbit.cpp`](vendor/device/fitbit.cpp) (`fitbit`) — Fitbit Web API, OAuth2
-  Bearer; `fetch()` issues the per-domain time-series GETs over a day range.
-- [`vendor/device/withings.cpp`](vendor/device/withings.cpp) (`withings`) — Withings Health
-  Mate API, OAuth2; `fetch()` POSTs the form-encoded `action` services (measures,
-  heart, activity, sleep).
-- [`vendor/device/garmin.cpp`](vendor/device/garmin.cpp) (`garmin`) — Garmin Health API, which
-  is **partner-gated, OAuth1.0a, and push-based**: there is no synchronous pull,
-  so `fetch()` explains the model and the real path is `handle_webhook()` once
-  approved partner credentials exist.
+| id | Brand | `fetch` domains | Individual-dev access | Notes |
+| --- | --- | --- | --- | --- |
+| [`dexcom`](vendor/device/dexcom.cpp) | Dexcom CGM | glucose | ✅ free to start | **cloud + retrospective** (~1h US / ~3h OUS delay, no real-time); sandbox free + ≤5-user prod, more needs a partnership; `DEXCOM_*` config |
+| [`fitbit`](vendor/device/fitbit.cpp) | Fitbit | activity, heart rate, sleep, body | ✅ free self-serve | per-domain time-series GETs over a day range |
+| [`garmin`](vendor/device/garmin.cpp) | Garmin | — (push) | ❌ partner-gated | OAuth1.0a, push-based; `fetch` explains the model, real path is `handle_webhook` |
+| [`oura`](vendor/device/oura.cpp) | Oura Ring | sleep, activity, heart rate | ✅ free self-serve | v2 usercollection (daily by date, heart rate by datetime) |
+| [`polar`](vendor/device/polar.cpp) | Polar | sleep (+ training/activity) | ✅ free self-serve | **sleep** is a direct GET; training/activity use AccessLink's transaction pull model (no `[start,end]`) so they throw with an explanation, like Garmin; `revoke` deletes the user |
+| [`whoop`](vendor/device/whoop.cpp) | WHOOP | sleep, heart rate (recovery), activity (cycle) | ✅ free self-serve | needs a WHOOP device + membership; cursor-paginated |
+| [`withings`](vendor/device/withings.cpp) | Withings | measures, heart, activity, sleep | ✅ free self-serve | form-encoded `action` services |
 
-Other brands (Oura, Whoop, Polar, …) stay aggregator-only — add a client only to
-deliberately bypass one.
+Other brands (Suunto, Ultrahuman, …) stay aggregator-only — they are partner-gated,
+so add a direct client only once you hold their partner credentials.

@@ -208,6 +208,10 @@ function buildSettingsMenu() {
         ehr.el.addEventListener("click", function () { close(); require("./ehr").showEhrModal(); });
         menu.appendChild(ehr.el);
 
+        var devices = menuItem(t("vendorManageTitle"), "", false);
+        devices.el.addEventListener("click", function () { close(); require("./vendors").showVendorsModal(); });
+        menu.appendChild(devices.el);
+
         menu.appendChild(divider());
     }
 

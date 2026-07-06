@@ -202,12 +202,57 @@ have **no client**: they expose no server API, so their data reaches mirobody vi
 the FHIR R4 write endpoint (see [../README.md](../README.md)). Those with a server
 API get a client:
 
+> **WeChat WeRun** is another non-`vendor::Vendor` source in the same spirit: its
+> only data is daily steps, obtained client-side (`wx.getWeRunData()`) and pushed to
+> the server as an encrypted blob — there is no server-side pull to fit the `Vendor`
+> `fetch()` contract, so it has no client here. It lives as its own service at
+> [`../werun.cpp`](../werun.cpp) (route `POST /wechat/werun`), decrypting the blob and
+> persisting steps through the FHIR write path like the on-device stores above.
+
 | ID | Dir | base_url | Auth | Implemented | Stubbed / notes |
 | --- | --- | --- | --- | --- | --- |
 | **huawei** | `phone/` | default `health-api.cloud.huawei.com` | OAuth2 bearer (Account Kit) | `fetch` (`sampleSet:polymerize`) | consent OAuth, subscription webhooks |
 | **fitbit** | `device/` | default `api.fitbit.com` | OAuth2 bearer | `fetch` (per-domain time-series GETs), `authorize_url` (OAuth2 code URL), `revoke` (`/oauth2/revoke`, Basic), `handle_webhook` (HMAC-SHA1 `X-Fitbit-Signature`) | — |
 | **withings** | `device/` | default `wbsapi.withings.net` | OAuth2 bearer | `fetch` (form `action` services), `authorize_url` (OAuth2 code URL) | `handle_webhook` (no inbound signature), `revoke` (no token-revoke endpoint) |
 | **garmin** | `device/` | `apis.garmin.com` (push) | OAuth2.0 + PKCE (partner-gated) | `revoke` (deregister hook) | `fetch` (push model + partner-gated spec), `authorize_url` (PKCE needs a stateful verifier — see ehr_connect), `handle_webhook` (unsigned push) |
+| **dexcom** | `device/` | default sandbox `sandbox-api.dexcom.com` (prod `api.dexcom.com` / `api.dexcom.eu` via `DEXCOM_ENVIRONMENT`) | OAuth2 bearer | `fetch` (v3 `egvs`, glucose — retrospective, ~1h US / ~3h OUS delay), `authorize_url` (v2 `/oauth2/login`) | `revoke` (no token-revoke endpoint), `list_providers` (single brand), `handle_webhook` (no signed webhook on the partner API) |
+| **oura** | `device/` | default `api.ouraring.com` | OAuth2 bearer | `fetch` (v2 usercollection: `daily_activity`/`daily_sleep` by date, `heartrate` by datetime), `authorize_url` (`cloud.ouraring.com/oauth/authorize`) | `revoke`, `list_providers`, `handle_webhook` (webhook API is a separate contract) |
+| **whoop** | `device/` | default `api.prod.whoop.com` | OAuth2 bearer | `fetch` (v2 `activity/sleep`, `recovery` [HR/HRV], `cycle` [strain]; cursor-paginated), `authorize_url` (`/oauth/oauth2/auth`) | `revoke`, `list_providers`, `handle_webhook` |
+| **polar** | `device/` | default `www.polaraccesslink.com` | OAuth2 bearer | `fetch` (**sleep only** — direct GET), `authorize_url` (`flow.polar.com`), `revoke` (`DELETE /v3/users/{id}`) | `fetch` for training/activity (transaction pull model: create/list/get/commit — no `[start,end]` query, doesn't fit `fetch()`), `list_providers`, `handle_webhook` (ping) |
+
+#### Access model — who can use each brand for FREE
+
+This project is open source, and an individual developer who owns a device usually
+will NOT pay for an aggregator (Terra/Validic/Rook) — but most brands run a **free,
+self-serve developer program** you can register for with just the device (or even
+just an account) and use at small scale. This table is that lens: what it takes for
+one developer to get credentials. Device-brand credentials are configured through
+the config object with clean per-vendor keys — `<ID>_CLIENT_ID` / `<ID>_CLIENT_SECRET`
+/ `<ID>_API_KEY` / `<ID>_BASE_URL` (e.g. `OURA_CLIENT_ID`), settable in the YAML file
+or as the same-named env var; see `config.example.yml`. The B2B aggregators (Terra,
+Validic, Rook, …) use the same `<ID>_*` keys. (Only the standalone `vendor` CLI still
+reads the older `MIROBODY_VENDOR_<ID>_*` env convention on its own; `ehr` is driven by
+the EHR connect flow, not static keys.)
+
+Beyond the static credential, the OAuth device brands implement the token lifecycle —
+`exchange_code()` (authorization code → tokens) and `refresh()` — via the shared
+[`oauth2.hpp`](oauth2.hpp) helper (Withings uses its own `{status,body}` envelope;
+Polar's tokens don't expire, so it has no `refresh`). `/bind/verify` exchanges the
+code and stores the user's tokens encrypted; `fetch` refreshes them on expiry. See
+"Per-user vendor tokens" in [../README.md](../README.md).
+
+| Brand | Individual-developer access | Notes |
+| --- | --- | --- |
+| **fitbit** | ✅ Free, self-serve | Register an app at dev.fitbit.com; OAuth2, no approval to start. |
+| **withings** | ✅ Free, self-serve | Register at the Withings developer dashboard; OAuth2. |
+| **oura** | ✅ Free, self-serve | Register an app in the Oura developer portal; OAuth2 (Personal Access Tokens were deprecated Dec 2025). Up to 10 users before Oura approval; unlimited after. |
+| **whoop** | ✅ Free, self-serve | Self-serve Developer Dashboard; OAuth2. You must own a WHOOP (device + membership) to use the platform at all — which the target developer does. Up to 5 apps. |
+| **polar** | ✅ Free, self-serve | Any free Polar Flow account can create an AccessLink client at admin.polaraccesslink.com; OAuth2, no approval period. |
+| **dexcom** | ✅ Free to start | Free sandbox (immediate) + production Limited Access (≤5 real users) with only app registration; serving >5 real users needs a Dexcom commercial partnership + Data Licensing Agreement. Glucose is PHI → BAA for production. |
+| **garmin** | ❌ Partner-gated | Garmin Health API is not self-serve — it requires approved partner credentials (OAuth1.0a/PKCE, push-based). An individual developer generally cannot self-onboard. |
+| **huawei** | ⚠️ Developer account + scopes | HMS Health Kit needs a Huawei developer account and registered Health Kit scopes (region-dependent); heavier than the self-serve brands above. |
+| _Strava_ | ❌ Not free (excluded) | Deliberately **not** added: Standard-Tier API access requires a paid Strava subscription (~$11.99/mo) after a 3-month grace period, so it fails the "free for individual developers" bar. If added later it belongs in a new `app/` dir (activity/social platform, not a device brand), not `device/`. |
+| _Ultrahuman, Suunto_ | ❌ Partner-gated (not added) | Ultrahuman's Partnership API needs a key + Partner ID by request; Suunto explicitly does not offer API access for personal use. Neither is self-serve. |
 
 ### Direct EHR systems — SMART on FHIR (`ehr/`)
 

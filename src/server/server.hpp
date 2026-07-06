@@ -6,6 +6,7 @@
 #include "fhir/rest.hpp"
 #include "health/ehr_connect.hpp"
 #include "health/vendor_service.hpp"
+#include "health/werun.hpp"
 #include "memory/memory.hpp"
 #include "mcp/service.hpp"
 #include "oauth/service.hpp"
@@ -78,6 +79,7 @@ private:
     std::unique_ptr<fhir::FhirService>  fhir_service_;
     std::unique_ptr<health::VendorService> vendor_service_;
     std::unique_ptr<health::EhrConnectService> ehr_connect_service_;
+    std::unique_ptr<health::WeRunService> werun_service_;
     std::unique_ptr<server::Router>     router_;
     // Security headers handed to lws via info.headers. lws keeps these pointers
     // for the vhost lifetime rather than copying, so the CSP string and the

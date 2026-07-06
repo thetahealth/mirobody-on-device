@@ -34,6 +34,7 @@
 
 #include "compat/cxx11.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -163,8 +164,10 @@ struct VendorInfo {
 
 // Per-vendor credentials and connection settings. Most of these platforms use a
 // bearer/API key or an OAuth client pair; `base_url` overrides the default API
-// host for sandbox / region endpoints. Wiring into the central mirobody::Config
-// is intentionally deferred — see from_env() for the convention used until then.
+// host for sandbox / region endpoints. The server builds this via
+// health::vendor_config(): every registered vendor's credentials come from the
+// central mirobody::Config (the clean <ID>_* keys), overlaid on the from_env()
+// fallback below — which the standalone `vendor` CLI still uses on its own.
 struct VendorConfig {
     std::string api_key;        // bearer / API key (most REST vendors)
     std::string client_id;      // OAuth client id (consumer-mediated consent)
@@ -180,6 +183,19 @@ struct VendorConfig {
     // where <ID> is the vendor id upper-cased (e.g. HUMAN_API). Missing vars are
     // left empty. Defined in vendor.cpp.
     static VendorConfig from_env(const std::string& id);
+};
+
+//------------------------------------------------------------------------------
+// TokenSet
+//------------------------------------------------------------------------------
+
+// Result of an OAuth2 token endpoint call (exchange_code / refresh). `expires_in`
+// is the access token lifetime in seconds (0 = unknown / non-expiring, e.g. Polar).
+// `refresh_token` may be empty when the vendor does not issue/rotate one.
+struct TokenSet {
+    std::string  access_token;
+    std::string  refresh_token;
+    std::int64_t expires_in = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -245,6 +261,17 @@ public:
     // revokes the whole user (vendors with only a whole-user disconnect ignore it).
     virtual void revoke(const std::string& user_id,
                         const std::string& provider) = 0;
+
+    // Exchange an OAuth2 authorization `code` (from authorize_url's redirect) for a
+    // TokenSet at the vendor's token endpoint. `redirect_uri` must match the one used
+    // in the authorize request. Requires the OAuth client id/secret in config. Throws
+    // VendorError on failure or for vendors without an OAuth2 code flow.
+    virtual TokenSet exchange_code(const std::string& code,
+                                   const std::string& redirect_uri) = 0;
+
+    // Exchange a `refresh_token` for a fresh TokenSet. Throws VendorError for vendors
+    // whose tokens do not expire / have no refresh grant (e.g. Polar).
+    virtual TokenSet refresh(const std::string& refresh_token) = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -279,6 +306,14 @@ public:
     }
     void revoke(const std::string&, const std::string&) override {
         not_implemented("revoke");
+    }
+    TokenSet exchange_code(const std::string&, const std::string&) override {
+        not_implemented("exchange_code");
+        return TokenSet();
+    }
+    TokenSet refresh(const std::string&) override {
+        not_implemented("refresh");
+        return TokenSet();
     }
 
 protected:

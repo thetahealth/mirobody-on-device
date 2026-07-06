@@ -78,6 +78,31 @@ struct VitaleraConfig {
     std::string environment;
 };
 
+// Credentials for a direct device-brand vendor client (src/health/vendor/device/).
+// Loaded from the config object via the clean per-vendor keys
+//   <ID>_CLIENT_ID / <ID>_CLIENT_SECRET / <ID>_API_KEY / <ID>_BASE_URL
+// where <ID> is the upper-cased vendor id (OURA_CLIENT_ID, WHOOP_CLIENT_SECRET, …).
+// Because the config store also consults the environment (getenv wins over YAML),
+// these work set either in the YAML file or as same-named env vars. Overlaid onto
+// the vendor's VendorConfig in health::vendor_config().
+struct VendorCredentials {
+    std::string client_id;      // OAuth client id
+    std::string client_secret;  // OAuth client secret
+    std::string api_key;        // a user's OAuth access token (obtained out of band)
+    std::string base_url;       // API host override (optional; region / self-host)
+};
+
+// Dexcom CGM direct client (see src/health/vendor/device/dexcom.cpp). Its OAuth
+// credentials use the generic VendorCredentials keys (DEXCOM_CLIENT_ID / _SECRET /
+// _API_KEY / _BASE_URL) like the other device brands; this struct only carries the
+// Dexcom-specific deployment selector. `environment` picks the host: "sandbox"
+// (default — immediate, fake data, no real PHI), "us" (production, EGVs delayed
+// ~1h) or "eu"/"ous" (production outside the US, ~3h delay), mapped to base_url in
+// health::vendor_config(). Set via DEXCOM_ENVIRONMENT.
+struct DexcomConfig {
+    std::string environment;   // "sandbox" (default) / "us" / "eu"
+};
+
 //------------------------------------------------------------------------------
 
 struct JwtConfig {
@@ -291,6 +316,32 @@ struct Config {
 
     // Vitalera health-data vendor credentials. See VitaleraConfig.
     VitaleraConfig             vitalera;
+
+    // Dexcom CGM deployment selector. See DexcomConfig.
+    DexcomConfig               dexcom;
+
+    // Direct device-brand vendor credentials, keyed by vendor id (e.g. "oura").
+    // Populated from the <ID>_* keys; overlaid in health::vendor_config().
+    std::unordered_map<std::string, VendorCredentials> vendor_credentials;
+
+    // Fernet key(s) that encrypt per-user vendor OAuth tokens at rest in
+    // user_vendor_accounts (last key encrypts, all decrypt — rotate by appending).
+    // From VENDOR_TOKEN_ENCRYPTION_KEY (YAML sequence or comma-separated scalar).
+    // When UNSET this falls back to file_encryption_keys (FILE_ENCRYPTION_KEY), since
+    // vendor tokens are user data at rest just like uploads — so configuring file
+    // encryption enables durable, multi-instance token storage with no extra key. Set
+    // VENDOR_TOKEN_ENCRYPTION_KEY only to rotate the token key independently.
+    // EMPTY (neither key set) disables DB token storage (tokens are never written in
+    // the clear); with no key, /bind/verify still verifies but does not persist tokens
+    // (a single-instance deployment then relies on the configured <ID>_* credential).
+    std::vector<std::string> vendor_token_encryption_keys;
+
+    // The server callback URL for the web vendor-OAuth connect flow — where a vendor
+    // redirects the browser after consent. Must be registered with each vendor and
+    // point at this server's GET /vendors/callback, e.g.
+    // "https://api.example.com/vendors/callback". Empty disables web Connect (the
+    // /vendors/{id}/authorize route then reports "not configured"). VENDOR_REDIRECT_URI.
+    std::string vendor_redirect_uri;
 
     JwtConfig                  jwt;
 

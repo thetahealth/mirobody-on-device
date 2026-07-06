@@ -25,6 +25,10 @@ std::unique_ptr<Vendor> make_huawei(const VendorConfig&);
 std::unique_ptr<Vendor> make_fitbit(const VendorConfig&);
 std::unique_ptr<Vendor> make_withings(const VendorConfig&);
 std::unique_ptr<Vendor> make_garmin(const VendorConfig&);
+std::unique_ptr<Vendor> make_dexcom(const VendorConfig&);
+std::unique_ptr<Vendor> make_oura(const VendorConfig&);
+std::unique_ptr<Vendor> make_whoop(const VendorConfig&);
+std::unique_ptr<Vendor> make_polar(const VendorConfig&);
 std::unique_ptr<Vendor> make_ehr(const VendorConfig&);
 
 namespace {
@@ -62,6 +66,10 @@ const Registration kVendors[] = {
     {"fitbit",          &make_fitbit},
     {"withings",        &make_withings},
     {"garmin",          &make_garmin},
+    {"dexcom",          &make_dexcom},
+    {"oura",            &make_oura},
+    {"whoop",           &make_whoop},
+    {"polar",           &make_polar},
     // Direct EHR-system access via SMART on FHIR — one client for every certified
     // EHR (Epic, Oracle Health/Cerner, …), tenant base_url from ehr/directory.hpp.
     {"ehr",             &make_ehr},

@@ -499,6 +499,104 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 # SMART_FHIR_SCOPE: 'launch/patient openid fhirUser offline_access patient/Observation.read'
 
 
+# -- Device-brand vendor clients (Fitbit / Withings / Garmin / Oura / WHOOP / Polar)
+#
+# Direct device-brand clients (src/health/vendor/device/) are configured through the
+# config object with per-vendor keys <ID>_CLIENT_ID / <ID>_CLIENT_SECRET /
+# <ID>_API_KEY / <ID>_BASE_URL, where <ID> is the upper-cased vendor id:
+#   <ID>_CLIENT_ID       OAuth client id (from the brand's developer app)
+#   <ID>_CLIENT_SECRET   OAuth client secret
+#   <ID>_API_KEY         a user's OAuth access token (obtained out of band)
+#   <ID>_BASE_URL        API host override (optional; region / self-host)
+# These are read through the config store, so each works set EITHER here in the YAML
+# OR as the same-named environment variable (the env var wins). Registering a
+# developer app is free and self-serve for most brands — see src/health/vendor/README.md
+# for the per-brand access model.
+#
+# The B2B aggregators use the SAME <ID>_* convention (TERRA_CLIENT_ID / TERRA_API_KEY,
+# VALIDIC_CLIENT_ID / VALIDIC_API_KEY, ROOK_CLIENT_ID / ROOK_CLIENT_SECRET, THRYVE_*,
+# METRIPORT_API_KEY, …) — one <ID>_CLIENT_ID / _CLIENT_SECRET / _API_KEY / _BASE_URL
+# set per vendor id. Uncomment and fill the ones you use:
+# OURA_CLIENT_ID: ''
+# OURA_CLIENT_SECRET: ''
+# WHOOP_CLIENT_ID: ''
+# WHOOP_CLIENT_SECRET: ''
+# POLAR_CLIENT_ID: ''
+# POLAR_CLIENT_SECRET: ''
+# FITBIT_CLIENT_ID: ''
+# FITBIT_CLIENT_SECRET: ''
+# WITHINGS_CLIENT_ID: ''
+# WITHINGS_CLIENT_SECRET: ''
+# GARMIN_CLIENT_ID: ''
+# GARMIN_CLIENT_SECRET: ''
+
+
+# -- Per-user vendor OAuth tokens: encryption at rest ------------------------
+#
+# When a user connects a vendor via POST /vendors/{id}/bind/verify with an OAuth
+# {code, redirect_uri}, the server exchanges the code and stores THAT user's access +
+# refresh tokens in user_vendor_accounts, so it can pull their data and refresh the
+# access token when it expires (Vendor::refresh). Those tokens are bearer secrets, so
+# they are stored ONLY encrypted: set VENDOR_TOKEN_ENCRYPTION_KEY to one or more
+# Fernet keys (same 44-char URL-safe base64 format as FILE_ENCRYPTION_KEY, and the
+# same rotation contract — the LAST key encrypts, ALL keys decrypt; append to rotate,
+# drop an old key once no token is still under it).
+#
+# DEFAULT = FILE_ENCRYPTION_KEY. When this is unset it falls back to your
+# FILE_ENCRYPTION_KEY, because a vendor token is user data at rest just like an upload.
+# So if you already encrypt uploads, per-user vendor tokens are encrypted too with no
+# extra config — durable and correct across multiple server instances. Set this only
+# to rotate the token key independently of the file key.
+#
+# With NEITHER key set there is NO key: /bind/verify still proves ownership but
+# persists nothing (a plaintext token is never written), and fetch falls back to the
+# configured <ID>_* credential. Note there is no encryption-free way to store per-user
+# tokens that ALSO works across machines — a leaked DB or a shared Redis would expose
+# plaintext — so a multi-instance, multi-user deployment MUST set a key (this or
+# FILE_ENCRYPTION_KEY). No key ⇒ effectively single-instance / the shared credential.
+# VENDOR_TOKEN_ENCRYPTION_KEY:
+#   - ''
+
+# Web vendor-OAuth connect callback. The "Connect" button in the web client sends the
+# user to the vendor's consent page, and the vendor redirects the browser back HERE.
+# Set it to this server's GET /vendors/callback and register the SAME URL in each
+# vendor's developer console (it must match the token-exchange redirect_uri too).
+# Empty disables web Connect (GET /vendors/{id}/authorize reports "not configured").
+# VENDOR_REDIRECT_URI: 'https://api.example.com/vendors/callback'
+
+
+# -- Dexcom CGM connect (direct vendor client) ------------------------------
+#
+# Reads a user's Dexcom continuous-glucose data through Dexcom's own v3 Web API
+# (health::vendor "dexcom", src/health/vendor/device/dexcom.cpp). This is a CLOUD
+# read: the Dexcom sensor's Bluetooth is proprietary/encrypted and unreadable by a
+# third party, so data flows sensor -> official Dexcom app -> Dexcom cloud -> here.
+# Note the API is RETROSPECTIVE by regulatory design: glucose values are delayed
+# ~1h in the US and ~3h outside the US, with no real-time push.
+#
+# Register a (free) app at https://developer.dexcom.com to get the client id/secret.
+# Access is free to start: the sandbox is immediate; production Limited Access (up
+# to 5 real users) needs only app registration; serving more real users requires a
+# Dexcom commercial partnership + Data Licensing Agreement. Because glucose is PHI,
+# a production deployment also needs a HIPAA BAA with each service in the pipeline.
+#
+# Dexcom uses the same <ID>_* device-brand keys as the block above (DEXCOM_CLIENT_ID /
+# DEXCOM_CLIENT_SECRET / DEXCOM_API_KEY / DEXCOM_BASE_URL), plus one Dexcom-specific key:
+#   - DEXCOM_CLIENT_ID / DEXCOM_CLIENT_SECRET: the OAuth app credentials. Empty
+#     leaves the client unconfigured (bind still records a link; fetch fails until
+#     credentials + a user access token exist).
+#   - DEXCOM_API_KEY: the per-user OAuth access token (exchanged out of band at
+#     /v2/oauth2/token). The in-app authorize/callback flow reuses authorize_url()
+#     once the vendor consent seam (health::verify_consent) is wired.
+#   - DEXCOM_ENVIRONMENT: which host to target — 'sandbox' (the default: immediate,
+#     fake data, no real PHI), 'us' (production, https://api.dexcom.com) or
+#     'eu'/'ous' (production outside the US, https://api.dexcom.eu). An explicit
+#     DEXCOM_BASE_URL overrides this mapping.
+# DEXCOM_CLIENT_ID: ''
+# DEXCOM_CLIENT_SECRET: ''
+# DEXCOM_ENVIRONMENT: 'sandbox'
+
+
 # -- Chat rate limit --------------------------------------------------------
 #
 # Each /api/chat turn (SSE or WebSocket) drives an upstream LLM call, so a
@@ -624,6 +722,11 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # AppSecret). WeChat users have no email, so a synthetic "<openid>@wechat"
 # address is stored to satisfy the email column; the real id lives in
 # health_app_user.wechat_openid.
+#
+# These same Mini Program keys also enable WeRun step ingestion (POST /wechat/werun,
+# src/health/werun.cpp): the Mini Program's wx.getWeRunData() blob is decrypted with
+# the session_key jscode2session returns and stored as FHIR step Observations. No
+# extra keys needed.
 # WECHAT_APPID: ''
 # WECHAT_SECRET: ''
 # WECHAT_API_BASE: 'https://api.weixin.qq.com'   # override only to point tests at a mock

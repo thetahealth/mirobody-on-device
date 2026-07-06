@@ -264,6 +264,61 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.vitalera.api_key     = store.get_str("VITALERA_API_KEY",     cfg.vitalera.api_key);
     cfg.vitalera.environment = store.get_str("VITALERA_ENVIRONMENT", cfg.vitalera.environment);
 
+    cfg.dexcom.environment = store.get_str("DEXCOM_ENVIRONMENT", cfg.dexcom.environment);
+
+    // VENDOR_TOKEN_ENCRYPTION_KEY: Fernet key list (last encrypts, all decrypt) for
+    // per-user vendor OAuth tokens at rest. Same YAML-sequence-or-comma-scalar
+    // parsing as FILE_ENCRYPTION_KEY above.
+    cfg.vendor_redirect_uri = store.get_str("VENDOR_REDIRECT_URI", cfg.vendor_redirect_uri);
+
+    cfg.vendor_token_encryption_keys = store.get_list("VENDOR_TOKEN_ENCRYPTION_KEY");
+    if (cfg.vendor_token_encryption_keys.empty()) {
+        const std::string raw = store.get_str("VENDOR_TOKEN_ENCRYPTION_KEY");
+        std::size_t start = 0;
+        while (!raw.empty() && start <= raw.size()) {
+            std::size_t comma = raw.find(',', start);
+            std::string tok = raw.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+            std::size_t b = tok.find_first_not_of(" \t\r\n");
+            std::size_t e = tok.find_last_not_of(" \t\r\n");
+            if (b != std::string::npos) cfg.vendor_token_encryption_keys.push_back(tok.substr(b, e - b + 1));
+            if (comma == std::string::npos) break;
+            start = comma + 1;
+        }
+    }
+
+    // Health-vendor credentials, unified through the config object via clean
+    // <ID>_CLIENT_ID / _CLIENT_SECRET / _API_KEY / _BASE_URL keys (the store consults
+    // the environment too, so either YAML or an env var works). Covers the B2B
+    // aggregators and the direct device brands; only ids with at least one value set
+    // are recorded. `ehr` is intentionally absent — its per-tenant token is driven by
+    // ehr_connect, not static config. Add an id here to wire a new vendor.
+    {
+        static const char* const kCredVendors[] = {
+            // B2B aggregators (src/health/vendor/platform/)
+            "rook", "spike", "terra", "junction", "wefitter", "lexisnexis", "thryve",
+            "validic", "human_api", "vitalera", "open_wearables", "redox",
+            "particle_health", "healthconnect", "metriport",
+            // Smartphone-store + direct device brands (phone/ , device/)
+            "huawei", "fitbit", "withings", "garmin", "dexcom", "oura", "whoop", "polar",
+        };
+        for (std::size_t i = 0; i < sizeof(kCredVendors) / sizeof(kCredVendors[0]); ++i) {
+            const std::string id = kCredVendors[i];
+            std::string up = id;
+            for (std::size_t j = 0; j < up.size(); ++j) {
+                up[j] = static_cast<char>(std::toupper(static_cast<unsigned char>(up[j])));
+            }
+            VendorCredentials vc;
+            vc.client_id     = store.get_str(up + "_CLIENT_ID");
+            vc.client_secret = store.get_str(up + "_CLIENT_SECRET");
+            vc.api_key       = store.get_str(up + "_API_KEY");
+            vc.base_url      = store.get_str(up + "_BASE_URL");
+            if (!vc.client_id.empty() || !vc.client_secret.empty() ||
+                !vc.api_key.empty() || !vc.base_url.empty()) {
+                cfg.vendor_credentials[id] = vc;
+            }
+        }
+    }
+
     cfg.connect_timeout_ms = static_cast<int>(store.get_int("MIROBODY_CONNECT_TIMEOUT_MS", cfg.connect_timeout_ms));
     cfg.request_timeout_ms = static_cast<int>(store.get_int("MIROBODY_REQUEST_TIMEOUT_MS", cfg.request_timeout_ms));
 
@@ -340,6 +395,17 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
             if (comma == std::string::npos) break;
             start = comma + 1;
         }
+    }
+    // Vendor OAuth tokens are user data at rest, so when no dedicated
+    // VENDOR_TOKEN_ENCRYPTION_KEY is set they fall back to the same at-rest key as
+    // file uploads (FILE_ENCRYPTION_KEY) -- parsed just above, hence the fallback
+    // sits here rather than with the vendor block. A deployment that already
+    // configured file encryption thus gets per-user vendor-token encryption for
+    // free (durable, works multi-instance); set VENDOR_TOKEN_ENCRYPTION_KEY only to
+    // rotate it independently of the file key. With NEITHER key set there is no key,
+    // and tokens are never persisted (see vendor_link.cpp).
+    if (cfg.vendor_token_encryption_keys.empty()) {
+        cfg.vendor_token_encryption_keys = cfg.file_encryption_keys;
     }
     cfg.file_key_seed       = store.get_str("FILE_KEY_SEED",        cfg.file_key_seed);
     cfg.file_url_prefix     = store.get_str("FILE_URL_PREFIX",      cfg.file_url_prefix);
@@ -641,6 +707,26 @@ void Config::print() const {
         std::fprintf(out, "  vitalera\n");
         std::fprintf(out, "    environment   : %s\n", vitalera.environment.empty() ? "<default>" : vitalera.environment.c_str());
         std::fprintf(out, "    api_key       : %s\n", mask(vitalera.api_key).c_str());
+    }
+
+    if (!dexcom.environment.empty()) {
+        std::fprintf(out, "\n");
+        std::fprintf(out, "  dexcom\n");
+        std::fprintf(out, "    environment   : %s\n", dexcom.environment.c_str());
+    }
+
+    for (std::unordered_map<std::string, VendorCredentials>::const_iterator it =
+             vendor_credentials.begin(); it != vendor_credentials.end(); ++it) {
+        std::fprintf(out, "\n");
+        std::fprintf(out, "  vendor:%s\n", it->first.c_str());
+        if (!it->second.client_id.empty())
+            std::fprintf(out, "    client_id     : %s\n", mask(it->second.client_id).c_str());
+        if (!it->second.client_secret.empty())
+            std::fprintf(out, "    client_secret : %s\n", mask(it->second.client_secret).c_str());
+        if (!it->second.api_key.empty())
+            std::fprintf(out, "    api_key       : %s\n", mask(it->second.api_key).c_str());
+        if (!it->second.base_url.empty())
+            std::fprintf(out, "    base_url      : %s\n", it->second.base_url.c_str());
     }
 
 

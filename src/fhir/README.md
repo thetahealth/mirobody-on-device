@@ -17,7 +17,7 @@ files) stays in Python; the C++ core only *consumes* the artifacts it produces.
 | ----- | ----- | ----- |
 | 1 | **Unit normalization** ([units/](units/)) | ✅ done |
 | 2 | **RESTful FHIR R4 server** ([rest.cpp](rest.cpp), [resource.cpp](resource.cpp), [store.cpp](store.cpp)) | ✅ done |
-| 3 | **Terminology resolve** — embed query → cosine over the bundle → ranked codes | ⏳ planned |
+| 3 | **Terminology resolve** — moved to [`src/indicator/`](../indicator/) and **redefined lexical-first** (deterministic match → rerank), replacing the embed→cosine design. The offline lexicon emitter is now C++ too (`cli/indicator build-lexicon`), not Python. | 🚧 in progress (M1) |
 | 4 | **Document → indicators → FHIR** pipeline wiring | ⏳ planned |
 | 5 | concept-graph expansion + taxonomy category view | ⏳ planned |
 

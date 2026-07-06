@@ -20,6 +20,7 @@
 //     Fitbit user id, or "-" (the API's alias for the token's own user).
 
 #include "health/vendor/vendor.hpp"
+#include "health/vendor/oauth2.hpp"
 
 #include "client/http_client.hpp"
 #include "storage/sign.hpp"   // hmac_sha1 / base64_encode
@@ -197,6 +198,21 @@ public:
         }
     }
 
+    // OAuth2 token endpoint at {base}/oauth2/token; a confidential client authenticates
+    // with HTTP Basic (client_id:client_secret).
+    TokenSet exchange_code(const std::string& code, const std::string& redirect_uri) override {
+        require_client();
+        return oauth2_token_request(base_url() + "/oauth2/token",
+            { {"grant_type", "authorization_code"}, {"code", code}, {"redirect_uri", redirect_uri} },
+            config().client_id, config().client_secret);
+    }
+    TokenSet refresh(const std::string& refresh_token) override {
+        require_client();
+        return oauth2_token_request(base_url() + "/oauth2/token",
+            { {"grant_type", "refresh_token"}, {"refresh_token", refresh_token} },
+            config().client_id, config().client_secret);
+    }
+
     // Verify and return an inbound Fitbit subscription notification. The POST body
     // is a JSON array; its signature is in the `X-Fitbit-Signature` header as
     // base64(HMAC-SHA1(raw_body)) keyed by the OAuth client secret with '&'
@@ -260,6 +276,12 @@ private:
         if (config().api_key.empty()) {
             throw VendorError(info_.id + ": api_key is required — set "
                               "MIROBODY_VENDOR_FITBIT_API_KEY to a Fitbit OAuth 2.0 access token");
+        }
+    }
+
+    void require_client() const {
+        if (config().client_id.empty() || config().client_secret.empty()) {
+            throw VendorError(info_.id + ": token exchange needs FITBIT_CLIENT_ID + FITBIT_CLIENT_SECRET");
         }
     }
 
