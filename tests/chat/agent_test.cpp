@@ -176,28 +176,28 @@ TEST_CASE("global registry: load_clients -> create -> stream", "[agent]") {
 }
 
 //------------------------------------------------------------------------------
-// BaseAgent self-registered from res/agents/base.cpp (linked via
+// BaselineAgent self-registered from res/agents/baseline.cpp (linked via
 // $<TARGET_OBJECTS:agent_impls>). Mirrors the MCP "tools self-register" guard.
 //------------------------------------------------------------------------------
 
-TEST_CASE("BaseAgent self-registers", "[agent]") {
-    const AgentRegistration* base = agent_registry().find("Base");
+TEST_CASE("BaselineAgent self-registers", "[agent]") {
+    const AgentRegistration* base = agent_registry().find("Baseline");
     REQUIRE(base != nullptr);
     REQUIRE(base->is_public);
     REQUIRE(base->factory);
 }
 
-TEST_CASE("BaseAgent loads its three providers", "[agent]") {
+TEST_CASE("BaselineAgent loads its three providers", "[agent]") {
     mirobody::Config cfg;   // empty config: clients build but cannot call out
     agent_registry().load_clients(cfg);
 
-    REQUIRE(agent_registry().client("Base", "gpt-5-nano")       != nullptr);
-    REQUIRE(agent_registry().client("Base", "gemini-2.5-flash") != nullptr);
-    REQUIRE(agent_registry().client("Base", "mirothinker-1.7")  != nullptr);
+    REQUIRE(agent_registry().client("Baseline", "gpt-5-nano")       != nullptr);
+    REQUIRE(agent_registry().client("Baseline", "gemini-2.5-flash") != nullptr);
+    REQUIRE(agent_registry().client("Baseline", "mirothinker-1.7")  != nullptr);
 
-    // They surface as "Base/<provider>" in the discovery list.
+    // They surface as "Baseline/<provider>" in the discovery list.
     const std::vector<std::string> names = agent_registry().provider_names(true);
-    REQUIRE(std::find(names.begin(), names.end(), "Base/gpt-5-nano")       != names.end());
-    REQUIRE(std::find(names.begin(), names.end(), "Base/gemini-2.5-flash") != names.end());
-    REQUIRE(std::find(names.begin(), names.end(), "Base/mirothinker-1.7")  != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "Baseline/gpt-5-nano")       != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "Baseline/gemini-2.5-flash") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "Baseline/mirothinker-1.7")  != names.end());
 }

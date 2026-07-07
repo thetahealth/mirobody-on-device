@@ -24,6 +24,23 @@
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <uses-permission android:name="android.permission.health.READ_WEIGHT" />
 
+    <!-- Direct BLE GATT health sensors (data/health/ble, BleHealthController). On
+         API 31+ scanning/connecting use the runtime BLUETOOTH_SCAN / BLUETOOTH_CONNECT
+         permissions (neverForLocation: we don't derive location from beacons); on
+         API 26–30 the legacy BLUETOOTH/BLUETOOTH_ADMIN (install-time) plus
+         ACCESS_FINE_LOCATION (runtime, required for BLE scan) apply instead. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="s" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
     <!-- Android 11+ package visibility -->
     <queries>
         <!-- WeChat OpenSDK detect/launch for "Sign in with WeChat". -->

@@ -36,7 +36,7 @@ add_executable(mirobody_tests
 
 # Link the self-registering MCP tool and agent objects directly into the test
 # binary, the same way the final app targets do (see the root CMakeLists.txt).
-# This is what lets the registration tests observe echo/whoami and BaseAgent:
+# This is what lets the registration tests observe echo/whoami and BaselineAgent:
 # were they only in the mirobody_core archive, the linker would drop them here.
 target_sources(mirobody_tests PRIVATE
     $<TARGET_OBJECTS:mcp_tools>

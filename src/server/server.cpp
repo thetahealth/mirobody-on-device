@@ -83,17 +83,12 @@ bool Server::start() {
             std::string env_upper(env);
             for (char& c : env_upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 
-            if (env_upper == "TEST" || env_upper == "GRAY" || env_upper == "PROD") {
-                mirobody::platform::log_info(
-                    "database init: skipping schema migration (ENV=%s, managed externally)", env);
-            } else {
-                try {
-                    mirobody::database::apply_schema(*db_, cfg_.sql_dir + "/" MIROBODY_DATABASE_BACKEND_DIR);
-                } catch (const std::exception& e) {
-                    mirobody::platform::log_error("database init failed: %s", e.what());
-                    mirobody::client::HttpClient::global_cleanup();
-                    return false;
-                }
+            try {
+                mirobody::database::apply_schema(*db_, cfg_.sql_dir + "/" MIROBODY_DATABASE_BACKEND_DIR);
+            } catch (const std::exception& e) {
+                mirobody::platform::log_error("database init failed: %s", e.what());
+                mirobody::client::HttpClient::global_cleanup();
+                return false;
             }
         }
 

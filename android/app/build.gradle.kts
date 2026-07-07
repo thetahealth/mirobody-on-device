@@ -101,8 +101,13 @@ if (nativeServerEnabled) {
                         // find_package/find_library only search the find-root paths. Seeding the
                         // prebuilt prefix here makes the deps under prebuilt/<abi>/{lib,include,share}
                         // resolvable; the toolchain appends the NDK sysroot after it.
-                        "-DCMAKE_FIND_ROOT_PATH=${rootProject.projectDir}/prebuilt/\${ANDROID_ABI}",
-                        "-DCMAKE_PREFIX_PATH=${rootProject.projectDir}/prebuilt/\${ANDROID_ABI}",
+                        //
+                        // The path is interpolated with the single fixed `androidAbi` (abiFilters
+                        // restricts the build to it) rather than CMake's `${ANDROID_ABI}` macro:
+                        // AGP 9.0 no longer expands that macro in cmake arguments and errors with
+                        // "Unrecognized macro ANDROID_ABI". Hardcoding the sole ABI is equivalent.
+                        "-DCMAKE_FIND_ROOT_PATH=${rootProject.projectDir}/prebuilt/$androidAbi",
+                        "-DCMAKE_PREFIX_PATH=${rootProject.projectDir}/prebuilt/$androidAbi",
                     )
                     cppFlags += "-std=c++17"
                 }

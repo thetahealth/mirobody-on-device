@@ -7,7 +7,7 @@
 // circle::can_read_health. The tool then returns that subject's most recent
 // Observations (code · value · time) for the model to summarize — the data half
 // of "how is Mom doing?". The chat composer's "currently for" picker biases the
-// model toward a member via a system-prompt hint (see res/agents/base.cpp); the
+// model toward a member via a system-prompt hint (see res/agents/baseline.cpp); the
 // model may also pick a member straight from the question.
 
 #include "mcp/tool.hpp"

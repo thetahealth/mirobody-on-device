@@ -174,6 +174,24 @@ void ApiClient::getEnvelope(const QString& path,
     });
 }
 
+void ApiClient::postRaw(const QString& path,
+                        const QByteArray& contentType,
+                        const QByteArray& body,
+                        std::function<void(bool, int)> onDone) {
+    QNetworkRequest req{QUrl(absoluteUrl(path))};
+    req.setHeader(QNetworkRequest::ContentTypeHeader, contentType);
+    if (!token_.isEmpty()) {
+        req.setRawHeader("Authorization", QByteArray("Bearer ") + token_.toUtf8());
+    }
+    QNetworkReply* reply = nam_->post(req, body);
+    connect(reply, &QNetworkReply::finished, this, [reply, onDone]() {
+        reply->deleteLater();
+        const int http = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool ok = reply->error() == QNetworkReply::NoError && http >= 200 && http < 300;
+        if (onDone) onDone(ok, http);
+    });
+}
+
 SseStream* ApiClient::openStream(const QString& path, const QJsonObject& body) {
     QNetworkRequest req{QUrl(absoluteUrl(path))};
     req.setHeader(QNetworkRequest::ContentTypeHeader,

@@ -11,6 +11,7 @@
 
 #include "appcontroller.hpp"
 #include "chatmodel.hpp"
+#include "blehealth.hpp"
 
 int main(int argc, char* argv[]) {
     QGuiApplication app(argc, argv);
@@ -26,6 +27,12 @@ int main(int argc, char* argv[]) {
     qmlRegisterUncreatableType<ChatModel>(
         "Mirobody", 1, 0, "ChatModel",
         QStringLiteral("ChatModel is provided by AppController.chat"));
+
+    // Likewise BleHealth is owned by AppController and exposed as `app.ble`; register
+    // it uncreatable so QML resolves its properties/signals.
+    qmlRegisterUncreatableType<BleHealth>(
+        "Mirobody", 1, 0, "BleHealth",
+        QStringLiteral("BleHealth is provided by AppController.ble"));
 
     QQmlApplicationEngine engine;
 

@@ -6,6 +6,8 @@
 
 #include <libwebsockets.h>
 
+#include <zlib.h>              // gzip-compress large fixed-length response bodies
+
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
@@ -38,6 +40,11 @@ struct PerHttpSession {
     size_t out_sent = 0;
     Response response;
     bool response_ready = false;
+
+    // Whether the client advertised gzip in Accept-Encoding. Latched at dispatch
+    // (the Request is gone by the time the writeable callback runs) and consulted
+    // when framing a fixed-length body: a large text response is gzip-ed then.
+    bool accept_gzip = false;
 
     // Chunked-streaming state, used only when response.is_streaming(). Headers
     // go out on the first writeable callback; each later callback drains
@@ -489,6 +496,7 @@ void collect_headers(lws* wsi, Request& req) {
     req.user_agent      = copy_lws_header(wsi, WSI_TOKEN_HTTP_USER_AGENT);
     req.host            = copy_lws_header(wsi, WSI_TOKEN_HOST);
     req.content_type    = copy_lws_header(wsi, WSI_TOKEN_HTTP_CONTENT_TYPE);
+    req.accept_encoding = copy_lws_header(wsi, WSI_TOKEN_HTTP_ACCEPT_ENCODING);
 
     req.accept_language = first_language(copy_lws_header(wsi, WSI_TOKEN_HTTP_ACCEPT_LANGUAGE));
 
@@ -787,6 +795,69 @@ bool serve_storage_file(lws* wsi, Router::Impl* impl, const Request& req, int* r
 //------------------------------------------------------------------------------
 // Response writing
 //------------------------------------------------------------------------------
+
+// Body below this size is sent uncompressed: gzip's framing overhead and the
+// CPU to produce it don't pay off, and tiny payloads can even grow.
+constexpr size_t GZIP_MIN_BODY = 10 * 1024;
+
+// Whether the client's Accept-Encoding advertises gzip as acceptable. A plain
+// substring match, except we reject an explicit "gzip;q=0" ("not acceptable");
+// finer q-value ranking isn't worth it for a single supported encoding.
+bool client_accepts_gzip(const std::string& accept_encoding) {
+    const std::size_t g = accept_encoding.find("gzip");
+    if (g == std::string::npos) return false;
+    // Look for a ";q=0" qualifier attached to this token (up to the next comma),
+    // treating "q=0", "q=0.0" as a refusal but "q=0.5" as acceptance.
+    const std::size_t comma = accept_encoding.find(',', g);
+    const std::string tok = accept_encoding.substr(g, comma == std::string::npos ? std::string::npos : comma - g);
+    const std::size_t q = tok.find("q=");
+    if (q != std::string::npos) {
+        const std::string qv = tok.substr(q + 2);
+        if (qv.compare(0, 1, "0") == 0 && qv.find_first_of("123456789") == std::string::npos) return false;
+    }
+    return true;
+}
+
+// Whether a response of this content-type compresses well enough to bother:
+// text-like payloads (HTML/CSS/JS/JSON/XML/SVG). Binary and already-compressed
+// types (images, archives, fonts) are skipped -- gzip just burns CPU on them.
+bool gzip_worthwhile_type(const std::string& content_type) {
+    std::string ct = content_type;
+    for (std::size_t i = 0; i < ct.size(); ++i) {
+        char& c = ct[i];
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    }
+    return ct.compare(0, 5, "text/") == 0 ||
+           ct.find("json") != std::string::npos ||
+           ct.find("javascript") != std::string::npos ||
+           ct.find("xml") != std::string::npos ||
+           ct.find("svg") != std::string::npos;
+}
+
+// gzip-compress `in` into a self-contained gzip stream (RFC 1952) for a
+// Content-Encoding: gzip response. Returns true and fills `out` on success;
+// false on any zlib error, so the caller can fall back to the raw body.
+bool gzip_compress(const std::string& in, std::string& out) {
+    z_stream zs;
+    std::memset(&zs, 0, sizeof(zs));
+    // windowBits 15|16: 15 = the maximum (32 KiB) window, +16 selects the gzip
+    // wrapper (as opposed to the zlib wrapper used by the lexicon artifact).
+    if (deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8,
+                     Z_DEFAULT_STRATEGY) != Z_OK) {
+        return false;
+    }
+    zs.next_in  = reinterpret_cast<Bytef*>(const_cast<char*>(in.data()));
+    zs.avail_in = static_cast<uInt>(in.size());
+    out.resize(static_cast<std::size_t>(deflateBound(&zs, static_cast<uLong>(in.size()))));
+    zs.next_out  = reinterpret_cast<Bytef*>(&out[0]);
+    zs.avail_out = static_cast<uInt>(out.size());
+    const int rc = deflate(&zs, Z_FINISH);
+    const uLong produced = zs.total_out;
+    deflateEnd(&zs);
+    if (rc != Z_STREAM_END) return false;   // didn't fit in one pass -- give up
+    out.resize(static_cast<std::size_t>(produced));
+    return true;
+}
 
 // Append the response's per-request headers and the router's configured default
 // headers (the CORS Access-Control-* set) to an in-progress lws header block.
@@ -1094,6 +1165,7 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             return lws_http_transaction_completed(wsi) ? -1 :
                 (lws_return_http_status(wsi, HTTP_STATUS_NOT_FOUND, "not found"), -1);
         }
+        session->accept_gzip = client_accepts_gzip(req.accept_encoding);
         session->response.set_request(&req);
         (*h)(req, session->response);
         session->response_ready = true;
@@ -1122,6 +1194,7 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             lws_return_http_status(wsi, HTTP_STATUS_NOT_FOUND, "not found");
             return -1;
         }
+        session->accept_gzip = client_accepts_gzip(req.accept_encoding);
         session->response.set_request(&req);
         (*h)(req, session->response);
         session->response_ready = true;
@@ -1142,6 +1215,18 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
         if (session->response.is_streaming()) return write_streaming(wsi, session, impl);
 
         if (session->out_buf.empty() && session->out_sent == 0) {
+            const std::string& body = session->response.body();
+
+            // gzip a large text body when the client advertised it; on any zlib
+            // failure fall back to the raw body. Content-Length is then the
+            // *compressed* size, and Content-Encoding/Vary go out alongside.
+            std::string gz;
+            const bool gzipped =
+                session->accept_gzip &&
+                body.size() >= GZIP_MIN_BODY &&
+                gzip_worthwhile_type(session->response.content_type()) &&
+                gzip_compress(body, gz);
+
             uint8_t headers[LWS_TX_BUFFER];
             uint8_t* p = headers + LWS_PRE;
             uint8_t* end = headers + sizeof(headers);
@@ -1149,15 +1234,29 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             if (lws_add_http_common_headers(wsi,
                     static_cast<unsigned>(session->response.status()),
                     session->response.content_type().c_str(),
-                    session->response.body().size(),
+                    gzipped ? gz.size() : body.size(),
                     &p, end)) return -1;
 
             // Per-request headers plus the configured default headers (the CORS
             // Access-Control-* set) added to every response.
             if (add_extra_headers(wsi, session->response, impl, &p, end)) return -1;
 
+            // Advertise the encoding, and that the body varies by Accept-Encoding
+            // so a shared cache won't hand a gzip body to a client that can't read
+            // it.
+            if (gzipped) {
+                if (lws_add_http_header_by_name(wsi,
+                        reinterpret_cast<const unsigned char*>("content-encoding:"),
+                        reinterpret_cast<const unsigned char*>("gzip"), 4, &p, end)) return -1;
+                if (lws_add_http_header_by_name(wsi,
+                        reinterpret_cast<const unsigned char*>("vary:"),
+                        reinterpret_cast<const unsigned char*>("Accept-Encoding"),
+                        15, &p, end)) return -1;
+            }
+
             if (lws_finalize_write_http_header(wsi, headers + LWS_PRE, &p, end)) return -1;
-            session->out_buf = session->response.body();
+            if (gzipped) session->out_buf = std::move(gz);
+            else         session->out_buf = body;
         }
 
         if (session->out_sent < session->out_buf.size()) {

@@ -109,6 +109,7 @@ import ai.thetahealth.mirobody.ui.LocalFontSizePreview
 import ai.thetahealth.mirobody.ui.ProvideLocale
 import ai.thetahealth.mirobody.ui.circle.CareCircleDialog
 import ai.thetahealth.mirobody.ui.circle.ShareConversationDialog
+import ai.thetahealth.mirobody.ui.health.BleDeviceDialog
 import ai.thetahealth.mirobody.ui.health.HealthSyncDialog
 import ai.thetahealth.mirobody.ui.settings.BaseUrlDialog
 import ai.thetahealth.mirobody.ui.settings.FontSizeDialog
@@ -596,6 +597,7 @@ private fun SettingsMenu(
     var showFontSizeDialog by remember { mutableStateOf(false) }
     var showBackendDialog by remember { mutableStateOf(false) }
     var showHealthDialog by remember { mutableStateOf(false) }
+    var showBleDialog by remember { mutableStateOf(false) }
     var showCircleDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
@@ -635,6 +637,13 @@ private fun SettingsMenu(
                 onClick = {
                     expanded = false
                     showHealthDialog = true
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.chat_bluetooth)) },
+                onClick = {
+                    expanded = false
+                    showBleDialog = true
                 },
             )
             DropdownMenuItem(
@@ -718,6 +727,13 @@ private fun SettingsMenu(
         HealthSyncDialog(
             currentLanguage = currentLanguage,
             onDismiss = { showHealthDialog = false },
+        )
+    }
+
+    if (showBleDialog) {
+        BleDeviceDialog(
+            currentLanguage = currentLanguage,
+            onDismiss = { showBleDialog = false },
         )
     }
 

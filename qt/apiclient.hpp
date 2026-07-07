@@ -75,6 +75,15 @@ public:
                      std::function<void(const QJsonValue&)> onSuccess,
                      std::function<void(const QString&, int)> onError);
 
+    // POST raw `body` (e.g. application/fhir+json) to `path` WITHOUT the
+    // {code,msg,data} envelope -- the FHIR R4 endpoint answers with a bare
+    // resource and a 2xx. `onDone(ok, httpStatus)`; the bearer token rides along.
+    // Used by BleHealth to ingest Observations, mirroring the mobile apps.
+    void postRaw(const QString& path,
+                 const QByteArray& contentType,
+                 const QByteArray& body,
+                 std::function<void(bool, int)> onDone);
+
     // Open an SSE stream by POSTing `body` to `path`. The returned SseStream is
     // parented to this client; connect to its signals before the event loop
     // turns. Never returns null.

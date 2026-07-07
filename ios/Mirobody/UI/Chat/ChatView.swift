@@ -16,6 +16,7 @@ struct ChatView: View {
     @State private var showFontSize = false
     @State private var showBackend = false
     @State private var showHealth = false
+    @State private var showBle = false
     @State private var showAbout = false
     @State private var showSignOut = false
     @State private var showFileImporter = false
@@ -58,6 +59,7 @@ struct ChatView: View {
         .sheet(isPresented: $showFontSize) { sheetEnv { FontSizeDialog() } }
         .sheet(isPresented: $showBackend) { sheetEnv { BaseUrlDialog() } }
         .sheet(isPresented: $showHealth) { sheetEnv { HealthSyncView(container: container) } }
+        .sheet(isPresented: $showBle) { sheetEnv { BleDeviceView(container: container) } }
         .sheet(isPresented: $showOnDeviceModel) {
             sheetEnv {
                 OnDeviceModelView(
@@ -245,6 +247,7 @@ struct ChatView: View {
             Button(L("chat_backend", lang)) { showBackend = true }
             // English literal for now; localize via the .lproj tables when wiring i18n.
             Button("Sync health data") { showHealth = true }
+            Button("Bluetooth devices") { showBle = true }
             Button(L("chat_about", lang)) { showAbout = true }
             Divider()
             Button(role: .destructive) { showSignOut = true } label: { Text(L("chat_sign_out", lang)) }

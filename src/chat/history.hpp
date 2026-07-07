@@ -26,7 +26,7 @@ namespace mirobody { namespace chat {
 
 // Cap on rows (one message per row) retained per conversation; the oldest
 // fall off. 40 rows = 20 exchanges, comfortably past the 10 user turns
-// BaseAgent keeps after trim_to_recent_user_turns.
+// BaselineAgent keeps after trim_to_recent_user_turns.
 const std::size_t kHistoryMaxMessages = 40;
 
 // How long a conversation survives without a new exchange.

@@ -62,6 +62,11 @@ public:
     // handler pick a body parser. Populated by collect_request().
     std::string content_type;
 
+    // Raw value of the Accept-Encoding header (e.g. "gzip, deflate, br"), or
+    // empty when absent. The router consults it to decide whether to gzip a
+    // large fixed-length response body. Populated by collect_request().
+    std::string accept_encoding;
+
     // The last SSE event id the client saw, naming where a resumed stream should
     // pick up. Read from the X-Last-Event-Id header, falling back to a
     // `last_event_id` query parameter; empty on a fresh connection.

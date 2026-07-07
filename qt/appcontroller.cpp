@@ -85,6 +85,10 @@ AppController::AppController(QObject* parent)
     downloader_  = new ModelDownloader(this);
     localEngine_ = new LocalLmEngine(this);
 
+    // Direct BLE GATT ingestion shares the one ApiClient, so it always posts with
+    // the current base URL + bearer token (updated on login / backend change).
+    ble_ = new BleHealth(api_, this);
+
     if (!token.isEmpty()) {
         loggedIn_ = true;
         email_ = emailClaim(token);

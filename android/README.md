@@ -101,6 +101,30 @@ the ingestion path for the phone-vendor health stores that have no server API
   `agconnect-services.json` + the agconnect plugin. `HealthConnectSource` works on
   GMS devices with none of that.
 
+### Direct Bluetooth (BLE GATT) sensors
+
+Beyond the platform stores, the app can talk **directly to a standard-profile BLE
+sensor** (`data/health/ble/`) — the Android-native sibling of the desktop Qt
+`BleHealth`. `BleHealthController` scans with the framework `android.bluetooth.le`
+APIs, connects over GATT, subscribes to each supported measurement characteristic,
+decodes it (`GattHealthCodec`), and POSTs the FHIR `Observation` to `/fhir/Observation`
+— the same ingestion path as Health Connect (no new server code). No extra Gradle
+dependency: BLE is in the framework. Reached from the chat overflow menu → **Bluetooth
+devices** (`ui/health/BleDeviceDialog`).
+
+- **Supported services**: Heart Rate `0x180D` → `0x2A37`, Blood Pressure `0x1810` →
+  `0x2A35` (systolic/diastolic/MAP), Health Thermometer `0x1809` → `0x2A1C`. Adding
+  one is a branch in `GattHealthCodec.decode` + a UUID constant. Consumer
+  watches/rings use proprietary/encrypted GATT and are **not** readable here — they
+  stay on the cloud vendor clients / Health Connect.
+- **When to use it**: this is the fallback for standard medical sensors that have no
+  companion app. Most devices still route through Health Connect first — prefer that.
+- **Permissions** (requested at runtime from the dialog): `BLUETOOTH_SCAN` +
+  `BLUETOOTH_CONNECT` on API 31+ (`neverForLocation`), or `ACCESS_FINE_LOCATION` on
+  API 26–30 (BLE scan requires it there); declared in `AndroidManifest.xml` with a
+  non-required `bluetooth_le` feature. The GATT layer serializes CCCD writes through a
+  one-op-at-a-time queue (Android permits a single outstanding GATT operation).
+
 ## Project layout
 
 ```

@@ -272,3 +272,121 @@ access-model and endpoint-status tables.
 
 Other brands (Suunto, Ultrahuman, …) stay aggregator-only — they are partner-gated,
 so add a direct client only once you hold their partner credentials.
+
+## Direct Bluetooth devices (HDP / BLE GATT) — not yet implemented
+
+Everything above reaches a device through a **cloud API** or an **on-device platform
+store** (Health Connect / HealthKit). A third path — talking **Bluetooth directly to
+the sensor** — is not built yet; this section is the map for adding it.
+
+**Where it runs:**
+
+- The server has no radio near the user's devices, so it **cannot** read Bluetooth.
+- The read happens on a client next to the sensor — the [`qt`](../../qt/) desktop app, a native mobile layer, or a gateway.
+- That client maps readings to FHIR `Observation`s and **POSTs them to the FHIR R4 endpoint** — the same on-device path Apple/Health-Connect use, so **no new server route or Bluetooth code is needed here**.
+- On phones most devices need no direct connection: the OEM companion app pairs the sensor and its samples land in Health Connect / HealthKit.
+- Direct BLE is only for **standard-profile medical devices with no companion app**, or desktop / kiosk / gateway scenarios.
+
+### HDP — Health Device Profile (Classic Bluetooth)
+
+MCAP transport + IEEE 11073-20601 exchange protocol + a `104xx` device specialization.
+
+> ⚠️ **Legacy — do not build on HDP.** The Bluetooth SIG stopped advancing it;
+> Android's `BluetoothHealth` was deprecated in API 29 then removed; iOS and Windows
+> never supported it. Only relevant for existing legacy medical hardware over Linux BlueZ.
+
+| IEEE 11073 | Device |
+| --- | --- |
+| `-10404` | Pulse oximeter |
+| `-10406` | Basic heart rate / ECG |
+| `-10407` | Blood pressure monitor |
+| `-10408` | Thermometer |
+| `-10415` | Weighing scale |
+| `-10417` | Glucose meter |
+| `-10418` | Coagulation (INR) |
+| `-10420` | Body composition analyzer |
+| `-10421` | Peak flow (respiratory) |
+| `-10441` | Cardiovascular fitness / activity |
+| `-10442` | Strength fitness |
+| `-10471` | Independent living activity hub |
+| `-10472` | Medication monitor |
+
+### BLE GATT — the current standard
+
+BLE Low Energy with standardized SIG GATT services (16-bit UUIDs); readings arrive via
+Notify/Indicate or characteristic reads.
+
+The **free direct-read examples** column lists devices that expose the *standard public*
+GATT service, so an individual dev can just buy one and read it — no cloud API,
+partnership, or paid tier. Blank = no reliably standard-profile consumer device (the
+category is dominated by proprietary/encrypted GATT; see the caveats below).
+
+| Service | UUID | Key characteristic | Free direct-read examples (individual dev) |
+| --- | --- | --- | --- |
+| Heart Rate (HRS) | `0x180D` | Heart Rate Measurement `0x2A37` | Polar H10, Polar H9, Wahoo TICKR, Garmin HRM-Dual, CooSpo H6 |
+| Health Thermometer (HTS) | `0x1809` | Temperature Meas. `0x2A1C` | *(few — mostly proprietary)* |
+| Blood Pressure (BLS) | `0x1810` | BP Measurement `0x2A35` | A&D UA-651BLE, A&D UA-767BLE, Beurer BM57 |
+| Glucose (GLS) | `0x1808` | Glucose Meas. `0x2A18` | *(most meters proprietary)* |
+| Continuous Glucose (CGMS) | `0x181F` | CGM Meas. `0x2AA7` | *(Dexcom / Libre are encrypted — none)* |
+| Pulse Oximeter (PLXS) | `0x1822` | Spot `0x2A5E` / Continuous `0x2A5F` | Nonin 3230, Masimo MightySat |
+| Weight Scale (WSS) | `0x181D` | Weight Meas. `0x2A9D` | A&D UC-352BLE |
+| Body Composition (BCS) | `0x181B` | Body Comp. Meas. `0x2A9C` | *(mostly proprietary — Mi/Withings, etc.)* |
+| Insulin Delivery (IDS) | `0x183A` | — | *(prescription pumps — not self-serve)* |
+| Physical Activity Monitor (PAMS) | `0x183E` | — | |
+| Fitness Machine (FTMS) | `0x1826` | — | Wahoo KICKR, Zwift Hub, Tacx Flux, Elite Suito |
+| Cycling Speed & Cadence (CSC) | `0x1816` | `0x2A5B` | Wahoo RPM, Garmin Speed Sensor 2, Magene S3+ |
+| Running Speed & Cadence (RSC) | `0x1814` | `0x2A53` | Stryd, Garmin RD Pod |
+| Cycling Power | `0x1818` | `0x2A63` | Favero Assioma, Stages, 4iiii Precision, Garmin Rally |
+| Device Information (DIS) | `0x180A` | model / serial / firmware | *(companion service — present on all above)* |
+| Battery (BAS) | `0x180F` | Battery Level `0x2A19` | *(companion service — present on all above)* |
+
+Two caveats:
+- **GHS (Generic Health Sensor)** is the SIG's newer profile — IEEE 11073's data model
+  carried over BLE GATT, the modern successor to HDP; worth tracking for durable
+  medical-device support.
+- **Consumer watches/rings (Oura, WHOOP, Fitbit, Garmin, Apple Watch, Mi/Huawei bands)
+  use proprietary/encrypted GATT** and can't be read directly — they stay on the cloud
+  clients in [`vendor/device/`](vendor/device/) or the platform stores. Direct BLE is
+  only genuinely useful for **standard-profile medical devices**: BP cuffs, glucose
+  meters, thermometers, SpO₂ meters, scales, HR straps.
+
+### Can C++ read Bluetooth directly?
+
+Yes — but there is **no cross-platform standard API**; each OS differs:
+
+| Platform | Classic / HDP | BLE GATT | C++ route |
+| --- | --- | --- | --- |
+| Linux | BlueZ + libbluetooth (MCAP) | BlueZ D-Bus (`org.bluez`) | D-Bus C++ bindings |
+| Windows | — (HDP effectively absent) | `Windows.Devices.Bluetooth` | **C++/WinRT** direct |
+| macOS / iOS | ❌ none | Core Bluetooth (BLE only) | Obj-C++ bridge |
+| Android | ❌ HDP API removed | `android.bluetooth.le` | NDK has no BT → **JNI** to Java |
+
+Cross-platform C++ libraries:
+- **Qt Bluetooth (QtConnectivity)** — `QLowEnergyController` for BLE GATT, `QBluetooth*`
+  for classic. The [`qt`](../../qt/) desktop app already exists, so this is the natural
+  fit for a desktop BLE path.
+- **SimpleBLE** — lightweight, commercially-friendly cross-platform C++ BLE (Win/macOS/Linux).
+
+**Bottom line:** don't invest in HDP; BLE GATT for standard-profile medical devices is
+the only worthwhile direction; read it on the client (desktop Qt `QLowEnergyController`,
+or native mobile / Health Connect / HealthKit) and feed the existing FHIR R4 endpoint —
+the server stays untouched, gaining only one more FHIR write source.
+
+### Implementation split — three codebases
+
+Each client uses its platform's native BLE stack (matching how the apps are already
+built), so a BLE reader is written **three times**, not once. All three now exist,
+sharing the same decoders (HR / BP / thermometer, IEEE-11073 SFLOAT/FLOAT) and FHIR
+`Observation` shape:
+
+| Codebase | Covers | BLE stack | Language | Implementation |
+| --- | --- | --- | --- | --- |
+| Android app | Android | `android.bluetooth.le` | Kotlin | [`data/health/ble/`](../../android/app/src/main/java/ai/thetahealth/mirobody/data/health/ble/) |
+| iOS app | iOS | Core Bluetooth | Swift | [`Data/Health/BleHealthController.swift`](../../ios/Mirobody/Data/Health/BleHealthController.swift) |
+| [`qt`](../../qt/) desktop app | Windows / macOS / Linux | `QLowEnergyController` | C++ | [`qt/blehealth.cpp`](../../qt/blehealth.cpp) |
+
+iOS and macOS both sit on Core Bluetooth but **don't share code** — iOS is the Swift
+app, macOS is the Qt desktop app. The one Qt C++ implementation covers all three desktop
+OSes (Qt's WinRT / Core Bluetooth / BlueZ backends). All three map to FHIR `Observation`
+and POST to the same endpoint. Mobile stays on Health Connect / HealthKit first —
+a direct-BLE reader there is only for standard-profile medical devices with no companion app.

@@ -26,6 +26,18 @@ Full parity with the web client's main flow:
   downloaded on demand (`ModelDownloader`). The engine (`LocalLmEngine`, Gemma 4
   via LiteRT-LM C++) is compiled only with `-DMIROBODY_ONDEVICE_LLM=ON`; without
   it the option still appears but reports the feature isn't built in.
+- **Direct Bluetooth (BLE GATT) health sensors** — scan for a standard-profile BLE
+  sensor (HR strap, blood-pressure cuff, thermometer), connect, and stream its
+  readings straight into the server's FHIR store. This is the desktop counterpart of
+  the mobile HealthKit / Health Connect readers: `BleHealth` (built on Qt Bluetooth's
+  `QLowEnergyController`) decodes each GATT / IEEE-11073 measurement, maps it to a FHIR
+  R4 `Observation`, and `POST`s it to `/fhir/Observation` (the same ingestion path the
+  phones use — the server gains no BLE code). Only standard-profile devices are
+  readable; consumer watches/rings use proprietary/encrypted GATT and stay on the cloud
+  vendor clients. See [`src/health/README.md`](../src/health/README.md) → *Direct
+  Bluetooth devices*. Supported services: Heart Rate `0x180D`, Blood Pressure `0x1810`,
+  Health Thermometer `0x1809` (adding one is a row in the decode dispatch in
+  [`blehealth.cpp`](blehealth.cpp)). Reached from **⚙ → Bluetooth devices** when signed in.
 - **Local conversation persistence** — the running conversation is mirrored to a
   per-user JSON file under `QStandardPaths::AppDataLocation`
   (`conversation-<userid>.json`, keyed by the JWT `sub`), the desktop stand-in
@@ -50,8 +62,9 @@ source.
 qt/
   CMakeLists.txt        Qt6 Quick app + QML module (Mirobody)
   main.cpp              engine bootstrap; exposes AppController as `app`
-  apiclient.{hpp,cpp}   HTTP envelope + SSE streaming (the net.js analogue)
+  apiclient.{hpp,cpp}   HTTP envelope + SSE streaming (the net.js analogue) + raw FHIR POST
   chatmodel.{hpp,cpp}   QAbstractListModel of the transcript
+  blehealth.{hpp,cpp}   direct BLE GATT sensor scan/connect -> FHIR Observation ingestion
   appcontroller.{hpp,cpp}  settings, login, providers, streaming, persistence
   modeldownloader.{hpp,cpp}  on-device model download (Hugging Face) + progress
   locallmengine.{hpp,cpp}  on-device Gemma 4 engine (LiteRT-LM; stub unless enabled)
@@ -59,7 +72,7 @@ qt/
     Main.qml            top bar + login/chat loader + shared dialogs
     LoginPage.qml  ChatPage.qml  MessageDelegate.qml
     SettingsMenu.qml  HistoryDrawer.qml
-    CostDialog.qml  BackendDialog.qml  LanguageDialog.qml  FontDialog.qml
+    CostDialog.qml  BackendDialog.qml  BleDialog.qml  LanguageDialog.qml  FontDialog.qml
     AboutDialog.qml  ConfirmDialog.qml
     Theme.qml           singleton: the Material 3 colour scheme (config.js)
     I18n.qml            singleton: reactive i18n facade
@@ -73,7 +86,7 @@ so the two surfaces read identically; regenerate it if `i18n.js` changes.
 
 It is **off by default** and built only when `MIROBODY_BUILD_QT=ON` (and never
 on mobile). It needs **Qt 6.5+** (Core, Gui, Qml, Quick, QuickControls2,
-Network). From the repo root:
+Network, **Bluetooth**). From the repo root:
 
 ```sh
 cmake -B build-qt -S . -DMIROBODY_BUILD_QT=ON \
@@ -101,3 +114,8 @@ Launch `mirobody_qt`, open **⚙ → Backend**, and point it at a mirobody serve
 (the default is `http://127.0.0.1:8080`, matching `config.yml`'s `HTTP_PORT`).
 Sign in with an email + code — with the demo codes in `config.yml`
 (`EMAIL_PREDEFINE_CODES`), e.g. `demo1@mirobody.ai` / `777777`.
+
+**Bluetooth permission.** BLE scanning is gated by the OS. On macOS the app must
+carry an `NSBluetoothAlwaysUsageDescription` string (Info.plist) and `BleHealth`
+requests the runtime `QBluetoothPermission` on first scan; Windows/Linux need
+Bluetooth enabled but no per-app grant. `MACOSX_BUNDLE` is already set on the target.

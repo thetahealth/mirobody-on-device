@@ -19,7 +19,10 @@ cmake_minimum_required(VERSION 3.19)
 
 # Qt 6.5+ for QQmlApplicationEngine::loadFromModule() (main.cpp) and the
 # qt_add_qml_module CMake API used below.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network)
+# Bluetooth backs the direct BLE GATT health-sensor path (blehealth.*); Qt maps
+# QLowEnergyController onto WinRT / Core Bluetooth / BlueZ, so one build covers
+# Windows, macOS, and Linux.
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Bluetooth)
 
 # CMAKE_AUTOMOC drives moc over the QObject-derived backend classes.
 set(CMAKE_AUTOMOC ON)
@@ -42,6 +45,10 @@ qt_add_executable(mirobody_qt
     chatmodel.hpp
     appcontroller.cpp
     appcontroller.hpp
+    blehealth.cpp
+    blehealth.hpp
+    blehealth_codec.cpp
+    blehealth_codec.hpp
     modeldownloader.cpp
     modeldownloader.hpp
     locallmengine.cpp
@@ -81,6 +88,7 @@ qt_add_qml_module(mirobody_qt
         qml/HistoryDrawer.qml
         qml/CostDialog.qml
         qml/BackendDialog.qml
+        qml/BleDialog.qml
         qml/LanguageDialog.qml
         qml/FontDialog.qml
         qml/AboutDialog.qml
@@ -96,6 +104,7 @@ target_link_libraries(mirobody_qt PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Network
+    Qt6::Bluetooth
 )
 
 # On-device private LLM (Gemma 4 via LiteRT-LM C++). OFF by default: LiteRT-LM has no
@@ -122,3 +131,23 @@ set_target_properties(mirobody_qt PROPERTIES
     WIN32_EXECUTABLE $<IF:$<CONFIG:Debug>,FALSE,TRUE>
     MACOSX_BUNDLE TRUE
 )
+
+# --- Unit tests -------------------------------------------------------------
+# The BLE GATT decoder (blehealth_codec.*) is pure Qt-Core logic, so it is tested
+# without the Bluetooth module or any hardware. Built only when Qt Test is present
+# (it always is in a full Qt install). Run with `ctest` in the build dir, or invoke
+# the mirobody_qt_tests executable directly. A console app so QtTest output shows.
+find_package(Qt6 6.5 QUIET COMPONENTS Test)
+if(Qt6Test_FOUND)
+    qt_add_executable(mirobody_qt_tests
+        tests/blehealth_codec_test.cpp
+        blehealth_codec.cpp
+        blehealth_codec.hpp
+    )
+    target_compile_features(mirobody_qt_tests PRIVATE cxx_std_17)
+    target_include_directories(mirobody_qt_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(mirobody_qt_tests PRIVATE Qt6::Core Qt6::Test)
+    set_target_properties(mirobody_qt_tests PROPERTIES WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
+    enable_testing()
+    add_test(NAME mirobody_qt_tests COMMAND mirobody_qt_tests)
+endif()

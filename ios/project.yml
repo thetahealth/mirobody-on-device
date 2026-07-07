@@ -95,6 +95,9 @@ targets:
         # HealthKit on-device ingestion (Data/Health). Read-only; we never write
         # back, so only the share-usage string is required.
         NSHealthShareUsageDescription: Mirobody reads your activity, heart rate, sleep, and weight from Apple Health to add them to your health record.
+        # Direct BLE GATT health sensors (Data/Health/BleHealthController). Core
+        # Bluetooth (central role) requires this string; prompted on first scan.
+        NSBluetoothAlwaysUsageDescription: Mirobody connects to Bluetooth health sensors (heart-rate strap, blood-pressure cuff, thermometer) to add their readings to your health record.
         # "Sign in with WeChat": let the OpenSDK detect/launch the WeChat app. Only
         # meaningful once the WeChat SDK is bundled (see ios/README.md); harmless
         # otherwise. When enabling WeChat, also add the WeChat appid URL scheme to
@@ -141,3 +144,21 @@ targets:
       # --- Embedded server (uncomment after building mirobody.xcframework) ---
       # - framework: Frameworks/mirobody.xcframework
       #   embed: false
+    # Run the unit tests through the app scheme's Test action (Cmd-U / xcodebuild test).
+    scheme:
+      testTargets:
+        - MirobodyTests
+
+  # Logic unit tests (host: Mirobody). Currently the GATT decoder tests
+  # (MirobodyTests/GattHealthCodecTests.swift), which need no simulator UI.
+  MirobodyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MirobodyTests
+    dependencies:
+      - target: Mirobody
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: ai.thetahealth.mirobodyTests

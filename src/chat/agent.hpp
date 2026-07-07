@@ -38,7 +38,7 @@ namespace chat {
 // Request
 //------------------------------------------------------------------------------
 
-// A file attached to the turn. Mirrors the file_infos BaseAgent forwards to
+// A file attached to the turn. Mirrors the file_infos BaselineAgent forwards to
 // the provider (URL + MIME type), trimmed to what the C++ clients can use.
 struct AgentFile {
     std::string filename;
@@ -127,7 +127,7 @@ using AgentFactory = std::function<std::unique_ptr<Agent>(const AgentRequest&)>;
 using ClientLoader = std::function<ClientMap(const Config&)>;
 
 struct AgentRegistration {
-    std::string  name;          // e.g. "Base" ("Agent" suffix already dropped)
+    std::string  name;          // e.g. "Baseline" ("Agent" suffix already dropped)
     bool         is_public;     // listed to end users vs. internal-only
     AgentFactory factory;
     ClientLoader load_clients;  // may be null
@@ -208,7 +208,7 @@ std::string detect_language(const std::string& text,
 #define MIROBODY_AGENT_CONCAT(a, b)  MIROBODY_AGENT_CONCAT_(a, b)
 
 // Place at file scope in a res/agents/*.cpp after defining an AgentRegistration:
-//     MIROBODY_REGISTER_AGENT(kBaseAgent);
+//     MIROBODY_REGISTER_AGENT(kBaselineAgent);
 #define MIROBODY_REGISTER_AGENT(reg_expr)                                     \
     namespace {                                                               \
         const bool MIROBODY_AGENT_CONCAT(_agent_reg_, __LINE__) =             \

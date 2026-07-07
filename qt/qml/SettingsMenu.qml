@@ -12,6 +12,7 @@ Menu {
     signal openLanguage()
     signal openFont()
     signal openBackend()
+    signal openBle()
     signal openAbout()
 
     MenuItem {
@@ -33,6 +34,14 @@ Menu {
     MenuItem {
         text: I18n.t("backend")
         onTriggered: menu.openBackend()
+    }
+    MenuItem {
+        // Direct BLE GATT sensor connect (desktop-only); needs a signed-in session
+        // to POST to the FHIR store.
+        visible: app.loggedIn
+        height: visible ? implicitHeight : 0
+        text: "Bluetooth devices"
+        onTriggered: menu.openBle()
     }
     MenuItem {
         text: I18n.t("about")

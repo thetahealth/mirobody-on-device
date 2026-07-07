@@ -1,4 +1,4 @@
-// BaseAgent -- the minimal health-assistant agent.
+// BaselineAgent -- the minimal health-assistant agent.
 //
 // The C++ analog of pub/agents/base_agent.py: no agent loop or middleware, it
 // just builds a system prompt, picks an LLM client by provider name, and
@@ -30,7 +30,7 @@ namespace {
 
 using namespace mirobody::chat;
 
-const char* const kAgentName = "Base";
+const char* const kAgentName = "Baseline";
 
 //------------------------------------------------------------------------------
 
@@ -166,9 +166,9 @@ std::size_t attach_files_to_turn(std::vector<mirobody::llm::ChatMessage>& messag
 
 //------------------------------------------------------------------------------
 
-class BaseAgent : public Agent {
+class BaselineAgent : public Agent {
 public:
-    explicit BaseAgent(const AgentRequest& req)
+    explicit BaselineAgent(const AgentRequest& req)
         : default_provider_("gemini-2.5-flash")
         , user_message_threshold_(10) {
         (void)req;   // per-request options (user/tools) are read in generate_response
@@ -265,8 +265,8 @@ std::string run_tool_for_user(const std::string& name, const std::string& args_j
     return mirobody::mcp::run_mcp_tool(name, args_json, user, ctx);
 }
 
-// Build BaseAgent's provider clients from config. Each provider is keyed by the
-// model name the /api/providers selector shows ("Base/<provider>"). Keys / URLs
+// Build BaselineAgent's provider clients from config. Each provider is keyed by the
+// model name the /api/providers selector shows ("Baseline/<provider>"). Keys / URLs
 // are read from the typed Config fields where present, otherwise the shared
 // key-value store (which also falls back to environment variables), matching
 // the keys the debug CLIs use. All three are registered unconditionally so they
@@ -348,15 +348,15 @@ ClientMap load_clients(const mirobody::Config& cfg) {
     return clients;
 }
 
-const AgentRegistration kBaseAgent = {
+const AgentRegistration kBaselineAgent = {
     kAgentName,
     true,                                                    // public
     [](const AgentRequest& req) -> std::unique_ptr<Agent> {
-        return std::unique_ptr<Agent>(new BaseAgent(req));
+        return std::unique_ptr<Agent>(new BaselineAgent(req));
     },
     &load_clients,
 };
 
 }   // namespace
 
-MIROBODY_REGISTER_AGENT(kBaseAgent);
+MIROBODY_REGISTER_AGENT(kBaselineAgent);

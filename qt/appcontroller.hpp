@@ -16,9 +16,11 @@
 #include <memory>
 
 #include "chatmodel.hpp"
-// Full definition required: ModelDownloader* is exposed as a Q_PROPERTY, so moc needs
-// the complete type to register its metatype (a forward declaration fails to compile).
+// Full definition required: ModelDownloader* and BleHealth* are exposed as
+// Q_PROPERTYs, so moc needs the complete type to register their metatypes (a
+// forward declaration fails to compile).
 #include "modeldownloader.hpp"
+#include "blehealth.hpp"
 
 class ApiClient;
 class SseStream;
@@ -41,6 +43,9 @@ class AppController : public QObject {
     // The on-device model downloader (status/progress + start/cancel/remove), exposed
     // to QML for the download affordance. Bind app.onDeviceModel.status / .progress.
     Q_PROPERTY(ModelDownloader* onDeviceModel READ onDeviceModel CONSTANT)
+    // Direct BLE GATT health-sensor ingestion (scan/connect → FHIR). Bind
+    // app.ble.devices / .status and drive app.ble.startScan() / connectDevice(i).
+    Q_PROPERTY(BleHealth* ble READ ble CONSTANT)
 public:
     explicit AppController(QObject* parent = nullptr);
     ~AppController() override;
@@ -57,6 +62,7 @@ public:
     QString       appVersion() const;
     QStringList   baseUrlPresets() const;
     ModelDownloader* onDeviceModel() const { return downloader_; }
+    BleHealth*    ble() const { return ble_; }
 
     // --- login -----------------------------------------------------------
     Q_INVOKABLE void sendCode(const QString& email);
@@ -118,6 +124,7 @@ private:
     SseStream* stream_ = nullptr;   // current in-flight chat stream, if any
     ModelDownloader* downloader_ = nullptr;
     LocalLmEngine*   localEngine_ = nullptr;
+    BleHealth*       ble_ = nullptr;
 
     bool         loggedIn_   = false;
     QString      email_;

@@ -113,6 +113,15 @@
     <string name="health_syncing">Syncing…</string>
     <string name="health_result">Posted %1$d, failed %2$d.</string>
     <string name="health_error">Error: %1$s</string>
+    <string name="chat_bluetooth">Bluetooth devices</string>
+    <string name="ble_title">Bluetooth health devices</string>
+    <string name="ble_intro">Connect a standard Bluetooth LE sensor (heart-rate strap, blood-pressure cuff, thermometer). Readings are saved to your health record. Watches and rings use private protocols — connect those under vendors.</string>
+    <string name="ble_scan">Scan</string>
+    <string name="ble_stop">Stop</string>
+    <string name="ble_no_devices">No devices yet — tap Scan</string>
+    <string name="ble_supported_tag">health</string>
+    <string name="ble_disconnect">Disconnect</string>
+    <string name="ble_saved">Saved %1$d, failed %2$d</string>
     <string name="chat_about">About</string>
     <string name="about_version">Version %1$s</string>
     <string name="chat_sign_out">Sign out</string>

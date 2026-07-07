@@ -168,6 +168,30 @@ only; there is no Apple cloud API). See [src/health/README.md](../src/health/REA
   `.lproj` tables (the `L()` helper returns the raw key when a locale lacks it, so
   there's no automatic en fallback).
 
+### Direct Bluetooth (BLE GATT) sensors
+
+Beyond HealthKit, the app can talk **directly to a standard-profile BLE sensor**
+(`Data/Health/BleHealthController.swift`) — the iOS-native sibling of the desktop Qt
+`BleHealth` and Android `BleHealthController`. Built on **Core Bluetooth**, it scans,
+connects, subscribes to each supported measurement characteristic, decodes it
+(`GattHealthCodec`), and `POST`s the FHIR `Observation` to `/fhir/Observation` — the
+same path HealthKit uses (no new server code). Reached from the settings gear →
+**Bluetooth devices** (`UI/Health/BleDeviceView`).
+
+- **Supported services**: Heart Rate `0x180D` → `0x2A37`, Blood Pressure `0x1810` →
+  `0x2A35` (systolic/diastolic/MAP), Health Thermometer `0x1809` → `0x2A1C`. Adding
+  one is a branch in `GattHealthCodec.decode`. Consumer watches/rings use
+  proprietary/encrypted GATT and are **not** readable here — they stay on HealthKit /
+  the cloud vendor clients.
+- **When to use it**: the fallback for standard medical sensors with no companion
+  app; most consumer data still flows through HealthKit.
+- **Setup**: `NSBluetoothAlwaysUsageDescription` is declared in
+  [`project.yml`](project.yml) and `App/Info.plist` (Core Bluetooth central role
+  requires it; prompted on the first scan, not at launch — the `CBCentralManager` is
+  created lazily). No entitlement needed. **Re-run `xcodegen generate`** so the new
+  `BleHealthController` / `GattHealthCodec` / `BleDeviceView` files are added to the
+  target (the `sources` glob picks them up automatically).
+
 ## Project layout
 
 ```
@@ -183,7 +207,7 @@ ios/
       Chat/                   # DTOs, SSE stream client, ChatRepository
       LLM/                    # On-device LLM: LiteRtLlmEngine (LiteRT-LM), ModelManager
       Config/                 # /mirobody.json model + store
-      Health/                 # HealthKitRepository, FHIR mapper (Apple Health → /fhir)
+      Health/                 # HealthKitRepository + FHIR mapper; BLE GATT (BleHealthController, GattHealthCodec)
       Settings/               # UserDefaults-backed settings
     UI/
       RootView.swift          # token-driven navigation + error toast

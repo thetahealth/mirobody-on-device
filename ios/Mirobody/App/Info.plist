@@ -60,6 +60,10 @@
 	</dict>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Save chat images to your photo library.</string>
+	<!-- Direct BLE GATT health sensors (Data/Health/BleHealthController). Core
+	     Bluetooth (central role) requires this string; prompted on first scan. -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Mirobody connects to Bluetooth health sensors (heart-rate strap, blood-pressure cuff, thermometer) to add their readings to your health record.</string>
 	<!-- Google sign-in (Firebase web OAuth) redirects back via a custom URL scheme.
 	     Replace REVERSED_CLIENT_ID with the value from the iOS Firebase app once
 	     registered (see ios/README.md). -->

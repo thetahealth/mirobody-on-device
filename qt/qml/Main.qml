@@ -98,6 +98,7 @@ ApplicationWindow {
         onOpenLanguage: languageDialog.open()
         onOpenFont: fontDialog.open()
         onOpenBackend: backendDialog.open()
+        onOpenBle: bleDialog.open()
         onOpenAbout: aboutDialog.open()
     }
 
@@ -175,6 +176,7 @@ ApplicationWindow {
     LanguageDialog { id: languageDialog }
     FontDialog     { id: fontDialog }
     BackendDialog  { id: backendDialog }
+    BleDialog      { id: bleDialog }
     AboutDialog    { id: aboutDialog }
     HistoryDrawer  { id: historyDrawer }
 }

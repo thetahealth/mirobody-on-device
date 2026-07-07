@@ -19,6 +19,7 @@ import ai.thetahealth.mirobody.data.config.ServerConfigStore
 import ai.thetahealth.mirobody.data.health.HealthApi
 import ai.thetahealth.mirobody.data.health.HealthRepository
 import ai.thetahealth.mirobody.data.health.HealthSourceFactory
+import ai.thetahealth.mirobody.data.health.ble.BleHealthController
 import ai.thetahealth.mirobody.data.llm.LiteRtLlmEngine
 import ai.thetahealth.mirobody.data.llm.MlKitTextService
 import ai.thetahealth.mirobody.data.llm.ModelManager
@@ -139,5 +140,14 @@ class AppContainer(context: Context) {
     val healthRepository: HealthRepository = HealthRepository(
         api = healthApi,
         sourceFactory = HealthSourceFactory(appContext),
+    )
+
+    // Direct BLE GATT sensor ingestion (HR strap / BP cuff / thermometer → FHIR),
+    // the fallback for standard medical sensors with no companion app. A singleton so
+    // a live connection survives dialog recomposition; posts through the same /fhir API.
+    val bleHealthController: BleHealthController = BleHealthController(
+        context = appContext,
+        api = healthApi,
+        scope = applicationScope,
     )
 }
