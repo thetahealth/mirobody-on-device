@@ -1,16 +1,9 @@
 package ai.thetahealth.mirobody.data.health.ble
 
+import ai.thetahealth.mirobody.data.health.FhirObs
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.addJsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
-import kotlinx.serialization.json.putJsonObject
-import java.time.Instant
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 import kotlin.math.pow
-import kotlin.math.roundToLong
 
 /**
  * Decodes standard SIG GATT health measurements into FHIR R4 `Observation` bodies —
@@ -139,49 +132,10 @@ object GattHealthCodec {
 
     private fun ByteArray.u8(i: Int): Int = this[i].toInt() and 0xFF
 
-    // --- FHIR builder --------------------------------------------------------
-
-    private fun iso(millis: Long): String =
-        DateTimeFormatter.ISO_INSTANT.format(Instant.ofEpochMilli(millis))
-
-    // Same Observation shape as FhirObservation.from(HealthSample): LOINC code,
-    // observation-category, UCUM valueQuantity, plus a Bluetooth provenance method.
+    // FHIR Observation via the shared builder; the provenance marks the BLE transport.
     private fun observation(
         loinc: String, display: String, category: String,
         value: Double, integral: Boolean, unit: String, ucum: String, nowMillis: Long,
-    ): JsonObject = buildJsonObject {
-        put("resourceType", "Observation")
-        put("status", "final")
-        putJsonArray("category") {
-            addJsonObject {
-                putJsonArray("coding") {
-                    addJsonObject {
-                        put("system", "http://terminology.hl7.org/CodeSystem/observation-category")
-                        put("code", category)
-                    }
-                }
-            }
-        }
-        putJsonObject("code") {
-            putJsonArray("coding") {
-                addJsonObject {
-                    put("system", "http://loinc.org")
-                    put("code", loinc)
-                    put("display", display)
-                }
-            }
-        }
-        put("effectiveDateTime", iso(nowMillis))
-        putJsonObject("valueQuantity") {
-            if (integral) put("value", value.roundToLong()) else put("value", value)
-            put("unit", unit)
-            put("system", "http://unitsofmeasure.org")
-            put("code", ucum)
-        }
-        putJsonObject("method") {
-            putJsonArray("coding") {
-                addJsonObject { put("display", "Bluetooth LE") }
-            }
-        }
-    }
+    ): JsonObject = FhirObs.observation(
+        loinc, display, category, value, integral, unit, ucum, nowMillis, "Bluetooth LE")
 }

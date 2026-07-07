@@ -92,6 +92,32 @@ with the identical schema — no inbox, worker, or cold tier.
 
 ![Mirobody v2 health data flow — with a backend, devices upload batches into a transient staging inbox that a background worker drains into Postgres (hot: health_indicators + health_facts) and Parquet (cold, raw), while fhir_resources holds the summary Observations; fully on-device the same mirobody_core ingest pipeline runs inline into SQLite with the same schema.](docs/health-data-flow.svg)
 
+## Why open device access
+
+If a wearable's moat were purely its **algorithms**, opening the raw Bluetooth (BLE GATT)
+layer wouldn't threaten it — yet most consumer vendors keep it closed. The commonly cited
+reasons are market dynamics, not any one company's practice:
+
+- **The moat is usually broader than the algorithm** — a historical-data flywheel plus
+  subscriptions that sell processed *outputs* (scores, readiness), which open raw access can
+  dilute.
+- **Little upside for incumbents** — at scale a developer ecosystem barely moves hardware
+  sales, while an open protocol costs documentation, compatibility, and support. The
+  incentive is asymmetric: low for large players, high for open ones.
+- **Path dependency** — products designed closed years ago are expensive to reopen (pairing,
+  security model, every existing app).
+
+The public counter-example is **Polar**: its H10/H9 chest straps implement the standard GATT
+Heart Rate service, so any app can read them directly — and by many accounts that openness
+helped make them a default heart-rate source for developers.
+
+mirobody's thesis: when your value isn't a locked algorithm subscription, **open ingestion
+is a feature, not a leak.** It reads whatever speaks an open standard — standard BLE GATT
+sensors (and legacy classic-Bluetooth HDP devices), the phone health stores (Apple Health /
+Health Connect / HMS), and EHRs over SMART on FHIR — normalizes everything to FHIR R4, and
+keeps it on your device unless you choose to share it. See
+[src/health/README.md](src/health/README.md).
+
 ## Quick start
 
 The default desktop database backend is `POSTGRESQL`, so these install

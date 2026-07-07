@@ -20,6 +20,7 @@ import ai.thetahealth.mirobody.data.health.HealthApi
 import ai.thetahealth.mirobody.data.health.HealthRepository
 import ai.thetahealth.mirobody.data.health.HealthSourceFactory
 import ai.thetahealth.mirobody.data.health.ble.BleHealthController
+import ai.thetahealth.mirobody.data.health.hdp.HdpHealthController
 import ai.thetahealth.mirobody.data.llm.LiteRtLlmEngine
 import ai.thetahealth.mirobody.data.llm.MlKitTextService
 import ai.thetahealth.mirobody.data.llm.ModelManager
@@ -146,6 +147,14 @@ class AppContainer(context: Context) {
     // the fallback for standard medical sensors with no companion app. A singleton so
     // a live connection survives dialog recomposition; posts through the same /fhir API.
     val bleHealthController: BleHealthController = BleHealthController(
+        context = appContext,
+        api = healthApi,
+        scope = applicationScope,
+    )
+
+    // Legacy classic-Bluetooth HDP (IEEE 11073) ingestion — self-disables above API 28
+    // (Android 9). Kept so old medical hardware can still reach the FHIR store.
+    val hdpHealthController: HdpHealthController = HdpHealthController(
         context = appContext,
         api = healthApi,
         scope = applicationScope,

@@ -273,43 +273,102 @@ access-model and endpoint-status tables.
 Other brands (Suunto, Ultrahuman, …) stay aggregator-only — they are partner-gated,
 so add a direct client only once you hold their partner credentials.
 
-## Direct Bluetooth devices (HDP / BLE GATT) — not yet implemented
+### CGM self-hosting (Dexcom / Libre)
+
+CGM is a high-value, high-engagement direction: there is a real, established community
+(Nightscout, xDrip+, Loop) that self-hosts glucose data rather than leaving it in the
+vendor cloud — which is exactly mirobody's shape (self-hosted, FHIR-normalized, on-device).
+But scope it honestly:
+
+- **What mirobody does today** — pull glucose **retrospectively** through Dexcom's official
+  OAuth API into self-hosted FHIR (`vendor/device/dexcom.cpp`). Good for analytics and
+  "own my data"; **not real-time** (~1–3 h delay), and the production API is **partner-gated
+  beyond ~5 users**.
+- **Not via our BLE path** — Dexcom and Abbott Libre use **proprietary, encrypted GATT**, so
+  the standard BLE GATT reader above cannot read them. Real-time access would require an
+  unofficial Share bridge or reverse-engineering the transmitter BLE (the approach some
+  community projects take) — routes that may conflict with vendor terms; **mirobody
+  implements neither** and uses only the official API.
+- **Libre too** — Abbott Libre's installed base is often cited as even larger; a serious CGM
+  effort would cover Libre (via its official API) too, not just Dexcom.
+- **Stay on the ingestion/analytics side** — retrospective ingest and display is low-risk;
+  anything approaching real-time alerting or dosing guidance is regulated medical-device
+  territory (FDA iCGM, …), which mirobody does not enter.
+
+## Direct Bluetooth devices (BLE GATT + basic Android HDP)
 
 Everything above reaches a device through a **cloud API** or an **on-device platform
 store** (Health Connect / HealthKit). A third path — talking **Bluetooth directly to
-the sensor** — is not built yet; this section is the map for adding it.
+the sensor** — now exists on the clients for **BLE GATT** (see the implementation-split
+table below); **HDP** is deliberately not built (legacy — see its subsection).
 
 **Where it runs:**
 
-- The server has no radio near the user's devices, so it **cannot** read Bluetooth.
-- The read happens on a client next to the sensor — the [`qt`](../../qt/) desktop app, a native mobile layer, or a gateway.
-- That client maps readings to FHIR `Observation`s and **POSTs them to the FHIR R4 endpoint** — the same on-device path Apple/Health-Connect use, so **no new server route or Bluetooth code is needed here**.
-- On phones most devices need no direct connection: the OEM companion app pairs the sensor and its samples land in Health Connect / HealthKit.
-- Direct BLE is only for **standard-profile medical devices with no companion app**, or desktop / kiosk / gateway scenarios.
+- The server has no radio near the user's devices, so it **cannot** read Bluetooth — and doesn't: there is **no server route or Bluetooth code here**.
+- The read happens on a client next to the sensor — the [`qt`](../../qt/) desktop app or the native mobile layer (Android/iOS).
+- That client decodes each reading and maps it to a FHIR `Observation`, then **POSTs it to the FHIR R4 endpoint** — the same on-device path Apple/Health-Connect use, so the server just gains one more write source.
+- On phones most devices need no direct connection: the OEM companion app pairs the sensor and its samples land in Health Connect / HealthKit. Direct BLE is the fallback for **standard-profile medical devices with no companion app**, or desktop / kiosk / gateway scenarios.
 
 ### HDP — Health Device Profile (Classic Bluetooth)
 
 MCAP transport + IEEE 11073-20601 exchange protocol + a `104xx` device specialization.
 
-> ⚠️ **Legacy — do not build on HDP.** The Bluetooth SIG stopped advancing it;
-> Android's `BluetoothHealth` was deprecated in API 29 then removed; iOS and Windows
-> never supported it. Only relevant for existing legacy medical hardware over Linux BlueZ.
+> ⚠️ **Legacy — Android-only, and only Android ≤ 9.** The Bluetooth SIG stopped advancing
+> HDP; Android's `BluetoothHealth` was deprecated in API 29 (the SDK stubs still ship, so
+> it compiles, but the OS runtime support only exists on **API ≤ 28** / Android ≤ 9); iOS
+> and Windows never supported it. Modern medical sensors are BLE GATT (covered above).
+>
+> A **basic, experimental** HDP path nonetheless exists so old hardware can still connect:
+> [`android/.../data/health/hdp/`](../../android/app/src/main/java/ai/thetahealth/mirobody/data/health/hdp/)
+> — `HdpHealthController` registers a health sink (auto-inert above API 28) and
+> [`Ieee11073Agent`](../../android/app/src/main/java/ai/thetahealth/mirobody/data/health/hdp/Ieee11073Agent.kt)
+> drives the IEEE 11073-20601 exchange (association → config → data) and POSTs the same
+> FHIR Observations. The **handshake + framing are implemented and unit-tested**; the
+> MDER **measurement parse is best-effort and not hardware-validated** (single-value
+> devices — thermometer / scale / SpO₂ / glucose — map via the sink's device
+> specialization; compound reports like blood pressure and waveforms like ECG connect and
+> are acknowledged but aren't auto-mapped — they need the config-driven parse).
+> **Contributions to finish and hardware-validate the parse are welcome.** No Qt/iOS
+> counterpart (those platforms can't do HDP); on Linux, legacy hardware would go via BlueZ.
 
-| IEEE 11073 | Device |
-| --- | --- |
-| `-10404` | Pulse oximeter |
-| `-10406` | Basic heart rate / ECG |
-| `-10407` | Blood pressure monitor |
-| `-10408` | Thermometer |
-| `-10415` | Weighing scale |
-| `-10417` | Glucose meter |
-| `-10418` | Coagulation (INR) |
-| `-10420` | Body composition analyzer |
-| `-10421` | Peak flow (respiratory) |
-| `-10441` | Cardiovascular fitness / activity |
-| `-10442` | Strength fitness |
-| `-10471` | Independent living activity hub |
-| `-10472` | Medication monitor |
+The **spec code** is the `MDC_DEV_SPEC_PROFILE_*` data type the sink registers with (it
+matches `Ieee11073Agent.Specialization`).
+
+| IEEE 11073 | Device | Spec code |
+| --- | --- | --- |
+| `-10404` | Pulse oximeter | `0x1004` |
+| `-10406` | Basic ECG | `0x1006` |
+| `-10407` | Blood pressure monitor | `0x1007` |
+| `-10408` | Thermometer | `0x1008` |
+| `-10415` | Weighing scale | `0x100F` |
+| `-10417` | Glucose meter | `0x1011` |
+| `-10418` | Coagulation (INR) | — |
+| `-10420` | Body composition analyzer | — |
+| `-10421` | Peak flow (respiratory) | `0x1015` |
+| `-10441` | Cardiovascular fitness / activity | `0x1029` |
+| `-10442` | Strength fitness | — |
+| `-10471` | Independent living activity hub | — |
+| `-10472` | Medication monitor | — |
+
+**HDP devices still in real use (2023–2025).** Most are legacy hospital / eldercare stock;
+current retail equivalents from these brands are all **BLE** now. In China specifically
+(Yuwell, Sinocare, Omron China, Contec, …), no still-produced HDP product was found — the
+existing HDP fleet lives in older institutional purchase batches.
+
+The **SDK** column is the vendor SDK's availability for an individual developer (mostly
+for the BLE successor's integration; HDP itself is a standard protocol and needs no SDK).
+
+| Type (code) | Model | Vendor | BLE successor | SDK | Notes |
+| --- | --- | --- | --- | --- | --- |
+| BP `0x1007` | UA-767PBT / -PBT-C / -PBT-Ci | A&D Medical | UA-651BLE | ✅ from A&D site | — |
+| BP `0x1007` | UA-851PBT-C | A&D Medical | — | ✅ | — |
+| BP `0x1007` | HEM-7081-IT | Omron | HEM-7361T | limited | — |
+| SpO₂ `0x1004` | Onyx II 9560 | Nonin | — | via OEM channel | only HDP device still in production; dual SPP + HDP |
+| SpO₂ `0x1004` | CMS50EW | Contec | (some batches BLE) | limited | some batches Classic, some already BLE |
+| Scale `0x100F` | UC-321PBT-C / UC-351PBT-Ci | A&D Medical | UC-352BLE | ✅ | — |
+| Glucose `0x1011` | TD-4277 | TaiDoc | — | — | legacy (Taiwan brand) |
+| Glucose `0x1011` | FORA G31 | ForaCare | — | — | legacy |
+| ECG `0x1006` | cor12 | Corscience | — | — | professional; waveform, not auto-mapped |
 
 ### BLE GATT — the current standard
 

@@ -110,6 +110,7 @@ import ai.thetahealth.mirobody.ui.ProvideLocale
 import ai.thetahealth.mirobody.ui.circle.CareCircleDialog
 import ai.thetahealth.mirobody.ui.circle.ShareConversationDialog
 import ai.thetahealth.mirobody.ui.health.BleDeviceDialog
+import ai.thetahealth.mirobody.ui.health.HdpDeviceDialog
 import ai.thetahealth.mirobody.ui.health.HealthSyncDialog
 import ai.thetahealth.mirobody.ui.settings.BaseUrlDialog
 import ai.thetahealth.mirobody.ui.settings.FontSizeDialog
@@ -119,6 +120,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -598,6 +600,7 @@ private fun SettingsMenu(
     var showBackendDialog by remember { mutableStateOf(false) }
     var showHealthDialog by remember { mutableStateOf(false) }
     var showBleDialog by remember { mutableStateOf(false) }
+    var showHdpDialog by remember { mutableStateOf(false) }
     var showCircleDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
@@ -646,6 +649,17 @@ private fun SettingsMenu(
                     showBleDialog = true
                 },
             )
+            // Legacy classic-Bluetooth HDP only runs on Android 9 and below; hide the
+            // entry on newer devices where BLE is the path.
+            if (Build.VERSION.SDK_INT <= 28) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.chat_bluetooth_hdp)) },
+                    onClick = {
+                        expanded = false
+                        showHdpDialog = true
+                    },
+                )
+            }
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.chat_care_circle)) },
                 onClick = {
@@ -734,6 +748,13 @@ private fun SettingsMenu(
         BleDeviceDialog(
             currentLanguage = currentLanguage,
             onDismiss = { showBleDialog = false },
+        )
+    }
+
+    if (showHdpDialog) {
+        HdpDeviceDialog(
+            currentLanguage = currentLanguage,
+            onDismiss = { showHdpDialog = false },
         )
     }
 

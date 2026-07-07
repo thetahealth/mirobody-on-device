@@ -125,6 +125,21 @@ devices** (`ui/health/BleDeviceDialog`).
   non-required `bluetooth_le` feature. The GATT layer serializes CCCD writes through a
   one-op-at-a-time queue (Android permits a single outstanding GATT operation).
 
+### Legacy classic-Bluetooth HDP (Android ≤ 9)
+
+Old **IEEE 11073 HDP** medical devices (classic Bluetooth, not BLE) can still be
+ingested via `data/health/hdp/` — **basic and experimental**, and only on **Android 9
+and below (API ≤ 28)**: the framework `BluetoothHealth` was deprecated in API 29 and has
+no OS runtime support after that (the menu entry is hidden above API 28). `Build.VERSION`
+gates it automatically. `HdpHealthController` registers a health **sink** and waits for
+the device to open a channel; `Ieee11073Agent` drives the 11073-20601 exchange over the
+channel FD (association → config → data) and POSTs the extracted measurements as FHIR,
+same as BLE. The handshake/framing are unit-tested; the MDER measurement parse is
+best-effort (single-value devices map via the sink specialization) and **not
+hardware-validated** — contributions welcome. Uses the classic `BLUETOOTH` /
+`BLUETOOTH_ADMIN` permissions (already declared, `maxSdkVersion=30`); no BLE/location
+permission needed. Kept so the community knows legacy hardware still has a path in.
+
 ## Project layout
 
 ```
