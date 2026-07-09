@@ -22,7 +22,9 @@ const val SEND_CODE_COOLDOWN_SECONDS = 60
 
 data class EmailUiState(
     val email: String = "",
+    val code: String = "",
     val sending: Boolean = false,
+    val verifying: Boolean = false,
     val sent: Boolean = false,
     val error: String? = null,
     val cooldownSeconds: Int = 0,
@@ -47,10 +49,15 @@ class EmailLoginViewModel(
     private var cooldownJob: Job? = null
 
     fun onEmailChange(value: String) {
-        _state.update { it.copy(email = value, error = null, sent = false) }
+        _state.update { it.copy(email = value, error = null) }
     }
 
-    fun sendCode(onSent: (String) -> Unit) {
+    fun onCodeChange(value: String) {
+        val sanitized = value.filter { it.isDigit() }.take(6)
+        _state.update { it.copy(code = sanitized, error = null) }
+    }
+
+    fun sendCode() {
         val email = _state.value.email.trim()
         if (email.isBlank()) {
             _state.update { it.copy(error = "Email is required") }
@@ -63,10 +70,27 @@ class EmailLoginViewModel(
                 .onSuccess {
                     _state.update { it.copy(sending = false, sent = true) }
                     startCooldown()
-                    onSent(email)
                 }
                 .onFailure { t ->
                     _state.update { it.copy(sending = false, error = t.message ?: "Failed to send code") }
+                }
+        }
+    }
+
+    fun verify(onSignedIn: () -> Unit) {
+        val s = _state.value
+        if (s.verifying) return
+        if (s.code.length < 4) {
+            _state.update { it.copy(error = "Enter the code from your email") }
+            return
+        }
+        _state.update { it.copy(verifying = true, error = null) }
+        viewModelScope.launch {
+            runCatching { repo.verifyCode(s.email.trim(), s.code) }
+                .onSuccess { onSignedIn() }
+                .onFailure { t ->
+                    // Clear the code so the user can retype without backspacing six digits.
+                    _state.update { it.copy(verifying = false, code = "", error = t.message ?: "Verification failed") }
                 }
         }
     }
@@ -163,79 +187,6 @@ class EmailLoginViewModel(
             while (_state.value.cooldownSeconds > 0) {
                 delay(1000)
                 _state.update { it.copy(cooldownSeconds = it.cooldownSeconds - 1) }
-            }
-        }
-    }
-}
-
-data class VerifyUiState(
-    val email: String,
-    val code: String = "",
-    val verifying: Boolean = false,
-    val resending: Boolean = false,
-    val error: String? = null,
-    val resendCooldownSeconds: Int = 0,
-)
-
-class VerifyCodeViewModel(
-    private val repo: AuthRepository,
-    email: String,
-) : ViewModel() {
-    private val _state = MutableStateFlow(VerifyUiState(email = email))
-    val state: StateFlow<VerifyUiState> = _state.asStateFlow()
-    private var cooldownJob: Job? = null
-
-    init {
-        // User just had a code sent (from EmailScreen) right before landing here.
-        startCooldown()
-    }
-
-    fun onCodeChange(value: String) {
-        val sanitized = value.filter { it.isDigit() }.take(6)
-        _state.update { it.copy(code = sanitized, error = null) }
-    }
-
-    fun verify(onSuccess: () -> Unit) {
-        val s = _state.value
-        if (s.verifying) return
-        if (s.code.length < 4) {
-            _state.update { it.copy(error = "Enter the code from your email") }
-            return
-        }
-        _state.update { it.copy(verifying = true, error = null) }
-        viewModelScope.launch {
-            runCatching { repo.verifyCode(s.email, s.code) }
-                .onSuccess {
-                    _state.update { it.copy(verifying = false) }
-                    onSuccess()
-                }
-                .onFailure { t ->
-                    // Clear the code so user can retype without manually backspacing 6 digits.
-                    _state.update { it.copy(verifying = false, code = "", error = t.message ?: "Verification failed") }
-                }
-        }
-    }
-
-    fun resend() {
-        if (_state.value.resendCooldownSeconds > 0) return
-        _state.update { it.copy(resending = true, error = null) }
-        viewModelScope.launch {
-            runCatching { repo.sendCode(_state.value.email) }
-                .onSuccess {
-                    _state.update { it.copy(resending = false) }
-                    startCooldown()
-                }
-                .onFailure { t -> _state.update { it.copy(resending = false, error = t.message ?: "Failed to resend") } }
-        }
-    }
-
-    private fun startCooldown() {
-        cooldownJob?.cancel()
-        cooldownJob = viewModelScope.launch {
-            _state.update { it.copy(resendCooldownSeconds = SEND_CODE_COOLDOWN_SECONDS) }
-            while (_state.value.resendCooldownSeconds > 0) {
-                delay(1000)
-                _state.update { it.copy(resendCooldownSeconds = it.resendCooldownSeconds - 1) }
             }
         }
     }

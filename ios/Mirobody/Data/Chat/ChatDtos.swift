@@ -113,41 +113,46 @@ struct HistoryDeleteRequest: Encodable {
 
 // MARK: - Providers (mirror data/chat/dto/ProviderInfo.kt)
 
-struct ProviderInfo: Decodable, Hashable, Identifiable {
-    let name: String
-    let code: String
-
-    var id: String { name + "|" + code }
-
-    /// `name` is "<agent>/<model>"; the agent code is the part before the slash.
-    var agentCode: String {
-        guard let idx = name.firstIndex(of: "/") else { return "" }
-        return String(name[..<idx])
-    }
+/// One agent group from `GET /api/providers` (`[{ agent, providers[] }]`). The
+/// default agent's group carries an empty `agent`.
+struct ProviderGroup: Decodable {
+    let agent: String
+    let providers: [String]
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
-        code = try c.decodeIfPresent(String.self, forKey: .code) ?? ""
+        agent = try c.decodeIfPresent(String.self, forKey: .agent) ?? ""
+        providers = try c.decodeIfPresent([String].self, forKey: .providers) ?? []
     }
-    enum CodingKeys: String, CodingKey { case name, code }
+    enum CodingKeys: String, CodingKey { case agent, providers }
+}
 
-    init(name: String, code: String) {
-        self.name = name
-        self.code = code
-    }
+/// A single selectable provider, flattened from a `ProviderGroup`: `agent` (empty
+/// for the default agent) + one `provider` (model). Submitted verbatim as the chat
+/// request's `agent` / `provider` — no string parsing.
+struct ProviderInfo: Hashable, Identifiable {
+    let agent: String
+    let provider: String
+
+    var id: String { key }
+
+    /// Stable key for persisting / restoring the selection.
+    var key: String { agent.isEmpty ? provider : "\(agent)/\(provider)" }
+
+    /// Picker display: the model name (or the on-device label).
+    var label: String { isOnDevice ? ProviderInfo.onDeviceName : provider }
 
     // MARK: On-device (private) provider — client-only, no server round-trip.
 
-    /// Sentinel `code` marking the synthetic on-device provider. When selected, chat
-    /// routes to `OnDeviceLlmEngine` instead of the SSE stream. Mirrors Android.
+    /// Sentinel `provider` marking the synthetic on-device provider. When selected,
+    /// chat routes to `OnDeviceLlmEngine` instead of the SSE stream. Mirrors Android.
     static let onDeviceCode = "__ondevice_gemma4__"
     /// Stable display name (kept non-localized so the persisted selection survives a
     /// UI-language change).
     static let onDeviceName = "Gemma 4 · On-device"
-    static let onDevice = ProviderInfo(name: onDeviceName, code: onDeviceCode)
+    static let onDevice = ProviderInfo(agent: "", provider: onDeviceCode)
 
-    var isOnDevice: Bool { code == ProviderInfo.onDeviceCode }
+    var isOnDevice: Bool { provider == ProviderInfo.onDeviceCode }
 }
 
 // MARK: - SSE chunk + cost stats (mirror data/chat/dto/SseEvent.kt)

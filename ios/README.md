@@ -48,8 +48,8 @@ installs use a paid Apple Developer account.
 This makes the app talk to Mirobody **in-process** over loopback instead of a
 remote backend — the iOS equivalent of the Android `MirobodyService`/JNI path.
 
-1. Cross-compile `mirobody.xcframework` per the **Building — iOS** section of the
-   [root README](../README.md#building--ios) (build the device + simulator slices,
+1. Cross-compile `mirobody.xcframework` per the **Building - iOS** section of the
+   [build guide](../docs/BUILDING.md#building---ios) (build the device + simulator slices,
    then `xcodebuild -create-xcframework`).
 2. Drop the result at `ios/Frameworks/mirobody.xcframework`.
 3. In [`project.yml`](project.yml), uncomment:

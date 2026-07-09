@@ -1,8 +1,14 @@
 
 //----------------------------------------------------------------------------
-// History drawer: a left-side panel listing past sessions (GET /api/history),
-// each deletable (POST /api/history/delete). Mirrors the app's HistoryScreen --
-// list + delete only, no resume. Opened from the brand logo.
+// Left navigation drawer -- the app's nav home. Top: a "New chat" / "Incognito"
+// button row. Middle (the only scrolling area): past sessions (GET /api/history,
+// each deletable via POST /api/history/delete; tap to resume). Bottom (all
+// PINNED): the Health & data group (care circle / EHR / devices) and the account
+// row (Sign out). Opened from the top-bar hamburger. The build version isn't shown
+// here -- it's in the settings gear's About item. App settings (language / font /
+// backend / about) are
+// NOT here -- they live in the top-bar settings gear, which the login screen shows
+// too, so settings sit in one consistent place across both screens.
 //----------------------------------------------------------------------------
 
 const ui   = require("./ui");
@@ -19,7 +25,8 @@ const BACK_SVG  = icons.BACK_SVG;
 const TRASH_SVG = icons.TRASH_SVG;
 
 const formatTimestamp  = require("./format").formatTimestamp;
-const showConfirmModal = require("./modals").showConfirmModal;
+const modals           = require("./modals");
+const showConfirmModal = modals.showConfirmModal;
 
 var t = i18n.t;
 
@@ -63,7 +70,8 @@ function openHistory() {
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     };
 
-    // Header: back button + title.
+    // Header: back button + title. (The build version isn't shown here -- it's in
+    // the settings gear's About item.)
     var header = ui.dom("div", {
         flex: "0 0 auto", display: "flex", alignItems: "center", gap: "4px",
         height: "56px", padding: "0 8px"
@@ -81,9 +89,13 @@ function openHistory() {
     header.appendChild(backBtn);
     header.appendChild(ui.setText(ui.dom("div", {
         fontSize: "1rem", fontWeight: "500", color: color.onSurface
-    }), t("historyTitle")));
+    }), t("menuTitle")));
 
     var body = ui.dom("div", { flex: "1 1 auto", overflowY: "auto", minHeight: "0" });
+    // History rows live in their own box so the loading / empty / error states
+    // clear just the list, leaving the nav sections appended below it intact.
+    var historyBox = ui.dom("div", { minHeight: "160px" });
+    body.appendChild(historyBox);
 
     // Drag handle straddling the drawer's inline-end edge (right in LTR, left in
     // RTL). A thin grip line highlights on hover/drag; pointer capture keeps the
@@ -133,8 +145,209 @@ function openHistory() {
     resizer.addEventListener("pointerup", endDrag);
     resizer.addEventListener("pointercancel", endDrag);
 
+    // --- Nav rows shared by the Health & data and Settings groups -------------
+    function navRow(label, hint, onClick, danger) {
+        var r = ui.dom("button", {
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: "12px", textAlign: "start", width: "100%", border: "none",
+            // minHeight matches the history rows' content (their 40px delete button);
+            // with the same 7px block padding, both groups come out the same height.
+            background: "transparent", padding: "7px 20px", minHeight: "40px",
+            cursor: "pointer", font: "inherit", fontSize: "0.95rem",
+            color: danger ? color.error : color.onSurface
+        }, { type: "button" });
+        r.appendChild(ui.setText(ui.dom("span", {
+            whiteSpace: "nowrap", flex: "0 0 auto"
+        }), label));
+        if (hint) {
+            // The hint takes the remaining width and ellipsizes -- the backend
+            // address can be a long URL.
+            r.appendChild(ui.setText(ui.dom("span", {
+                fontSize: "0.8rem", color: color.onSurfaceVar, whiteSpace: "nowrap",
+                overflow: "hidden", textOverflow: "ellipsis", minWidth: "0",
+                flex: "0 1 auto", textAlign: "end"
+            }), hint));
+        }
+        r.addEventListener("mouseenter", function () { r.style.background = color.surfaceLow; });
+        r.addEventListener("mouseleave", function () { r.style.background = "transparent"; });
+        r.addEventListener("click", onClick);
+        return r;
+    };
+    function drawerDivider() {
+        return ui.dom("div", {
+            height: "1px", background: color.outlineVar, opacity: "0.5", margin: "4px 0"
+        });
+    };
+
+    // "New chat": drop the current thread for a fresh one. Skipped mid-stream so an
+    // in-flight reply isn't torn down. Leaves incognito state as-is (that's the
+    // top-bar toggle's job); clears the local mirror so a reload doesn't resurrect
+    // the old thread.
+    var newChatBtn = ui.dom("button", {
+        display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+        border: "1px solid " + color.outlineVar, borderRadius: "8px",
+        background: "transparent", cursor: "pointer",
+        font: "inherit", fontSize: "0.95rem", fontWeight: "500",
+        color: color.onSurface, padding: "9px 14px", flex: "1 1 0", minWidth: "0"
+    }, { type: "button" });
+    newChatBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }), t("newChat")));
+    newChatBtn.addEventListener("mouseenter", function () { newChatBtn.style.background = color.surfaceLow; });
+    newChatBtn.addEventListener("mouseleave", function () { newChatBtn.style.background = "transparent"; });
+    newChatBtn.addEventListener("click", function () {
+        if (state.streaming) { return; }
+        state.messages = [];
+        state.currentConversationId = "";
+        state.readOnly = false;
+        if (!state.incognito) {
+            var freshDb = require("./db");
+            freshDb.saveMessages([]);
+            freshDb.saveConversationId("");   // forget the old thread id too
+        }
+        dismiss();
+        require("./app").render();
+    });
+
+    // Incognito ("privacy mode") toggle, sharing the top row with "New chat" (New
+    // chat on the leading edge, this on the trailing edge). A sibling text button:
+    // ghost icon + an explicit label that states what the tap does ("Turn on /
+    // off incognito"). Solid ghost + navy tint when on, hollow ghost when off;
+    // toggling swaps the whole session (chat.toggleIncognito) then closes the
+    // drawer so the re-rendered chat shows the incognito banner/empty state.
+    var incognitoBtn = ui.dom("button", {
+        display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+        border: "1px solid " + (state.incognito ? color.primary : color.outlineVar),
+        borderRadius: "8px", background: "transparent", cursor: "pointer",
+        font: "inherit", fontSize: "0.95rem", fontWeight: "500",
+        color: state.incognito ? color.primary : color.onSurface,
+        padding: "9px 14px", flex: "1 1 0", minWidth: "0"
+    }, { type: "button", title: t(state.incognito ? "incognitoStop" : "incognitoStart") });
+    incognitoBtn.setAttribute("aria-pressed", state.incognito ? "true" : "false");
+    incognitoBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }),
+        t("incognitoMode")));
+    incognitoBtn.addEventListener("mouseenter", function () { incognitoBtn.style.background = color.surfaceLow; });
+    incognitoBtn.addEventListener("mouseleave", function () { incognitoBtn.style.background = "transparent"; });
+    incognitoBtn.addEventListener("click", function () {
+        if (state.streaming) { return; }
+        dismiss();
+        require("./chat").toggleIncognito();
+    });
+
+    // The shared top row: "New chat" (leading) and the incognito toggle (trailing),
+    // each a text button with a leading icon.
+    var topRow = ui.dom("div", {
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: "8px", flex: "0 0 auto", padding: "12px 16px"
+    });
+    topRow.appendChild(newChatBtn);
+    topRow.appendChild(incognitoBtn);
+
+    var signedIn = !!net.getToken();
+
+    // Health & data + Settings + account are all PINNED at the bottom (flex:0), so
+    // only the history list above them scrolls. Groups are compact (tight rows) to
+    // fit without needing their own scroll.
+    var footer = ui.dom("div", {
+        flex: "0 0 auto", borderTop: "1px solid " + color.outlineVar, paddingBottom: "6px"
+    });
+
+    if (signedIn) {
+        footer.appendChild(navRow(t("careCircle"), "", function () {
+            dismiss(); modals.showManageCircleModal();
+        }));
+        footer.appendChild(navRow(t("ehrConnect"), "", function () {
+            dismiss(); require("./ehr").showEhrModal();
+        }));
+        footer.appendChild(navRow(t("vendorManageTitle"), "", function () {
+            dismiss(); require("./vendors").showVendorsModal();
+        }));
+    }
+
+    // App settings (language / font / backend / about) are NOT here -- they live
+    // in the top-bar settings gear, shared with the login screen. This drawer is
+    // just navigation: history, health connections, and the account row below.
+
+    // Account: the signed-in email (centered, muted) above a centered Sign out.
+    if (signedIn) {
+        footer.appendChild(drawerDivider());
+
+        // Account switcher. The current account (email from the JWT `email` claim)
+        // is a tappable row that expands a list of the other signed-in accounts
+        // (tap to switch) plus "Add account" (sign in another without dropping the
+        // current ones). Several accounts can live in one browser -- see net.js.
+        var accounts = net.listAccounts();
+        var current = null, others = [];
+        accounts.forEach(function (a) { if (a.current) { current = a; } else { others.push(a); } });
+        function acctLabel(a) { return (a && a.email) ? a.email : (a ? "#" + a.sub.slice(0, 6) : ""); }
+
+        function acctRowStyle(danger) {
+            return {
+                display: "flex", alignItems: "center", width: "100%", border: "none",
+                background: "transparent", cursor: "pointer", font: "inherit",
+                fontSize: "0.85rem", padding: "10px 20px",
+                color: danger ? color.error : color.onSurface,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+            };
+        }
+        function hoverable(el) {
+            el.addEventListener("mouseenter", function () { el.style.background = color.surfaceLow; });
+            el.addEventListener("mouseleave", function () { el.style.background = "transparent"; });
+            return el;
+        }
+
+        // Current account + caret; tapping toggles the switcher list below it.
+        var acctBtn = ui.dom("button", {
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: "8px", width: "100%", border: "none", background: "transparent",
+            cursor: "pointer", font: "inherit", padding: "10px 20px", minHeight: "40px"
+        }, { type: "button" });
+        acctBtn.appendChild(ui.setText(ui.dom("span", {
+            fontSize: "0.8rem", color: color.onSurfaceVar, minWidth: "0", flex: "0 1 auto",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+        }), acctLabel(current)));
+        var acctCaret = ui.dom("span", {
+            display: "inline-flex", alignItems: "center", color: color.onSurfaceVar, flex: "0 0 auto"
+        });
+        ui.setHTML(acctCaret, icons.CARET_SVG);
+        acctBtn.appendChild(acctCaret);
+
+        var switcher = ui.dom("div", { display: "none", flexDirection: "column" });
+        others.forEach(function (a) {
+            var r = hoverable(ui.dom("button", acctRowStyle(false), { type: "button" }));
+            ui.setText(r, acctLabel(a));
+            r.addEventListener("click", function () { dismiss(); require("./app").switchAccount(a.sub); });
+            switcher.appendChild(r);
+        });
+        var addBtn = hoverable(ui.dom("button", acctRowStyle(false), { type: "button" }));
+        ui.setText(addBtn, "＋  " + t("addAccount"));
+        addBtn.addEventListener("click", function () { dismiss(); require("./app").addAccount(); });
+        switcher.appendChild(addBtn);
+
+        acctBtn.addEventListener("click", function () {
+            switcher.style.display = (switcher.style.display === "none") ? "flex" : "none";
+        });
+        footer.appendChild(acctBtn);
+        footer.appendChild(switcher);
+
+        // Sign out the current account (confirmed). app.signOut then falls back to
+        // another stored account, or the login screen when none remain.
+        var signOutBtn = hoverable(ui.dom("button", acctRowStyle(true), { type: "button" }));
+        signOutBtn.style.justifyContent = "center";
+        signOutBtn.style.minHeight = "40px";
+        ui.setText(signOutBtn, t("signOut"));
+        signOutBtn.addEventListener("click", function () {
+            // Confirm first. The confirm modal (zIndex 1200) sits above the drawer
+            // (1100), so keep the drawer open behind it and only dismiss on confirm.
+            showConfirmModal(t("signOut"), t("signOutConfirm"), t("signOut"), true, function () {
+                dismiss(); require("./app").signOut();
+            });
+        });
+        footer.appendChild(signOutBtn);
+    }
+
     panel.appendChild(header);
+    panel.appendChild(topRow);
     panel.appendChild(body);
+    panel.appendChild(footer);
     panel.appendChild(resizer);
     backdrop.appendChild(panel);
     backdrop.addEventListener("click", function (evt) {
@@ -154,17 +367,17 @@ function openHistory() {
     };
 
     function showLoading() {
-        ui.clear(body);
+        ui.clear(historyBox);
         // A lightweight spinner: reuse the streaming-cursor blink on a dot.
         var dot = ui.dom("div", {
             width: "10px", height: "10px", borderRadius: "50%",
             background: color.primary, animation: "mb-blink 1s steps(2, start) infinite"
         });
-        body.appendChild(centerBox(dot));
+        historyBox.appendChild(centerBox(dot));
     };
 
     function showError(msg) {
-        ui.clear(body);
+        ui.clear(historyBox);
         var col = ui.dom("div", {
             display: "flex", flexDirection: "column", alignItems: "center", gap: "10px"
         });
@@ -174,12 +387,12 @@ function openHistory() {
         var retry = button(t("retry"), false, { click: load });
         ui.setStyle(retry, { padding: "8px 16px" });
         col.appendChild(retry);
-        body.appendChild(centerBox(col));
+        historyBox.appendChild(centerBox(col));
     };
 
     function showEmpty() {
-        ui.clear(body);
-        body.appendChild(centerBox(ui.setText(ui.dom("div", {
+        ui.clear(historyBox);
+        historyBox.appendChild(centerBox(ui.setText(ui.dom("div", {
             fontSize: "0.875rem", color: color.onSurfaceVar
         }), t("historyEmpty"))));
     };
@@ -199,6 +412,20 @@ function openHistory() {
                 });
                 state.currentConversationId = String((data && data.id) || item.session_id);
                 state.readOnly = !(data && data.owned);
+                // Opening a saved conversation leaves incognito: this is a real,
+                // persisted thread, not the ephemeral session. Drop the stash so
+                // the (now-abandoned) incognito session isn't restored later.
+                state.incognito = false;
+                state.incognitoSaved = null;
+                // Mirror the opened thread locally (its messages + id) so a reload
+                // restores THIS conversation and continues it, matching the screen.
+                // Only for an owned/editable thread -- a read-only shared one can't
+                // be continued, so it isn't made the local mirror.
+                if (!state.readOnly) {
+                    var odb = require("./db");
+                    odb.saveMessages(state.messages);
+                    odb.saveConversationId(state.currentConversationId);
+                }
                 dismiss();
                 require("./app").render();
             },
@@ -218,10 +445,10 @@ function openHistory() {
     function row(item) {
         var wrap = ui.dom("div", {
             display: "flex", alignItems: "center",
-            paddingBlock: "12px", paddingInlineStart: "20px", paddingInlineEnd: "8px",
-            borderBottom: "1px solid " + color.outlineVar
+            paddingBlock: "7px", paddingInlineStart: "20px", paddingInlineEnd: "8px",
+            borderTop: "1px solid " + color.outlineVar
         });
-        wrap.style.borderBottomColor = "rgba(196, 199, 203, 0.4)";
+        wrap.style.borderTopColor = "rgba(196, 199, 203, 0.4)";
 
         var texts = ui.dom("div", {
             flex: "1 1 auto", minWidth: "0", cursor: "pointer",
@@ -249,11 +476,12 @@ function openHistory() {
 
         var del = ui.dom("button", {
             border: "none", background: "transparent", cursor: "pointer",
-            width: "36px", height: "36px", borderRadius: "18px", flex: "0 0 auto",
+            width: "40px", height: "40px", borderRadius: "20px", flex: "0 0 auto",
             display: "flex", alignItems: "center", justifyContent: "center",
             color: color.error
         }, { type: "button", title: t("delete") });
-        ui.setHTML(del, TRASH_SVG);
+        // Bump the trash glyph up from its 18px default for an easier tap target.
+        ui.setHTML(del, TRASH_SVG.replace('width="18" height="18"', 'width="24" height="24"'));
         del.addEventListener("click", function () {
             showConfirmModal(
                 t("historyDeleteTitle"), t("historyDeleteMessage"),
@@ -268,13 +496,13 @@ function openHistory() {
     };
 
     function showList() {
-        ui.clear(body);
+        ui.clear(historyBox);
         if (items.length === 0) { showEmpty(); return; }
         var list = ui.dom("div", { padding: "8px 0" });
         for (var i = 0; i < items.length; i ++) {
             list.appendChild(row(items[i]));
         }
-        body.appendChild(list);
+        historyBox.appendChild(list);
     };
 
     //----------------------------------------------------

@@ -31,7 +31,7 @@
 "verify_resending" = "正在重发…";
 "verify_resend_code" = "重新发送";
 
-"chat_message_hint" = "输入消息";
+"chat_message_hint" = "有什么想问的？";
 "chat_history_cd" = "历史";
 "chat_select_model" = "选择模型";
 "chat_no_providers" = "暂无可用模型";
@@ -51,7 +51,7 @@
 "chat_sign_out_confirm_title" = "退出登录？";
 "chat_sign_out_confirm_message" = "下次需要重新登录。";
 "chat_empty_title" = "开始对话";
-"chat_empty_subtitle" = "选择上方模型，然后发送第一条消息。";
+"chat_empty_subtitle" = "选择下方模型，然后发送第一条消息。";
 
 "history_title" = "历史";
 "history_empty" = "暂无历史记录。";

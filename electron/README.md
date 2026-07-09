@@ -48,8 +48,9 @@ npm start
 
 `main.js` reads the library from `../build-shared`, resources from `../res`, and
 the repo-root [`config.example.yml`](../config.example.yml) directly — no
-packaging needed. Sign in with the demo credentials it defines
-(`demo1@mirobody.ai` / `777777`); add an LLM key there to enable cloud chat, or pick
+packaging needed. Enable demo login there first (uncomment `EMAIL_PREDEFINE_CODES`,
+off by default), then sign in with `demo1@mirobody.ai` / `777777`; add an LLM key
+there to enable cloud chat, or pick
 the **on-device** provider (no key needed — see below). Per-machine
 overrides (paths, port, loopback host) come from env vars set in `main.js`, which
 the config store honors above the file.
@@ -106,7 +107,9 @@ At runtime `main.js` switches its paths to `process.resourcesPath` when
   `extraResources` filter copies whichever `mirobody.dll`/`libmirobody.*` is
   present, and `mirobody.js` picks the right name per `process.platform`.
 - **Security note.** The bundled `config.example.yml` ships placeholder `JWT_KEY`
-  / secrets and demo login (`EMAIL_PREDEFINE_CODES`) — replace these before
-  distributing. It also carries the full server template (e.g. a `PG_*` block);
-  those keys are inert under the desktop's SQLite-backed shared library.
+  / secrets — replace these before distributing. Demo login
+  (`EMAIL_PREDEFINE_CODES`) is commented out by default; if you enable it for
+  local use, do not ship it enabled (anyone could sign in with the well-known
+  codes). It also carries the full server template (e.g. a `PG_*` block); those
+  keys are inert under the desktop's SQLite-backed shared library.
 ```

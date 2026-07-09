@@ -26,6 +26,11 @@ var slots = {
     providerRefill : null
 };
 
+// True while "Add account" is showing the login view over an existing session
+// (a token is still stored, but we render login so a second account can sign in).
+// In-memory only: a reload just returns to the current account.
+var addingAccount = false;
+
 //----------------------------------------------------------------------------
 
 function render() {
@@ -57,32 +62,82 @@ function render() {
     // user is signed in; until then the normal login view runs and we resume
     // here automatically after completeLogin re-renders.
     var token = net.getToken();
+    // "Add account" forces the login view even though a token is still stored.
+    var showLogin = addingAccount || !token;
     var body;
-    if (consent.active() && token) {
+    if (consent.active() && token && !addingAccount) {
         body = consent.build();
     } else {
-        body = token ? buildChat() : buildLogin();
+        body = showLogin ? buildLogin() : buildChat();
     }
-    appEl.appendChild(buildTopBar(slots.topCenter, slots.topRight));
+    // Top-bar left: the account avatar in chat; a back arrow to cancel while
+    // adding an account; nothing on the plain login screen.
+    var leftMode = addingAccount ? "cancelAdd" : (token ? "account" : "none");
+    appEl.appendChild(buildTopBar(slots.topCenter, slots.topRight, leftMode));
     appEl.appendChild(body);
 };
 
 //----------------------------------------------------------------------------
 
+// Sign out the CURRENT account. Drops its local chat mirror (before clearToken,
+// which needs the still-current token to derive the key), removes its token, then
+// falls back to another stored account when one exists -- else lands on login.
+// activateSession() handles both: with no token left, it renders the login view.
 function signOut() {
-    db.clear();   // drop this user's local chat history (keyed by the still-present token)
+    db.clear();
     net.clearToken();
-    state.email     = "";
-    state.messages  = [];
-    state.providers = [];   // don't leak the previous session's provider list
-    state.streaming = false;
-    state.currentConversationId = "";
-    state.readOnly  = false;
-    state.currentSubjectId = "";
     // Modals/history mount their backdrop on document.body as siblings of #app,
     // so render() (which only clears #app) wouldn't remove them -- tear down any
     // open overlay here so a 401 mid-modal doesn't leave it floating over login.
     closeOverlays();
+    activateSession();
+};
+
+// Reset per-session state and load the CURRENT account's data, then render. The
+// single entry point after any session change (fresh login, account switch, or
+// signing out the current account), so no previous account's state leaks through.
+function activateSession() {
+    addingAccount = false;
+    state.email     = "";
+    state.messages  = [];
+    state.providers = [];
+    state.streaming = false;
+    state.currentConversationId = "";
+    state.readOnly  = false;
+    state.currentSubjectId = "";
+    state.incognito = false;
+    state.incognitoSaved = null;
+    // Provider list is auth-gated; loadProviders no-ops when signed out.
+    loadProviders();
+    db.loadMessages().then(function (msgs) {
+        if (msgs && msgs.length) { state.messages = msgs; }
+    }).catch(function () {}).then(function () {
+        render();
+        // A care-circle invite link consumed before sign-in: accept it now that a
+        // session exists (no-op when nothing is stashed / signed out).
+        require("./circle_accept").consume();
+    });
+};
+
+// Switch to another already-stored account (from the drawer's account switcher).
+function switchAccount(sub) {
+    if (net.switchAccount(sub)) {
+        closeOverlays();   // dismiss the drawer
+        activateSession();
+    }
+};
+
+// Show the login view over the current session so a second account can sign in;
+// the existing account's token stays stored (see net.setToken).
+function addAccount() {
+    addingAccount = true;
+    closeOverlays();
+    render();
+};
+
+// Back out of "Add account" without signing in, returning to the current account.
+function cancelAddAccount() {
+    addingAccount = false;
     render();
 };
 
@@ -104,19 +159,8 @@ function closeOverlays() {
 // by every sign-in success path (email, Google, Apple, WeChat) in place of a
 // bare setToken + render.
 function completeLogin(accessToken) {
-    net.setToken(accessToken);
-    state.messages = [];
-    // The provider list is auth-gated, so it isn't fetched on the login screen;
-    // load it now that we hold a token.
-    loadProviders();
-    db.loadMessages().then(function (msgs) {
-        if (msgs && msgs.length) { state.messages = msgs; }
-    }).catch(function () {}).then(function () {
-        render();
-        // A care-circle invite link consumed before sign-in: accept it now that
-        // a session exists (no-op when there's nothing stashed).
-        require("./circle_accept").consume();
-    });
+    net.setToken(accessToken);   // stores under this account's slot + makes current
+    activateSession();
 };
 
 //----------------------------------------------------------------------------
@@ -150,8 +194,11 @@ function loadProviders() {
 // rejected/expired token always falls back to the login view -- see net.post/get/stream.
 net.setUnauthorizedHandler(signOut);
 
-exports.slots         = slots;
-exports.render        = render;
-exports.signOut       = signOut;
-exports.completeLogin = completeLogin;
-exports.loadProviders = loadProviders;
+exports.slots            = slots;
+exports.render           = render;
+exports.signOut          = signOut;
+exports.completeLogin    = completeLogin;
+exports.loadProviders    = loadProviders;
+exports.switchAccount    = switchAccount;
+exports.addAccount       = addAccount;
+exports.cancelAddAccount = cancelAddAccount;

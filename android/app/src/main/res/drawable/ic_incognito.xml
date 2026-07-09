@@ -1,0 +1,12 @@
+<!-- Solid "privacy mode" ghost (incognito ON) from htdoc INCOGNITO_SVG. Tinted at
+     the call site. evenOdd so the two eyes read as cut-out holes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#000000"
+        android:fillType="evenOdd"
+        android:pathData="M12,2C7.58,2 4,5.58 4,10v9.5c0,0.84 0.98,1.3 1.63,0.77L7,19l1.63,1.3c0.37,0.3 0.9,0.3 1.27,0L12,18.5l2.1,1.8c0.37,0.3 0.9,0.3 1.27,0L17,19l1.37,1.27c0.65,0.53 1.63,0.07 1.63,-0.77V10c0,-4.42 -3.58,-8 -8,-8zm-2.5,9a1.5,1.5 0,1 1,0 -3,1.5 1.5 0,0 1,0 3zm5,0a1.5,1.5 0,1 1,0 -3,1.5 1.5 0,0 1,0 3z" />
+</vector>

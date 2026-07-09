@@ -6,9 +6,12 @@
 
 const ui  = require("./ui");
 const md  = require("./markdown");
+const i18n = require("./i18n");
 
 const config = require("./config");
 const color  = config.color;
+
+const CLOSE_SVG = require("./icons").CLOSE_SVG;
 
 //----------------------------------------------------------------------------
 
@@ -75,7 +78,35 @@ function field(attributes) {
 
 //----------------------------------------------------------------------------
 
+// A modal header row: the title on the leading edge, a close (X) icon on the
+// trailing corner. The negative inline-end margin tucks the icon into the card's
+// padding; logical properties keep it in the correct corner under RTL. Shared by
+// every dialog so the close affordance reads identically and no dialog needs a
+// bottom "Close" button (saves a row of height). `onDismiss` runs on click.
+function modalHeader(titleText, onDismiss) {
+    var header = ui.dom("div", {
+        display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px"
+    });
+    header.appendChild(ui.setText(ui.dom("div", {
+        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface, minWidth: "0"
+    }), titleText));
+    var closeBtn = ui.dom("button", {
+        border: "none", background: "transparent", padding: "0",
+        marginInlineEnd: "-6px", marginTop: "-2px",
+        width: "32px", height: "32px", borderRadius: "16px", flexShrink: "0",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", color: color.onSurfaceVar
+    }, { type: "button", title: i18n.t("close") });
+    ui.setHTML(closeBtn, CLOSE_SVG.replace('width="12" height="12"', 'width="18" height="18"'));
+    closeBtn.addEventListener("click", onDismiss);
+    header.appendChild(closeBtn);
+    return header;
+};
+
+//----------------------------------------------------------------------------
+
 exports.renderInto   = renderInto;
 exports.streamRender = streamRender;
 exports.button       = button;
 exports.field        = field;
+exports.modalHeader  = modalHeader;

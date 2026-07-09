@@ -30,13 +30,7 @@ TASK="assemble$(cap "$FLAVOR")$(cap "$BUILD_TYPE")"
 # --- 1. Ensure prebuilt native deps -------------------------------------------
 if [ ! -d "prebuilt/$ABI" ]; then
   echo "==> prebuilt/$ABI missing; cross-compiling native deps"
-  if command -v pwsh >/dev/null 2>&1; then
-    pwsh -File ./build-prebuilt.ps1 -Abi "$ABI"
-  else
-    echo "ERROR: prebuilt/$ABI not found and PowerShell (pwsh) is unavailable." >&2
-    echo "Produce the deps first (see build-prebuilt.ps1), then re-run." >&2
-    exit 1
-  fi
+  ./build-prebuilt.sh "$ABI"
 fi
 
 # --- 2. Resolve a Gradle launcher ---------------------------------------------

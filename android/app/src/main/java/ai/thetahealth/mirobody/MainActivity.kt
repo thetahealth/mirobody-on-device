@@ -1,9 +1,9 @@
 package ai.thetahealth.mirobody
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.LocalActivityResultRegistryOwner
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
@@ -28,12 +28,27 @@ import ai.thetahealth.mirobody.ui.LayoutInfo
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import ai.thetahealth.mirobody.ui.LocalFontSizePreview
 import ai.thetahealth.mirobody.ui.LocalLayoutInfo
+import ai.thetahealth.mirobody.data.settings.SettingsStore
 import ai.thetahealth.mirobody.ui.MirobodyNavGraph
-import ai.thetahealth.mirobody.ui.ProvideLocale
+import ai.thetahealth.mirobody.ui.localizedContext
 import ai.thetahealth.mirobody.ui.theme.MirobodyTheme
 import ai.thetahealth.mirobody.ui.toLocalizedMessage
 
 class MainActivity : ComponentActivity() {
+
+    // The language this Activity was created with (applied in attachBaseContext).
+    // A change (from the settings menu) recreates the Activity so it re-reads it.
+    private var appliedLanguage: String = "en"
+
+    // Apply the chosen app language to the whole Activity before it's created, so
+    // every context -- including the separate windows Compose dialogs run in --
+    // resolves resources in it. Read synchronously from the SharedPreferences
+    // mirror (DataStore is async and can't be read here).
+    override fun attachBaseContext(newBase: Context) {
+        appliedLanguage = SettingsStore.persistedLanguage(newBase)
+        super.attachBaseContext(localizedContext(newBase, appliedLanguage))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         startMirobodyService()
@@ -45,51 +60,55 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalAppContainer provides container,
                     LocalFontSizePreview provides fontSizePreview,
-                    // ProvideLocale (below) swaps LocalContext for a createConfigurationContext
-                    // result whose unwrap chain no longer reaches this Activity, so
-                    // rememberLauncherForActivityResult can't find the registry owner by
-                    // unwrapping the context. Provide it explicitly here, above the locale wrap.
-                    LocalActivityResultRegistryOwner provides this@MainActivity,
                 ) {
-                    val language by container.settings.language.collectAsState(initial = "en")
                     val persisted by container.settings.fontSizeOffset.collectAsState(initial = 0)
                     // Once the persisted value catches up to the preview (post-confirm DataStore
                     // write), drop the preview so we stop overriding.
                     LaunchedEffect(persisted, fontSizePreview.value) {
                         if (fontSizePreview.value == persisted) fontSizePreview.value = null
                     }
-                    val effectiveOffset = fontSizePreview.value ?: persisted
-                    ProvideLocale(language) {
-                        val base = LocalDensity.current
-                        // Offset is in "px relative to a 14sp body" → convert to a fontScale multiplier
-                        // layered on top of the system/accessibility scale.
-                        val scaled = Density(base.density, base.fontScale * (1f + effectiveOffset / 14f))
-                        CompositionLocalProvider(LocalDensity provides scaled) {
-                            val snackbarHost = remember { SnackbarHostState() }
-                            val context = LocalContext.current
-                            LaunchedEffect(Unit) {
-                                container.errorBus.errors.collect { err ->
-                                    snackbarHost.showSnackbar(err.toLocalizedMessage(context))
-                                }
+                    // Language is applied app-wide in attachBaseContext; when the user
+                    // changes it, mirror it to the sync store and recreate so the new
+                    // locale takes effect everywhere. The initial value matches what
+                    // attach already applied, so it doesn't recreate on launch.
+                    LaunchedEffect(Unit) {
+                        container.settings.language.collect { lang ->
+                            if (lang != appliedLanguage) {
+                                SettingsStore.setPersistedLanguage(this@MainActivity, lang)
+                                recreate()
                             }
-                            // Measure the root window once and publish it as LayoutInfo so
-                            // every screen can compact itself on small/watch displays.
-                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                                val layoutInfo = LayoutInfo(
-                                    widthDp = maxWidth,
-                                    heightDp = maxHeight,
-                                    isWatch = BuildConfig.IS_WATCH,
+                        }
+                    }
+                    val effectiveOffset = fontSizePreview.value ?: persisted
+                    val base = LocalDensity.current
+                    // Offset is in "px relative to a 14sp body" → convert to a fontScale multiplier
+                    // layered on top of the system/accessibility scale.
+                    val scaled = Density(base.density, base.fontScale * (1f + effectiveOffset / 14f))
+                    CompositionLocalProvider(LocalDensity provides scaled) {
+                        val snackbarHost = remember { SnackbarHostState() }
+                        val context = LocalContext.current
+                        LaunchedEffect(Unit) {
+                            container.errorBus.errors.collect { err ->
+                                snackbarHost.showSnackbar(err.toLocalizedMessage(context))
+                            }
+                        }
+                        // Measure the root window once and publish it as LayoutInfo so
+                        // every screen can compact itself on small/watch displays.
+                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                            val layoutInfo = LayoutInfo(
+                                widthDp = maxWidth,
+                                heightDp = maxHeight,
+                                isWatch = BuildConfig.IS_WATCH,
+                            )
+                            CompositionLocalProvider(LocalLayoutInfo provides layoutInfo) {
+                                MirobodyNavGraph()
+                                SnackbarHost(
+                                    hostState = snackbarHost,
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .imePadding()
+                                        .navigationBarsPadding(),
                                 )
-                                CompositionLocalProvider(LocalLayoutInfo provides layoutInfo) {
-                                    MirobodyNavGraph()
-                                    SnackbarHost(
-                                        hostState = snackbarHost,
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .imePadding()
-                                            .navigationBarsPadding(),
-                                    )
-                                }
                             }
                         }
                     }

@@ -21,8 +21,11 @@ const languageLabel = config.languageLabel;
 const fontTierLabel = config.fontTierLabel;
 const applyDirection = config.applyDirection;
 const applyFontScale = config.applyFontScale;
+const APP_VERSION    = config.APP_VERSION;
 
 const SETTINGS_SVG = require("./icons").SETTINGS_SVG;
+const PERSON_SVG   = require("./icons").PERSON_SVG;
+const BACK_SVG     = require("./icons").BACK_SVG;
 
 const modals = require("./modals");
 const openHistory = require("./history").openHistory;
@@ -33,11 +36,13 @@ var t = i18n.t;
 
 //----------------------------------------------------------------------------
 
-// Top bar styled like the app's CenterAlignedTopAppBar: flat background, brand on
-// the left, an optional centered element (the provider picker on chat), and
-// optional right-side actions (the settings menu). centerEl/rightEl come from the
-// active view via the topCenter/topRight slots.
-function buildTopBar(centerEl, rightEl) {
+// Top bar styled like the app's CenterAlignedTopAppBar: a left slot, the brand
+// optically centered, and optional right-side actions (the settings menu).
+// centerEl/rightEl come from the active view via the topCenter/topRight slots.
+// leftMode picks the left affordance: "account" = the avatar that opens the
+// drawer (chat); "cancelAdd" = a back arrow that cancels Add-account; "none" =
+// empty (the plain login screen).
+function buildTopBar(centerEl, rightEl, leftMode) {
     var bar = ui.dom("header", {
         display    : "flex",
         alignItems : "center",
@@ -53,33 +58,71 @@ function buildTopBar(centerEl, rightEl) {
     var left = ui.dom("div", {
         display: "flex", alignItems: "center", flex: "1 1 0", minWidth: "0"
     });
-    // When signed in the logo (serif brand) opens the history drawer, as the app's
-    // BrandLogo does. On the login screen the brand is omitted here -- the sign-in
-    // view shows its own centered brand block (see login.js) -- so the bar carries
-    // only the settings gear, matching the Theta Health login design.
-    var signedIn = !!net.getToken();
+    // "account": the top-left is an account avatar that opens the personal drawer
+    // (history, health connections, account). A filled initial-avatar reads as
+    // "you / account" -- distinct from the settings gear on the right (app
+    // settings), so users aren't left guessing which menu is which. The initial
+    // comes from the JWT email claim; with no email we fall back to a person glyph.
+    var signedIn = leftMode === "account";
     if (signedIn) {
-        var brand = ui.dom("button", {
-            display: "inline-flex", alignItems: "center", gap: "10px",
-            textDecoration: "none", color: color.onSurface, padding: "8px",
-            border: "none", background: "transparent", cursor: "pointer", font: "inherit"
-        }, { type: "button", title: t("historyTitle") });
-        brand.appendChild(ui.img(logoUrl, { width: "28px", height: "28px" }));
-        // The title sits next to the logo but only on wider viewports; the
-        // "brand-title" class is toggled by a min-width:600px media query (see
-        // index.html) since inline styles can't express a breakpoint.
-        brand.appendChild(ui.setText(ui.dom("span", {
-            fontFamily: serifFamily, fontSize: "20px", fontWeight: "600",
-            color: color.onSurface, whiteSpace: "nowrap"
-        }, { "class": "brand-title" }), "Mirobody"));
-        brand.addEventListener("click", openHistory);
-        left.appendChild(brand);
+        var menuBtn = ui.dom("button", {
+            border: "none", background: "transparent", padding: "0",
+            width: "40px", height: "40px", borderRadius: "20px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer"
+        }, { type: "button", title: t("menuTitle") });
+        var avatar = ui.dom("div", {
+            width: "30px", height: "30px", borderRadius: "50%",
+            background: color.primary, color: color.onPrimary,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "14px", fontWeight: "600", lineHeight: "1"
+        });
+        var email = net.getUserEmail();
+        var initial = email ? email.charAt(0).toUpperCase() : "";
+        if (initial) { ui.setText(avatar, initial); }
+        else { ui.setHTML(avatar, PERSON_SVG); }
+        menuBtn.appendChild(avatar);
+        menuBtn.addEventListener("click", openHistory);
+        left.appendChild(menuBtn);
+    } else if (leftMode === "cancelAdd") {
+        // Adding another account: a back arrow returns to the current account
+        // without signing in.
+        var backBtn = ui.dom("button", {
+            border: "none", background: "transparent", padding: "0",
+            width: "40px", height: "40px", borderRadius: "20px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: color.onSurfaceVar
+        }, { type: "button", title: t("back") });
+        ui.setHTML(backBtn, BACK_SVG);
+        backBtn.addEventListener("click", function () { app.cancelAddAccount(); });
+        left.appendChild(backBtn);
     }
 
     var center = ui.dom("div", {
         display: "flex", alignItems: "center", justifyContent: "center",
         flex: "0 1 auto", minWidth: "0"
     });
+    // Centered brand (logo + serif wordmark), the true CenterAlignedTopAppBar
+    // title. It's static branding now -- the hamburger carries the nav action.
+    // On narrow screens with shared subjects the subject picker needs the center
+    // slot, so chat.js calls app.slots.setBrandVisible(false) to hand it over;
+    // the two are mutually exclusive. On wide the subject sits in the composer,
+    // so the center is free and the brand stays.
+    if (signedIn) {
+        var brand = ui.dom("div", {
+            display: "inline-flex", alignItems: "center", gap: "8px", minWidth: "0"
+        });
+        brand.appendChild(ui.img(logoUrl, { width: "26px", height: "26px" }));
+        var brandText = ui.setText(ui.dom("span", {
+            fontFamily: serifFamily, fontSize: "20px", fontWeight: "600",
+            color: color.onSurface, whiteSpace: "nowrap"
+        }), "Mirobody");
+        brand.appendChild(brandText);
+        app.slots.setBrandVisible = function (show) {
+            brand.style.display = show ? "inline-flex" : "none";
+        };
+        center.appendChild(brand);
+    }
     if (centerEl) { center.appendChild(centerEl); }
 
     var right = ui.dom("div", {
@@ -109,7 +152,7 @@ function buildSettingsMenu() {
 
     var menu = ui.dom("div", {
         position: "absolute", top: "46px", insetInlineEnd: "4px",
-        minWidth: "190px", background: "#ffffff",
+        minWidth: "190px", maxWidth: "300px", background: "#ffffff",
         border: "1px solid " + color.outlineVar,
         borderRadius: "12px", boxShadow: "0 8px 24px rgba(0, 0, 0, 0.16)",
         padding: "6px", display: "none", flexDirection: "column", zIndex: "900"
@@ -123,12 +166,6 @@ function buildSettingsMenu() {
         if (!wrap.contains(evt.target)) { close(); }
     };
 
-    function divider() {
-        return ui.dom("div", {
-            height: "1px", background: color.outlineVar, opacity: "0.6", margin: "4px 0"
-        });
-    };
-
     // A menu row with a left label and an optional right-aligned hint (the
     // current value); `danger` paints it in the error color, as the app does for
     // sign-out. Returns the row and its hint node so callers can update the hint.
@@ -140,23 +177,21 @@ function buildSettingsMenu() {
             cursor: "pointer", font: "inherit", fontSize: "0.875rem",
             color: danger ? color.error : color.onSurface
         }, { type: "button" });
-        row.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }), label));
+        row.appendChild(ui.setText(ui.dom("span", {
+            whiteSpace: "nowrap", flex: "0 0 auto"
+        }), label));
+        // The hint takes the remaining width and ellipsizes -- the backend address
+        // can be a long URL.
         var hintEl = ui.setText(ui.dom("span", {
-            fontSize: "0.8rem", color: color.onSurfaceVar, whiteSpace: "nowrap"
+            fontSize: "0.8rem", color: color.onSurfaceVar, whiteSpace: "nowrap",
+            overflow: "hidden", textOverflow: "ellipsis", minWidth: "0",
+            flex: "0 1 auto", textAlign: "end"
         }), hint || "");
         row.appendChild(hintEl);
         row.addEventListener("mouseenter", function () { row.style.background = color.surfaceLow; });
         row.addEventListener("mouseleave", function () { row.style.background = "transparent"; });
         return { el: row, hint: hintEl };
     };
-
-    if (state.email) {
-        menu.appendChild(ui.setText(ui.dom("div", {
-            padding: "8px 12px", fontSize: "0.8rem", color: color.onSurfaceVar,
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
-        }), state.email));
-        menu.appendChild(divider());
-    }
 
     var lang = menuItem(t("language"), languageLabel(state.language), false);
     lang.el.addEventListener("click", function () {
@@ -190,47 +225,24 @@ function buildSettingsMenu() {
     });
     menu.appendChild(font.el);
 
-    var backend = menuItem(t("backend"), "", false);
+    var backend = menuItem(t("backend"), net.getBaseUrl(), false);
     backend.el.addEventListener("click", function () {
         close();
         modals.showBackendModal();
     });
     menu.appendChild(backend.el);
 
-    // Connect EHR joins the main items, but only when signed in (it needs a
-    // session); About follows it and stays visible on the login screen too.
-    if (net.getToken()) {
-        var circle = menuItem(t("careCircle"), "", false);
-        circle.el.addEventListener("click", function () { close(); modals.showManageCircleModal(); });
-        menu.appendChild(circle.el);
-
-        var ehr = menuItem(t("ehrConnect"), "", false);
-        ehr.el.addEventListener("click", function () { close(); require("./ehr").showEhrModal(); });
-        menu.appendChild(ehr.el);
-
-        var devices = menuItem(t("vendorManageTitle"), "", false);
-        devices.el.addEventListener("click", function () { close(); require("./vendors").showVendorsModal(); });
-        menu.appendChild(devices.el);
-
-        menu.appendChild(divider());
-    }
-
-    var about = menuItem(t("about"), "", false);
+    // About: opens a small dialog with the build version. The gear menu is
+    // intentionally just the app settings (language / font / backend / about) so
+    // it's identical on the login and chat screens. Everything session-scoped --
+    // health connections (care circle / EHR / devices), history, and Sign out --
+    // lives in the left nav drawer instead (chat only; see history.js).
+    var about = menuItem(t("about"), APP_VERSION ? ("v" + APP_VERSION) : "", false);
     about.el.addEventListener("click", function () {
         close();
-        modals.showAboutModal();
+        modals.showAlertModal(t("about"), t("version", APP_VERSION), t("close"));
     });
     menu.appendChild(about.el);
-
-    // Sign out only makes sense once authenticated; on the login screen the menu
-    // is just language / font / backend / about.
-    if (net.getToken()) {
-        menu.appendChild(divider());
-
-        var signOut2 = menuItem(t("signOut"), "", true);
-        signOut2.el.addEventListener("click", function () { close(); app.signOut(); });
-        menu.appendChild(signOut2.el);
-    }
 
     gear.addEventListener("click", function (evt) {
         evt.stopPropagation();

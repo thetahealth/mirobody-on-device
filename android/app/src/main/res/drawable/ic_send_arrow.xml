@@ -1,0 +1,20 @@
+<!-- Stroke-based up-arrow for the composer send button, from htdoc SEND_ARROW_SVG.
+     Tinted to onPrimary at the call site (drawn white here for the navy button). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,19 L12,5" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,12 L12,5 L19,12" />
+</vector>

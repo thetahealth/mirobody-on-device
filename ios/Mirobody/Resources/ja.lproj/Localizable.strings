@@ -31,7 +31,7 @@
 "verify_resending" = "再送信中…";
 "verify_resend_code" = "コードを再送信";
 
-"chat_message_hint" = "メッセージ";
+"chat_message_hint" = "何でも質問してください";
 "chat_history_cd" = "履歴";
 "chat_select_model" = "モデルを選択";
 "chat_no_providers" = "利用可能なモデルがありません";
@@ -51,7 +51,7 @@
 "chat_sign_out_confirm_title" = "ログアウトしますか？";
 "chat_sign_out_confirm_message" = "次回は再度ログインが必要です。";
 "chat_empty_title" = "会話を始めましょう";
-"chat_empty_subtitle" = "上でモデルを選んで、最初のメッセージを送信してください。";
+"chat_empty_subtitle" = "下でモデルを選んで、最初のメッセージを送信してください。";
 
 "history_title" = "履歴";
 "history_empty" = "履歴はまだありません。";

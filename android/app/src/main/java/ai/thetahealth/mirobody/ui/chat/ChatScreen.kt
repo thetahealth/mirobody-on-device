@@ -5,7 +5,9 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
@@ -33,6 +36,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoFixHigh
@@ -44,7 +49,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -90,8 +95,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -103,18 +110,17 @@ import ai.thetahealth.mirobody.data.chat.dto.ProviderInfo
 import ai.thetahealth.mirobody.data.llm.MlKitTextService
 import ai.thetahealth.mirobody.data.llm.OnDeviceModelStatus
 import ai.thetahealth.mirobody.data.circle.dto.HealthSharer
+import ai.thetahealth.mirobody.data.settings.StoredAccount
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import ai.thetahealth.mirobody.ui.LocalLayoutInfo
-import ai.thetahealth.mirobody.ui.LocalFontSizePreview
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import ai.thetahealth.mirobody.ui.circle.CareCircleDialog
 import ai.thetahealth.mirobody.ui.circle.ShareConversationDialog
 import ai.thetahealth.mirobody.ui.health.BleDeviceDialog
+import ai.thetahealth.mirobody.ui.health.EhrDialog
 import ai.thetahealth.mirobody.ui.health.HdpDeviceDialog
 import ai.thetahealth.mirobody.ui.health.HealthSyncDialog
-import ai.thetahealth.mirobody.ui.settings.BaseUrlDialog
-import ai.thetahealth.mirobody.ui.settings.FontSizeDialog
-import ai.thetahealth.mirobody.ui.settings.LanguageDialog
+import ai.thetahealth.mirobody.ui.settings.AppSettingsMenu
+import ai.thetahealth.mirobody.ui.vendor.VendorsDialog
 import ai.thetahealth.mirobody.ui.theme.BrandBlue
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
@@ -131,7 +137,11 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    onSignOut: () -> Unit,
+    // Recreate the chat for the now-current account (after a switch, or after
+    // signing out to a remaining account).
+    onRelaunch: () -> Unit,
+    // Show the login screen over this session to add another account.
+    onAddAccount: () -> Unit,
 ) {
     val container = LocalAppContainer.current
     val vm: ChatViewModel = viewModel(
@@ -151,11 +161,29 @@ fun ChatScreen(
     )
     val layout = LocalLayoutInfo.current
     val state by vm.state.collectAsState()
-    val baseUrl by container.settings.baseUrl.collectAsState(initial = null)
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
+    val currentEmail by container.settings.currentEmail.collectAsState(initial = null)
+    // Sign out the CURRENT account. Clear its local chat first (the key is derived
+    // from the still-current sub), then drop its token. If another account remains,
+    // recreate the chat as it; otherwise the token goes null and the nav graph's
+    // token collector returns to login.
+    val doSignOut: () -> Unit = {
+        scope.launch {
+            container.chatHistoryStore.clear()
+            container.authRepository.signOut()
+            if (container.settings.hasAccount()) onRelaunch()
+        }
+    }
+    // Switch to another stored account, then recreate the chat as it.
+    val onSwitchAccount: (String) -> Unit = { sub ->
+        scope.launch {
+            container.settings.switchAccount(sub)
+            onRelaunch()
+        }
+    }
 
     // System file picker → read each pick into a ChatAttachment off the main thread,
     // then stage it in the composer (mirrors the web client's paperclip upload).
@@ -202,9 +230,33 @@ fun ChatScreen(
                     .widthIn(max = layout.drawerMaxWidth)
                     .shadow(elevation = 8.dp, shape = DrawerDefaults.shape),
             ) {
-                HistoryScreen(
-                    onBack = { scope.launch { drawerState.close() } },
+                ChatDrawer(
+                    conversationId = state.conversationId,
                     isActive = drawerState.targetValue == DrawerValue.Open,
+                    incognito = state.incognito,
+                    onToggleIncognito = {
+                        vm.toggleIncognito()
+                        scope.launch { drawerState.close() }
+                    },
+                    onNewChat = {
+                        vm.newChat()
+                        scope.launch { drawerState.close() }
+                    },
+                    onOpenConversation = { id ->
+                        vm.openConversation(id)
+                        scope.launch { drawerState.close() }
+                    },
+                    onClose = { scope.launch { drawerState.close() } },
+                    currentEmail = currentEmail,
+                    onSwitchAccount = { sub ->
+                        onSwitchAccount(sub)
+                        scope.launch { drawerState.close() }
+                    },
+                    onAddAccount = {
+                        scope.launch { drawerState.close() }
+                        onAddAccount()
+                    },
+                    onSignOut = doSignOut,
                 )
             }
         },
@@ -217,29 +269,19 @@ fun ChatScreen(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
                 navigationIcon = {
-                    BrandLogo(baseUrl = baseUrl, onClick = { scope.launch { drawerState.open() } })
-                },
-                title = { ProviderMenu(state, onProviderSelected, vm::loadProviders) },
-                actions = {
-                    val fontOffset by container.settings.fontSizeOffset.collectAsState(initial = 0)
-                    SettingsMenu(
-                        currentLanguage = state.language,
-                        currentFontOffset = fontOffset,
-                        conversationId = state.conversationId,
-                        onSelectLanguage = { code ->
-                            scope.launch { container.settings.setLanguage(code) }
-                        },
-                        onSelectFontOffset = { offset ->
-                            scope.launch { container.settings.setFontSizeOffset(offset) }
-                        },
-                        onSignOut = {
-                            scope.launch {
-                                container.authRepository.signOut()
-                                container.chatHistoryStore.clear()   // don't leave one user's chat for the next
-                                onSignOut()
-                            }
-                        },
+                    AccountAvatar(
+                        email = currentEmail,
+                        onClick = { scope.launch { drawerState.open() } },
                     )
+                },
+                // Centered brand (logo + serif wordmark), the CenterAlignedTopAppBar
+                // title -- the drawer entry is the hamburger now, mirroring the web.
+                title = { BrandTitle() },
+                // Right slot: the shared settings gear (language / font / backend /
+                // about), identical to the login screen. Incognito moved to the
+                // drawer, alongside the other session-scoped items.
+                actions = {
+                    AppSettingsMenu(currentLanguage = state.language)
                 },
             )
         },
@@ -254,7 +296,11 @@ fun ChatScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Column(modifier = Modifier.widthIn(max = layout.contentMaxWidth)) {
+                    Column(
+                        modifier = Modifier
+                            .widthIn(max = layout.contentMaxWidth)
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
                         // "Currently for" subject picker — shown only when care-circle
                         // members have shared their health data with this user. Picking
                         // one sends `subject` so the AI's family_health tool defaults to
@@ -273,46 +319,72 @@ fun ChatScreen(
                                 onRemove = vm::removeAttachment,
                             )
                         }
-                        // Single-line composer, so center the paperclip against the field.
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(
-                                onClick = { filePicker.launch("*/*") },
-                                enabled = !state.sending,
-                                modifier = Modifier.padding(start = 4.dp),
+                        val canSend = !state.sending && state.selected != null &&
+                            (state.input.isNotBlank() || state.attachments.isNotEmpty())
+                        val doSend: () -> Unit = {
+                            // For the on-device provider, prompt to download the model
+                            // first instead of sending into a dead engine.
+                            if (state.selected?.isOnDevice == true &&
+                                state.onDeviceModel !is OnDeviceModelStatus.Ready
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.AttachFile,
-                                    contentDescription = stringResource(R.string.chat_attach_file),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                showModelDialog = true
+                            } else {
+                                vm.send()
                             }
-                            // On-device draft rewrite (Gemini Nano) — only where supported.
-                            if (state.polishAvailable) {
-                                PolishButton(
-                                    enabled = !state.sending && state.input.isNotBlank(),
-                                    polishing = state.polishing,
-                                    onPolish = vm::polishDraft,
+                        }
+                        // One rounded pill: the input on top, a control row (attach ·
+                        // model picker · send) below — matching the web composer.
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp, MaterialTheme.colorScheme.outlineVariant,
+                            ),
+                        ) {
+                            Column(modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 6.dp, bottom = 6.dp)) {
+                                ChatInputField(
+                                    value = state.input,
+                                    onValueChange = vm::onInputChange,
+                                    enabled = !state.sending,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
-                            }
-                            ChatInputField(
-                                value = state.input,
-                                onValueChange = vm::onInputChange,
-                                enabled = !state.sending,
-                                canSend = !state.sending && state.selected != null &&
-                                    (state.input.isNotBlank() || state.attachments.isNotEmpty()),
-                                onSend = {
-                                    // For the on-device provider, prompt to download the
-                                    // model first instead of sending into a dead engine.
-                                    if (state.selected?.isOnDevice == true &&
-                                        state.onDeviceModel !is OnDeviceModelStatus.Ready
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    IconButton(
+                                        onClick = { filePicker.launch("*/*") },
+                                        enabled = !state.sending,
+                                        modifier = Modifier.size(40.dp),
                                     ) {
-                                        showModelDialog = true
-                                    } else {
-                                        vm.send()
+                                        Icon(
+                                            imageVector = Icons.Outlined.AttachFile,
+                                            contentDescription = stringResource(R.string.chat_attach_file),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
                                     }
-                                },
-                                modifier = Modifier.weight(1f),
-                            )
+                                    // On-device draft rewrite (Gemini Nano) — only where supported.
+                                    if (state.polishAvailable) {
+                                        PolishButton(
+                                            enabled = !state.sending && state.input.isNotBlank(),
+                                            polishing = state.polishing,
+                                            onPolish = vm::polishDraft,
+                                        )
+                                    }
+                                    // Model picker takes the middle, centered.
+                                    ProviderMenu(
+                                        state = state,
+                                        onSelect = onProviderSelected,
+                                        onRetry = vm::loadProviders,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    SendButton(
+                                        enabled = canSend,
+                                        sending = state.sending,
+                                        onClick = doSend,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -321,7 +393,7 @@ fun ChatScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (state.messages.isEmpty()) {
-                EmptyState(modifier = Modifier.weight(1f))
+                EmptyState(incognito = state.incognito, modifier = Modifier.weight(1f))
             } else {
                 Box(
                     modifier = Modifier
@@ -329,17 +401,26 @@ fun ChatScreen(
                         .fillMaxWidth(),
                     contentAlignment = Alignment.TopCenter,
                 ) {
-                    LazyColumn(
-                        state = listState,
+                    Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .widthIn(max = layout.contentMaxWidth)
                             .padding(horizontal = layout.screenPadding),
-                        contentPadding = PaddingValues(vertical = layout.screenPadding),
-                        verticalArrangement = Arrangement.spacedBy(layout.messageSpacing),
                     ) {
-                        items(state.messages, key = { it.id }) { msg ->
-                            MessageBubble(msg, currentLanguage = state.language)
+                        // Slim banner while an incognito session already has messages
+                        // (the empty state carries its own hero instead).
+                        if (state.incognito) {
+                            IncognitoBanner()
+                        }
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(vertical = layout.screenPadding),
+                            verticalArrangement = Arrangement.spacedBy(layout.messageSpacing),
+                        ) {
+                            items(state.messages, key = { it.id }) { msg ->
+                                MessageBubble(msg)
+                            }
                         }
                     }
                 }
@@ -349,116 +430,191 @@ fun ChatScreen(
     }
 }
 
+/** Top-left account avatar that opens the drawer: a navy circle with the email's
+ *  first letter (person glyph when there's no email). Reads as "you / account",
+ *  distinct from the settings gear on the right. */
 @Composable
-private fun BrandLogo(baseUrl: String?, onClick: () -> Unit) {
-    val url = baseUrl?.trimEnd('/')?.let { "$it/mirobody.svg" }
-    val context = LocalContext.current
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier.padding(start = 4.dp),
-    ) {
+private fun AccountAvatar(email: String?, onClick: () -> Unit) {
+    val initial = email?.trim()?.firstOrNull()?.uppercaseChar()?.toString()
+    IconButton(onClick = onClick) {
         Box(
             modifier = Modifier
-                .size(32.dp)
-                .clip(CircleShape),
+                .size(30.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary),
             contentAlignment = Alignment.Center,
         ) {
-            if (url != null) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(url)
-                        .crossfade(true)
-                        .build(),
-                    contentDescription = stringResource(R.string.chat_history_cd),
-                    modifier = Modifier.fillMaxSize(),
+            if (initial != null) {
+                Text(
+                    text = initial,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            } else {
+                Icon(
+                    Icons.Outlined.Person,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
     }
 }
 
+/** Centered brand in the top app bar: the Mirobody mark + serif wordmark. */
 @Composable
-private fun EmptyState(modifier: Modifier = Modifier) {
+private fun BrandTitle() {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Image(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_mirobody_logo),
+            contentDescription = null,
+            modifier = Modifier.size(width = 26.dp, height = 27.dp),
+        )
+        Text(
+            text = stringResource(R.string.app_name),
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontFamily = FontFamily.Serif,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun EmptyState(incognito: Boolean, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(if (incognito) 20.dp else 6.dp),
             modifier = Modifier.padding(24.dp),
         ) {
-            Text(
-                text = stringResource(R.string.chat_empty_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(R.string.chat_empty_subtitle),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (incognito) {
+                // Privacy hero: the big ghost + "You're incognito" + the not-saved note.
+                Icon(
+                    painter = androidx.compose.ui.res.painterResource(R.drawable.ic_incognito),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(56.dp),
+                )
+                Text(
+                    text = stringResource(R.string.chat_incognito_heading),
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.chat_incognito_note),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.chat_empty_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.chat_empty_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Slim pill pinned above an incognito thread, reminding it won't be saved. */
+@Composable
+private fun IncognitoBanner() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_incognito),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = stringResource(R.string.chat_incognito_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+/** Borderless, auto-growing message field (the pill around it owns the outline). */
 @Composable
 private fun ChatInputField(
     value: String,
     onValueChange: (String) -> Unit,
     enabled: Boolean,
-    canSend: Boolean,
-    onSend: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val shape = RoundedCornerShape(16.dp)
-    val accent = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-    val colors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = accent,
-        unfocusedBorderColor = accent.copy(alpha = 0.35f),
-        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        cursorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-    )
     val hint = stringResource(R.string.chat_message_hint)
     val hintColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        enabled = enabled,
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-        keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
-        interactionSource = interactionSource,
-        decorationBox = { innerTextField ->
-            OutlinedTextFieldDefaults.DecorationBox(
-                value = value,
-                innerTextField = innerTextField,
-                enabled = enabled,
-                singleLine = true,
-                visualTransformation = VisualTransformation.None,
-                interactionSource = interactionSource,
-                placeholder = @Composable { Text(hint, color = hintColor) },
-                colors = colors,
-                container = {
-                    OutlinedTextFieldDefaults.Container(
-                        enabled = enabled,
-                        isError = false,
-                        interactionSource = interactionSource,
-                        colors = colors,
-                        shape = shape,
-                        focusedBorderThickness = 1.dp,
-                        unfocusedBorderThickness = 0.5.dp,
-                    )
-                },
+    Box(modifier = modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+        if (value.isEmpty()) {
+            Text(hint, color = hintColor, style = MaterialTheme.typography.bodyLarge)
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = enabled,
+            maxLines = 6,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+        )
+    }
+}
+
+/** Circular navy send button (the composer's primary action). Shows a spinner
+ *  while a reply is streaming; the up-arrow otherwise. */
+@Composable
+private fun SendButton(
+    enabled: Boolean,
+    sending: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(
+                if (enabled) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
             )
-        },
-    )
+            .clickable(enabled = enabled && !sending, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (sending) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onPrimary,
+            )
+        } else {
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(R.drawable.ic_send_arrow),
+                contentDescription = stringResource(R.string.chat_send),
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
 }
 
 /** Label for a sharer in the subject picker: nickname, else email, else "#handle". */
@@ -585,182 +741,189 @@ private fun AttachmentChips(
     }
 }
 
+/**
+ * Left navigation drawer (mirrors the web client): a header with the "Menu" title,
+ * a "New chat" / "Incognito" button row, the conversation history, and a pinned
+ * footer with the health + account items — each launching its dialog. App settings
+ * (language / font / backend / about) live in the top-bar gear, not here.
+ */
 @Composable
-private fun SettingsMenu(
-    currentLanguage: String,
-    currentFontOffset: Int,
+private fun ChatDrawer(
     conversationId: String,
-    onSelectLanguage: (String) -> Unit,
-    onSelectFontOffset: (Int) -> Unit,
+    isActive: Boolean,
+    incognito: Boolean,
+    currentEmail: String?,
+    onToggleIncognito: () -> Unit,
+    onNewChat: () -> Unit,
+    onOpenConversation: (String) -> Unit,
+    onClose: () -> Unit,
+    onSwitchAccount: (String) -> Unit,
+    onAddAccount: () -> Unit,
     onSignOut: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    var showLanguageDialog by remember { mutableStateOf(false) }
-    var showFontSizeDialog by remember { mutableStateOf(false) }
-    var showBackendDialog by remember { mutableStateOf(false) }
+    val container = LocalAppContainer.current
+    val accounts by container.settings.accounts.collectAsState(initial = emptyList())
+    var switcherOpen by remember { mutableStateOf(false) }
     var showHealthDialog by remember { mutableStateOf(false) }
     var showBleDialog by remember { mutableStateOf(false) }
     var showHdpDialog by remember { mutableStateOf(false) }
     var showCircleDialog by remember { mutableStateOf(false) }
+    var showVendorsDialog by remember { mutableStateOf(false) }
+    var showEhrDialog by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
-    var showAboutDialog by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
-    IconButton(onClick = { expanded = true }) {
-        Icon(
-            Icons.Outlined.Settings,
-            contentDescription = stringResource(R.string.common_settings),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        ProvideLocale(currentLanguage) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_language)) },
-                onClick = {
-                    expanded = false
-                    showLanguageDialog = true
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_font_size)) },
-                onClick = {
-                    expanded = false
-                    showFontSizeDialog = true
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_backend)) },
-                onClick = {
-                    expanded = false
-                    showBackendDialog = true
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_sync_health)) },
-                onClick = {
-                    expanded = false
-                    showHealthDialog = true
-                },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_bluetooth)) },
-                onClick = {
-                    expanded = false
-                    showBleDialog = true
-                },
-            )
-            // Legacy classic-Bluetooth HDP only runs on Android 9 and below; hide the
-            // entry on newer devices where BLE is the path.
-            if (Build.VERSION.SDK_INT <= 28) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.chat_bluetooth_hdp)) },
-                    onClick = {
-                        expanded = false
-                        showHdpDialog = true
-                    },
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header: close + "Menu" title.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 12.dp, top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(
+                        Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = stringResource(R.string.common_back),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.chat_menu_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_care_circle)) },
-                onClick = {
-                    expanded = false
-                    showCircleDialog = true
-                },
-            )
-            if (conversationId.isNotBlank()) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.chat_share)) },
-                    onClick = {
-                        expanded = false
-                        showShareDialog = true
-                    },
+            // New chat + Incognito: two equal-width bordered text buttons in one row
+            // (the build version isn't shown here -- it's in the gear's About item).
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DrawerActionButton(
+                    label = stringResource(R.string.chat_new_chat),
+                    active = false,
+                    onClick = onNewChat,
+                    modifier = Modifier.weight(1f),
+                )
+                DrawerActionButton(
+                    label = stringResource(R.string.chat_incognito_mode),
+                    active = incognito,
+                    onClick = onToggleIncognito,
+                    modifier = Modifier.weight(1f),
                 )
             }
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_about)) },
-                onClick = {
-                    expanded = false
-                    showAboutDialog = true
-                },
+            // History fills the middle and scrolls; the footer below stays pinned.
+            // (No divider here -- each history row carries its own top rule.)
+            HistoryList(
+                isActive = isActive,
+                onOpen = onOpenConversation,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        stringResource(R.string.chat_sign_out),
-                        color = MaterialTheme.colorScheme.error,
+            // Health & data.
+            DrawerRow(stringResource(R.string.chat_care_circle), onClick = { showCircleDialog = true })
+            DrawerRow(stringResource(R.string.chat_vendors), onClick = { showVendorsDialog = true })
+            DrawerRow(stringResource(R.string.chat_ehr), onClick = { showEhrDialog = true })
+            DrawerRow(stringResource(R.string.chat_sync_health), onClick = { showHealthDialog = true })
+            DrawerRow(stringResource(R.string.chat_bluetooth), onClick = { showBleDialog = true })
+            // Legacy classic-Bluetooth HDP only runs on Android 9 and below.
+            if (Build.VERSION.SDK_INT <= 28) {
+                DrawerRow(stringResource(R.string.chat_bluetooth_hdp), onClick = { showHdpDialog = true })
+            }
+            if (conversationId.isNotBlank()) {
+                DrawerRow(stringResource(R.string.chat_share), onClick = { showShareDialog = true })
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            // App settings (language / font / backend / about) live in the top-bar
+            // gear now, shared with login; the drawer is navigation + account only.
+            // Account switcher: the current email expands the other signed-in
+            // accounts (tap to switch) plus "Add account"; Sign out is below.
+            val others = accounts.filter { !it.current }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { switcherOpen = !switcherOpen }
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = currentEmail?.takeIf { it.isNotBlank() }
+                        ?: stringResource(R.string.chat_account),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    if (switcherOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (switcherOpen) {
+                others.forEach { acc ->
+                    DrawerRow(
+                        label = acc.email.ifBlank { "#" + acc.sub.take(6) },
+                        onClick = { onSwitchAccount(acc.sub) },
                     )
-                },
-                onClick = {
-                    expanded = false
-                    showSignOutDialog = true
-                },
+                }
+                DrawerRow(
+                    label = stringResource(R.string.chat_add_account),
+                    onClick = onAddAccount,
+                    leading = {
+                        Icon(
+                            Icons.Outlined.Add,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+            }
+            DrawerRow(
+                label = stringResource(R.string.chat_sign_out),
+                onClick = { showSignOutDialog = true },
+                danger = true,
+                center = true,
             )
+            Spacer(Modifier.height(6.dp))
         }
-    }
-
-    if (showLanguageDialog) {
-        LanguageDialog(
-            current = currentLanguage,
-            onPick = { code ->
-                onSelectLanguage(code)
-                showLanguageDialog = false
-            },
-            onDismiss = { showLanguageDialog = false },
-        )
-    }
-
-    val fontSizePreview = LocalFontSizePreview.current
-    if (showFontSizeDialog) {
-        FontSizeDialog(
-            currentLanguage = currentLanguage,
-            current = currentFontOffset,
-            onPreview = { offset -> fontSizePreview.value = offset },
-            onPick = { offset ->
-                // Keep the preview set to the picked value so the UI doesn't snap
-                // back to the persisted size while DataStore is still writing.
-                // MainActivity clears it once persisted catches up.
-                onSelectFontOffset(offset)
-                showFontSizeDialog = false
-            },
-            onDismiss = {
-                fontSizePreview.value = null
-                showFontSizeDialog = false
-            },
-        )
-    }
-
-    if (showBackendDialog) {
-        BaseUrlDialog(
-            currentLanguage = currentLanguage,
-            onDismiss = { showBackendDialog = false },
-        )
-    }
 
     if (showHealthDialog) {
         HealthSyncDialog(
-            currentLanguage = currentLanguage,
             onDismiss = { showHealthDialog = false },
         )
     }
 
     if (showBleDialog) {
         BleDeviceDialog(
-            currentLanguage = currentLanguage,
             onDismiss = { showBleDialog = false },
         )
     }
 
     if (showHdpDialog) {
         HdpDeviceDialog(
-            currentLanguage = currentLanguage,
             onDismiss = { showHdpDialog = false },
         )
     }
 
+    if (showVendorsDialog) {
+        VendorsDialog(
+            onDismiss = { showVendorsDialog = false },
+        )
+    }
+
+    if (showEhrDialog) {
+        EhrDialog(onDismiss = { showEhrDialog = false })
+    }
+
     if (showCircleDialog) {
         CareCircleDialog(
-            currentLanguage = currentLanguage,
             onDismiss = { showCircleDialog = false },
         )
     }
@@ -768,21 +931,12 @@ private fun SettingsMenu(
     if (showShareDialog && conversationId.isNotBlank()) {
         ShareConversationDialog(
             conversationId = conversationId,
-            currentLanguage = currentLanguage,
             onDismiss = { showShareDialog = false },
-        )
-    }
-
-    if (showAboutDialog) {
-        AboutDialog(
-            currentLanguage = currentLanguage,
-            onDismiss = { showAboutDialog = false },
         )
     }
 
     if (showSignOutDialog) {
         SignOutConfirmDialog(
-            currentLanguage = currentLanguage,
             onConfirm = {
                 showSignOutDialog = false
                 onSignOut()
@@ -792,82 +946,101 @@ private fun SettingsMenu(
     }
 }
 
+/** One tappable row in the drawer: optional leading icon, label, optional right-aligned
+ *  hint (e.g. the backend host). `danger` paints the label red (Sign out). */
 @Composable
-private fun AboutDialog(
-    currentLanguage: String,
-    onDismiss: () -> Unit,
+private fun DrawerRow(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    hint: String? = null,
+    leading: (@Composable () -> Unit)? = null,
+    danger: Boolean = false,
+    center: Boolean = false,
 ) {
-    val context = LocalContext.current
-    val versionName = remember(context) {
-        runCatching {
-            context.packageManager.getPackageInfo(context.packageName, 0).versionName
-        }.getOrNull().orEmpty()
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (center) Arrangement.Center else Arrangement.Start,
+    ) {
+        if (leading != null) {
+            leading()
+            Spacer(Modifier.width(10.dp))
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+        )
+        if (hint != null) {
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 12.dp),
+            )
+        }
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            ProvideLocale(currentLanguage) {
-                Text(stringResource(R.string.chat_about))
-            }
-        },
-        text = {
-            ProvideLocale(currentLanguage) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.about_version, versionName),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.common_close))
-                }
-            }
-        },
-    )
+}
+
+/** One of the drawer's top-row buttons (New chat / Incognito): an equal-width,
+ *  bordered, centered text button. `active` tints it navy (incognito on). */
+@Composable
+private fun DrawerActionButton(
+    label: String,
+    active: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .border(
+                width = 1.dp,
+                color = if (active) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(8.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = if (active) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+        )
+    }
 }
 
 @Composable
 private fun SignOutConfirmDialog(
-    currentLanguage: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            ProvideLocale(currentLanguage) {
-                Text(stringResource(R.string.chat_sign_out_confirm_title))
-            }
-        },
-        text = {
-            ProvideLocale(currentLanguage) {
-                Text(stringResource(R.string.chat_sign_out_confirm_message))
-            }
-        },
+        title = { Text(stringResource(R.string.chat_sign_out_confirm_title)) },
+        text = { Text(stringResource(R.string.chat_sign_out_confirm_message)) },
         confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onConfirm) {
-                    Text(
-                        stringResource(R.string.chat_sign_out),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+            TextButton(onClick = onConfirm) {
+                Text(
+                    stringResource(R.string.chat_sign_out),
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
         },
         dismissButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.common_cancel))
-                }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )
@@ -878,17 +1051,23 @@ private fun ProviderMenu(
     state: ChatUiState,
     onSelect: (ProviderInfo) -> Unit,
     onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
     TextButton(
         onClick = { expanded = true },
         shape = RoundedCornerShape(10.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         val selectModel = stringResource(R.string.chat_select_model)
         Text(
-            text = state.selected?.name?.ifBlank { selectModel } ?: selectModel,
+            text = state.selected?.label?.ifBlank { selectModel } ?: selectModel,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Icon(
             Icons.Outlined.ArrowDropDown,
@@ -897,7 +1076,6 @@ private fun ProviderMenu(
         )
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        ProvideLocale(state.language) {
             if (state.providers.isEmpty()) {
                 if (state.error != null) {
                     DropdownMenuItem(
@@ -924,7 +1102,7 @@ private fun ProviderMenu(
                         text = {
                             if (provider.isOnDevice) {
                                 Column {
-                                    Text(provider.name)
+                                    Text(provider.label)
                                     Text(
                                         text = onDeviceStatusLabel(state.onDeviceModel),
                                         style = MaterialTheme.typography.bodySmall,
@@ -932,7 +1110,7 @@ private fun ProviderMenu(
                                     )
                                 }
                             } else {
-                                Text(provider.name)
+                                Text(provider.label)
                             }
                         },
                         leadingIcon = if (provider.isOnDevice) {
@@ -945,7 +1123,7 @@ private fun ProviderMenu(
                     )
                 }
             }
-        }
+    }
     }
 }
 
@@ -1100,7 +1278,7 @@ private fun formatBytes(bytes: Long): String {
 }
 
 @Composable
-private fun MessageBubble(msg: ChatMessage, currentLanguage: String) {
+private fun MessageBubble(msg: ChatMessage) {
     val isUser = msg.role == Role.User
     val bubbleMaxWidth = LocalLayoutInfo.current.bubbleMaxWidth
     var showStats by remember(msg.id) { mutableStateOf(false) }
@@ -1138,13 +1316,14 @@ private fun MessageBubble(msg: ChatMessage, currentLanguage: String) {
                 BubbleContent(msg)
             }
         } else {
-            // AI: no bubble / no border — plain text on background.
+            // AI: no bubble / no border — plain text on background, flush-left so it
+            // (and the provider footer below) line up with the message column edge.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 2.dp),
             ) {
-                BubbleContent(msg)
+                BubbleContent(msg, horizontalPadding = 0.dp)
                 // Footer for a settled reply: the provider ("Agent/model") label on
                 // the left; on the right the stats icon (when cost data is available)
                 // and a copy icon. Mirrors the web client's reply footer.
@@ -1199,7 +1378,6 @@ private fun MessageBubble(msg: ChatMessage, currentLanguage: String) {
         msg.costStats?.let {
             CostStatsDialog(
                 stats = it,
-                currentLanguage = currentLanguage,
                 onDismiss = { showStats = false },
             )
         }
@@ -1209,38 +1387,26 @@ private fun MessageBubble(msg: ChatMessage, currentLanguage: String) {
 @Composable
 private fun CostStatsDialog(
     stats: CostStatistics,
-    currentLanguage: String,
     onDismiss: () -> Unit,
 ) {
-    // AlertDialog hosts its content in a new Window whose LocalContext is the bare
-    // Activity context — outer ProvideLocale doesn't propagate, so we re-wrap each
-    // slot. Same pattern as FontSizeDialog / AboutDialog above.
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            ProvideLocale(currentLanguage) {
-                Text(stringResource(R.string.chat_stats_title))
-            }
-        },
+        title = { Text(stringResource(R.string.chat_stats_title)) },
         text = {
-            ProvideLocale(currentLanguage) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StatsRow(stringResource(R.string.chat_stats_model), stats.model)
-                    StatsRow(stringResource(R.string.chat_stats_input_tokens), stats.inputTokens.toString())
-                    StatsRow(stringResource(R.string.chat_stats_output_tokens), stats.outputTokens.toString())
-                    if (stats.thoughtTokens > 0) {
-                        StatsRow(stringResource(R.string.chat_stats_thought_tokens), stats.thoughtTokens.toString())
-                    }
-                    StatsRow(stringResource(R.string.chat_stats_total_tokens), stats.totalTokens.toString())
-                    StatsRow(stringResource(R.string.chat_stats_total_cost), formatCost(stats.totalCost))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatsRow(stringResource(R.string.chat_stats_model), stats.model)
+                StatsRow(stringResource(R.string.chat_stats_input_tokens), stats.inputTokens.toString())
+                StatsRow(stringResource(R.string.chat_stats_output_tokens), stats.outputTokens.toString())
+                if (stats.thoughtTokens > 0) {
+                    StatsRow(stringResource(R.string.chat_stats_thought_tokens), stats.thoughtTokens.toString())
                 }
+                StatsRow(stringResource(R.string.chat_stats_total_tokens), stats.totalTokens.toString())
+                StatsRow(stringResource(R.string.chat_stats_total_cost), formatCost(stats.totalCost))
             }
         },
         confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.common_close))
-                }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_close))
             }
         },
     )
@@ -1269,10 +1435,10 @@ private fun StatsRow(label: String, value: String) {
 private fun formatCost(cost: Double): String = "$" + "%.4f".format(cost)
 
 @Composable
-private fun BubbleContent(msg: ChatMessage) {
+private fun BubbleContent(msg: ChatMessage, horizontalPadding: Dp = 14.dp) {
     val context = LocalContext.current
     var viewerUrl by remember { mutableStateOf<String?>(null) }
-    Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+    Column(modifier = Modifier.padding(horizontal = horizontalPadding, vertical = 10.dp)) {
         msg.attachmentNames.forEach { name ->
             // Uses LocalContentColor so it stays legible on the navy user bubble.
             Row(

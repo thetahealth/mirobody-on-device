@@ -1,13 +1,14 @@
 {
   "pages": [
     "pages/chat/chat",
-    "pages/login/login"
+    "pages/login/login",
+    "pages/circle/circle"
   ],
   "window": {
     "navigationBarTitleText": "Mirobody",
-    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarBackgroundColor": "#f2efe9",
     "navigationBarTextStyle": "black",
-    "backgroundColor": "#f5f5f5"
+    "backgroundColor": "#f2efe9"
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json"

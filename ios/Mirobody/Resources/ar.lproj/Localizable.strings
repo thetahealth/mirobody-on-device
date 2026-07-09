@@ -36,7 +36,7 @@
 "verify_resend_code" = "إعادة إرسال الرمز";
 
 /* Chat */
-"chat_message_hint" = "رسالة";
+"chat_message_hint" = "اسأل عن أي شيء";
 "chat_history_cd" = "السجل";
 "chat_select_model" = "اختر النموذج";
 "chat_no_providers" = "لم يتم تحميل أي مزوّدين";
@@ -56,7 +56,7 @@
 "chat_sign_out_confirm_title" = "تسجيل الخروج؟";
 "chat_sign_out_confirm_message" = "ستحتاج إلى تسجيل الدخول مرة أخرى.";
 "chat_empty_title" = "ابدأ محادثة";
-"chat_empty_subtitle" = "اختر نموذجًا بالأعلى ثم أرسل رسالتك الأولى.";
+"chat_empty_subtitle" = "اختر نموذجًا بالأسفل ثم أرسل رسالتك الأولى.";
 
 /* History */
 "history_title" = "السجل";

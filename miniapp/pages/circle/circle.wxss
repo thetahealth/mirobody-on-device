@@ -1,0 +1,228 @@
+/* Care circle page, in the web client's "Theta Health" palette. A core subset
+   of the web modal: list circles + members, invite by email (admins), accept /
+   decline invitations, remove members (admins), delete a circle (owner), and
+   create a new circle. Role change / nickname / rename / health-sharing level
+   are not yet ported. */
+
+.circle {
+  min-height: 100vh;
+  padding: 24rpx 28rpx calc(40rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  background: #f2efe9;
+}
+
+.state {
+  padding: 60rpx 0;
+  text-align: center;
+  font-size: 28rpx;
+  color: #52565c;
+}
+.state.tappable {
+  color: #ba1a1a;
+}
+
+.section-title {
+  margin: 28rpx 4rpx 12rpx;
+  font-size: 26rpx;
+  color: #52565c;
+}
+
+/* invitations */
+.invite-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 12rpx;
+  background: #faf7f1;
+  border: 1px solid #ddd6c9;
+  border-radius: 16rpx;
+}
+.invite-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 28rpx;
+  color: #1a1c1e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.invite-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 12rpx;
+}
+
+/* circle card */
+.card {
+  padding: 20rpx 24rpx;
+  margin-bottom: 20rpx;
+  background: #faf7f1;
+  border: 1px solid #ddd6c9;
+  border-radius: 16rpx;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding-bottom: 12rpx;
+  border-bottom: 1px solid #ddd6c9;
+}
+.card-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1c1e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Owner-editable circle name (rename on blur / done). */
+.name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1c1e;
+  padding: 2rpx 0;
+}
+
+/* My health-data sharing level for this circle */
+.health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  padding: 16rpx 0;
+  border-bottom: 1px solid rgba(196, 199, 203, 0.4);
+}
+.health-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 26rpx;
+  color: #52565c;
+}
+/* picker trigger (role + health), a small pill */
+.pick {
+  padding: 8rpx 22rpx;
+  font-size: 24rpx;
+  color: #1e3a6b;
+  background: #fff;
+  border: 1px solid #ddd6c9;
+  border-radius: 999rpx;
+  white-space: nowrap;
+}
+.role-picker {
+  flex: 0 0 auto;
+}
+.role-badge {
+  flex: 0 0 auto;
+  padding: 2rpx 14rpx;
+  font-size: 22rpx;
+  color: #1e3a6b;
+  background: rgba(30, 58, 107, 0.10);
+  border-radius: 999rpx;
+}
+
+.member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  padding: 16rpx 0;
+  border-bottom: 1px solid rgba(196, 199, 203, 0.4);
+}
+.member-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+.member-name {
+  font-size: 28rpx;
+  color: #1a1c1e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Admin-editable member nickname (the label line). */
+.nick-input {
+  font-size: 28rpx;
+  color: #1a1c1e;
+  padding: 2rpx 0;
+}
+.member-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+.member-email {
+  font-size: 22rpx;
+  color: #52565c;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
+}
+.badge {
+  padding: 1rpx 12rpx;
+  font-size: 20rpx;
+  color: #52565c;
+  background: #f2efe9;
+  border-radius: 999rpx;
+}
+
+.invite-box,
+.create-box {
+  display: flex;
+  gap: 12rpx;
+  align-items: stretch;
+  margin-top: 16rpx;
+}
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 76rpx;
+  padding: 0 22rpx;
+  box-sizing: border-box;
+  font-size: 28rpx;
+  color: #1a1c1e;
+  background: #fff;
+  border: 1px solid #ddd6c9;
+  border-radius: 14rpx;
+}
+.input-ph {
+  color: #a9a49a;
+}
+.card-foot {
+  margin-top: 16rpx;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* small buttons */
+.btn-sm {
+  flex: 0 0 auto;
+  height: 76rpx;
+  line-height: 76rpx;
+  padding: 0 26rpx;
+  font-size: 26rpx;
+  color: #1a1c1e;
+  background: #fff;
+  border: 1px solid #ddd6c9;
+  border-radius: 14rpx;
+}
+.btn-sm.primary {
+  color: #fff;
+  background: #1e3a6b;
+  border-color: #1e3a6b;
+}
+.btn-sm.danger {
+  color: #ba1a1a;
+  border-color: #e6c3c3;
+  background: #fff;
+}

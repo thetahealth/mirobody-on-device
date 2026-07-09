@@ -33,7 +33,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
 import ai.thetahealth.mirobody.ui.LocalAppContainer
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
@@ -46,7 +45,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 @Composable
 fun ShareConversationDialog(
     conversationId: String,
-    currentLanguage: String,
     onDismiss: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -70,77 +68,69 @@ fun ShareConversationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            ProvideLocale(currentLanguage) { Text(stringResource(R.string.share_title)) }
-        },
+        title = { Text(stringResource(R.string.share_title)) },
         text = {
-            ProvideLocale(currentLanguage) {
-                when {
-                    state.loading -> Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center,
-                    ) { CircularProgressIndicator() }
-                    state.targets.isEmpty() -> Text(
-                        stringResource(R.string.share_no_members),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    else -> Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 360.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        state.targets.forEach { t ->
-                            val isChecked = checked[t.member] ?: false
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(
-                                    checked = isChecked,
-                                    onCheckedChange = { checked[t.member] = it },
-                                )
-                                Text(
-                                    text = t.nickname.ifBlank { t.email.ifBlank { "#${t.member}" } },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                AccessDropdown(
-                                    value = access[t.member] ?: "view",
-                                    enabled = isChecked,
-                                    onChange = { access[t.member] = it },
-                                )
-                            }
+            when {
+                state.loading -> Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator() }
+                state.targets.isEmpty() -> Text(
+                    stringResource(R.string.share_no_members),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                else -> Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    state.targets.forEach { t ->
+                        val isChecked = checked[t.member] ?: false
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { checked[t.member] = it },
+                            )
+                            Text(
+                                text = t.nickname.ifBlank { t.email.ifBlank { "#${t.member}" } },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f),
+                            )
+                            AccessDropdown(
+                                value = access[t.member] ?: "view",
+                                enabled = isChecked,
+                                onChange = { access[t.member] = it },
+                            )
                         }
                     }
                 }
             }
         },
         confirmButton = {
-            ProvideLocale(currentLanguage) {
-                if (state.targets.isNotEmpty()) {
-                    TextButton(
-                        enabled = !state.busy,
-                        onClick = {
-                            val sels = state.targets.map { t ->
-                                ShareSelection(
-                                    member = t.member,
-                                    checked = checked[t.member] ?: false,
-                                    access = access[t.member] ?: "view",
-                                    wasShared = t.wasShared,
-                                )
-                            }
-                            vm.apply(conversationId, sels, onDismiss)
-                        },
-                    ) { Text(stringResource(R.string.share_save)) }
-                }
+            if (state.targets.isNotEmpty()) {
+                TextButton(
+                    enabled = !state.busy,
+                    onClick = {
+                        val sels = state.targets.map { t ->
+                            ShareSelection(
+                                member = t.member,
+                                checked = checked[t.member] ?: false,
+                                access = access[t.member] ?: "view",
+                                wasShared = t.wasShared,
+                            )
+                        }
+                        vm.apply(conversationId, sels, onDismiss)
+                    },
+                ) { Text(stringResource(R.string.share_save)) }
             }
         },
         dismissButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     )
 }

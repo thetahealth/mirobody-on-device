@@ -87,6 +87,19 @@ ChatParams ChatParams::parse(const Packet& pkt, std::int64_t user_id) {
         }
     }
 
+    // incognito ("privacy mode"): when set, the dispatcher persists nothing for
+    // this turn and disables memory (see AgentRequest::incognito). Accept a JSON
+    // boolean (JSON body) or a "true"/"1" string (multipart form field).
+    rapidjson::Value::ConstMemberIterator iit = params.FindMember("incognito");
+    if (iit != params.MemberEnd()) {
+        if (iit->value.IsBool()) {
+            areq.incognito = iit->value.GetBool();
+        } else if (iit->value.IsString()) {
+            const std::string v(iit->value.GetString(), iit->value.GetStringLength());
+            areq.incognito = (v == "true" || v == "1");
+        }
+    }
+
     rapidjson::Value::ConstMemberIterator mit = params.FindMember("messages");
     if (mit != params.MemberEnd() && mit->value.IsArray()) {
         append_messages(mit->value, areq.messages);

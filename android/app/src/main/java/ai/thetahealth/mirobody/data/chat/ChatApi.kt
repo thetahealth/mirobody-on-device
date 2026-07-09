@@ -1,8 +1,9 @@
 package ai.thetahealth.mirobody.data.chat
 
+import ai.thetahealth.mirobody.data.chat.dto.ConversationDetail
 import ai.thetahealth.mirobody.data.chat.dto.HistoryDeleteRequest
 import ai.thetahealth.mirobody.data.chat.dto.HistoryResponse
-import ai.thetahealth.mirobody.data.chat.dto.ProviderInfo
+import ai.thetahealth.mirobody.data.chat.dto.ProviderGroup
 import ai.thetahealth.mirobody.data.net.ApiEnvelope
 import kotlinx.serialization.json.JsonElement
 import retrofit2.http.Body
@@ -12,7 +13,7 @@ import retrofit2.http.Query
 
 interface ChatApi {
     @GET("/api/providers")
-    suspend fun listProviders(): ApiEnvelope<List<ProviderInfo>>
+    suspend fun listProviders(): ApiEnvelope<List<ProviderGroup>>
 
     @GET("/api/history")
     suspend fun history(
@@ -22,4 +23,7 @@ interface ChatApi {
 
     @POST("/api/history/delete")
     suspend fun deleteHistory(@Body body: HistoryDeleteRequest): ApiEnvelope<JsonElement?>
+
+    @GET("/api/conversation")
+    suspend fun conversation(@Query("id") id: String): ApiEnvelope<ConversationDetail>
 }

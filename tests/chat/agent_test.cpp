@@ -195,9 +195,33 @@ TEST_CASE("BaselineAgent loads its three providers", "[agent]") {
     REQUIRE(agent_registry().client("Baseline", "gemini-2.5-flash") != nullptr);
     REQUIRE(agent_registry().client("Baseline", "mirothinker-1.7")  != nullptr);
 
-    // They surface as "Baseline/<provider>" in the discovery list.
+    // Baseline is the default agent, so its providers surface in the discovery
+    // list WITHOUT the "Baseline/" prefix -- just the model name.
     const std::vector<std::string> names = agent_registry().provider_names(true);
-    REQUIRE(std::find(names.begin(), names.end(), "Baseline/gpt-5-nano")       != names.end());
-    REQUIRE(std::find(names.begin(), names.end(), "Baseline/gemini-2.5-flash") != names.end());
-    REQUIRE(std::find(names.begin(), names.end(), "Baseline/mirothinker-1.7")  != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "gpt-5-nano")       != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "gemini-2.5-flash") != names.end());
+    REQUIRE(std::find(names.begin(), names.end(), "mirothinker-1.7")  != names.end());
+    // The old prefixed form no longer leaks in.
+    REQUIRE(std::find(names.begin(), names.end(), "Baseline/gpt-5-nano") == names.end());
+}
+
+TEST_CASE("resolve_agent maps bare providers and empty tokens to the default agent", "[agent]") {
+    mirobody::Config cfg;
+    agent_registry().load_clients(cfg);
+
+    // A bare provider (the prefix-less list) routes through the default agent,
+    // carried as the provider.
+    std::string prov;
+    REQUIRE(agent_registry().resolve_agent("gemini-2.5-flash", prov) == "Baseline");
+    REQUIRE(prov == "gemini-2.5-flash");
+
+    // An empty token defaults to the agent, leaving an explicit provider intact.
+    std::string prov2 = "gpt-5-nano";
+    REQUIRE(agent_registry().resolve_agent("", prov2) == "Baseline");
+    REQUIRE(prov2 == "gpt-5-nano");
+
+    // A real agent name passes through unchanged.
+    std::string prov3;
+    REQUIRE(agent_registry().resolve_agent("Baseline", prov3) == "Baseline");
+    REQUIRE(prov3.empty());
 }

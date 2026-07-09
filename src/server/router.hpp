@@ -134,6 +134,14 @@ public:
     // every route at the root, exactly as before.
     void set_uri_prefix(std::string prefix);
 
+    // Extra response headers emitted ONLY when serving an HTML document (the SPA
+    // entry). These are the document-scoped security headers (CSP,
+    // X-Frame-Options, Referrer-Policy, Cross-Origin-Opener-Policy) that have no
+    // effect on JS/CSS/image/JSON responses, so keeping them off every response
+    // saves bandwidth. `block` is a ready-to-emit buffer of CRLF-terminated
+    // "Name: value\r\n" lines (empty disables). See serve_static_file.
+    void set_document_headers(std::string block);
+
     void apply_to(lws_context_creation_info& info);
 
     void send_ws(lws* wsi, const std::string& payload, bool is_binary);

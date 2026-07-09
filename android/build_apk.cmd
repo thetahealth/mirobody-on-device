@@ -39,7 +39,7 @@ set "TASK=assemble%FLAVOR_CAP%%TYPE_CAP%"
 rem --- 1. Ensure prebuilt native deps ------------------------------------------
 if not exist "prebuilt\%ABI%" (
     echo ==^> prebuilt\%ABI% missing; cross-compiling native deps
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-prebuilt.ps1" -Abi "%ABI%"
+    call "%~dp0build-prebuilt.cmd" "%ABI%"
     if errorlevel 1 exit /b 1
 )
 

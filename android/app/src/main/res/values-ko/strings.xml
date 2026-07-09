@@ -23,7 +23,7 @@
     <string name="verify_resending">재전송 중…</string>
     <string name="verify_resend_code">코드 다시 보내기</string>
 
-    <string name="chat_message_hint">메시지</string>
+    <string name="chat_message_hint">무엇이든 물어보세요</string>
     <string name="chat_history_cd">기록</string>
     <string name="chat_select_model">모델 선택</string>
     <string name="chat_currently_for">현재 대상</string>
@@ -67,6 +67,23 @@
     <string name="circle_delete_circle">서클 삭제</string>
     <string name="circle_delete_confirm">“%1$s”을(를) 삭제할까요? 이 서클을 통해서만 공유된 항목에 멤버가 접근할 수 없게 됩니다.</string>
     <string name="chat_no_providers">사용 가능한 모델이 없습니다</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">온디바이스 프라이빗 AI</string>
+    <string name="chat_ondevice_desc">Gemma 4는 전적으로 기기에서 실행됩니다. 메시지는 휴대폰을 벗어나지 않으며 오프라인에서도 작동합니다. 약 2.5GB의 일회성 다운로드와 충분한 메모리를 갖춘 기기가 필요합니다.</string>
+    <string name="chat_ondevice_download">모델 다운로드</string>
+    <string name="chat_ondevice_downloading">다운로드 중…</string>
+    <string name="chat_ondevice_continue_background">계속</string>
+    <string name="chat_ondevice_ready">준비됨 — 오프라인 실행</string>
+    <string name="chat_ondevice_absent">다운로드 필요 (~2.5GB)</string>
+    <string name="chat_ondevice_failed">다운로드 실패</string>
+    <string name="chat_ondevice_retry">다운로드 재시도</string>
+    <string name="chat_ondevice_delete">모델 삭제</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">기기에서 초안 다듬기</string>
+    <string name="chat_polish_rephrase">다시 쓰기</string>
+    <string name="chat_polish_shorten">더 짧게</string>
+    <string name="chat_polish_professional">더 격식 있게</string>
+    <string name="chat_polish_friendly">더 친근하게</string>
     <string name="chat_language">언어</string>
     <string name="chat_font_size">글자 크기</string>
     <string name="chat_font_size_smaller">아주 작게</string>
@@ -91,7 +108,7 @@
     <string name="chat_sign_out_confirm_title">로그아웃하시겠습니까?</string>
     <string name="chat_sign_out_confirm_message">다음에 다시 로그인해야 합니다.</string>
     <string name="chat_empty_title">대화 시작하기</string>
-    <string name="chat_empty_subtitle">위에서 모델을 선택한 후 첫 메시지를 보내세요.</string>
+    <string name="chat_empty_subtitle">아래에서 모델을 선택한 후 첫 메시지를 보내세요.</string>
 
     <string name="history_title">기록</string>
     <string name="history_empty">기록이 없습니다.</string>
@@ -137,4 +154,51 @@
     <string name="chat_image_saved">갤러리에 저장됨</string>
     <string name="chat_image_save_failed">저장 실패</string>
     <string name="chat_image_save_permission_denied">저장소 권한이 거부되었습니다</string>
+    <!-- Newer keys previously missing in this locale (fell back to English). -->
+    <string name="login_continue">계속하려면 로그인</string>
+    <string name="verification_code">인증 코드</string>
+    <string name="chat_send">보내기</string>
+    <string name="chat_menu_title">메뉴</string>
+    <string name="chat_new_chat">새 대화</string>
+    <string name="chat_account">계정</string>
+    <string name="chat_add_account">계정 추가</string>
+    <string name="chat_incognito_start">시크릿 모드 켜기</string>
+    <string name="chat_incognito_stop">시크릿 모드 끄기</string>
+    <string name="chat_incognito_mode">시크릿 모드</string>
+    <string name="chat_incognito_heading">시크릿 모드입니다</string>
+    <string name="chat_incognito_note">시크릿 대화는 저장되거나 메모리에 추가되지 않습니다.</string>
+    <string name="chat_vendors">연결된 기기</string>
+    <string name="chat_vendors_subtitle">기기 또는 서비스를 연결하거나 연결 해제합니다.</string>
+    <string name="chat_vendor_devices">기기</string>
+    <string name="chat_vendor_platforms">플랫폼</string>
+    <string name="chat_vendor_connect">연결</string>
+    <string name="chat_vendor_disconnect">연결 해제</string>
+    <string name="chat_vendor_pending">대기 중</string>
+    <string name="chat_vendor_unlink_confirm">%1$s 연결을 해제할까요?</string>
+    <string name="chat_ehr">EHR 연결</string>
+    <string name="chat_ehr_title">내 EHR 연결</string>
+    <string name="chat_ehr_subtitle">병원이나 클리닉을 검색한 다음 로그인하여 기록을 공유하세요(SMART on FHIR).</string>
+    <string name="chat_ehr_manual_label">또는 FHIR 기본 URL 입력</string>
+    <string name="chat_ehr_search_hint">기관 검색(예: 병원 이름)</string>
+    <string name="chat_ehr_search">검색</string>
+    <string name="chat_ehr_connect">연결</string>
+    <string name="chat_ehr_sync_now">지금 동기화</string>
+    <string name="chat_ehr_sync_done">관측 데이터 %1$d건을 가져왔습니다.</string>
+    <string name="auth_apple_failed">Apple 로그인 실패</string>
+    <string name="auth_wechat_failed">WeChat 로그인 실패</string>
+    <string name="chat_bluetooth">블루투스 기기</string>
+    <string name="chat_bluetooth_hdp">블루투스 HDP(레거시)</string>
+    <string name="ble_title">블루투스 건강 기기</string>
+    <string name="ble_intro">표준 블루투스 LE 센서(심박 스트랩, 혈압계, 체온계)를 연결합니다. 측정값은 건강 기록에 저장됩니다. 워치와 링은 독자 프로토콜을 사용하므로 「연결된 기기」에서 연결하세요.</string>
+    <string name="ble_scan">검색</string>
+    <string name="ble_stop">중지</string>
+    <string name="ble_no_devices">아직 기기가 없습니다 — 검색을 누르세요</string>
+    <string name="ble_supported_tag">건강</string>
+    <string name="ble_disconnect">연결 해제</string>
+    <string name="ble_saved">저장 %1$d건, 실패 %2$d건</string>
+    <string name="hdp_title">레거시 HDP 기기</string>
+    <string name="hdp_intro">클래식 블루투스 IEEE 11073 의료 기기(구형 체온계, 체중계, 산소포화도계)를 연결합니다. Android 설정에서 기기를 페어링한 다음 수신을 시작하세요. 측정값은 건강 기록에 저장됩니다.</string>
+    <string name="hdp_unsupported">HDP는 Android 9 이하에서만 사용할 수 있습니다. 최신 기기에서는 블루투스(BLE)를 사용하세요.</string>
+    <string name="hdp_start">수신 시작</string>
+    <string name="hdp_stop">중지</string>
 </resources>

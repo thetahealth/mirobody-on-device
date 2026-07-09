@@ -236,17 +236,27 @@ void AppController::loadProviders() {
     api_->postEnvelope("/api/providers", QJsonObject(),
         [this](const QJsonValue& data) {
             providers_.clear();
+            // /api/providers returns groups: [{ agent, providers[] }]. Flatten to one
+            // entry per model. "name" is the display + selection value (QML textRole/
+            // valueRole = "name"); "agent" ("" for the default agent) rides on the
+            // request. "code" mirrors the model here and is only special-cased for the
+            // on-device sentinel in QML.
             const QJsonArray arr = data.toArray();
             QStringList names;
-            for (const QJsonValue& v : arr) {
-                const QJsonObject o = v.toObject();
-                const QString name = o.value("name").toString();
-                if (name.isEmpty()) continue;
-                names << name;
-                QVariantMap m;
-                m.insert("code", o.value("code").toString());
-                m.insert("name", name);
-                providers_.push_back(m);
+            for (const QJsonValue& gv : arr) {
+                const QJsonObject g = gv.toObject();
+                const QString agent = g.value("agent").toString();
+                const QJsonArray provs = g.value("providers").toArray();
+                for (const QJsonValue& pv : provs) {
+                    const QString p = pv.toString();
+                    if (p.isEmpty()) continue;
+                    names << p;
+                    QVariantMap m;
+                    m.insert("name", p);
+                    m.insert("code", p);
+                    m.insert("agent", agent);
+                    providers_.push_back(m);
+                }
             }
             // Always offer the on-device provider alongside the server's.
             appendOnDeviceProvider();
@@ -292,11 +302,19 @@ void AppController::sendMessage(const QString& text) {
         return;
     }
 
-    // --- Agent mode: a provider ("Agent/provider") is selected ------------
+    // --- Agent mode: a provider is selected -------------------------------
+    // turnProvider is the selected model name; look up its agent from providers_
+    // ("" for the default agent). Send {agent, provider} verbatim -- no parsing.
     if (!turnProvider.isEmpty()) {
-        const int slash = turnProvider.indexOf('/');
-        const QString agentName    = slash >= 0 ? turnProvider.left(slash) : turnProvider;
-        const QString providerName = slash >= 0 ? turnProvider.mid(slash + 1) : QString();
+        QString agentName;
+        for (const QVariant& v : providers_) {
+            const QVariantMap m = v.toMap();
+            if (m.value("name").toString() == turnProvider) {
+                agentName = m.value("agent").toString();
+                break;
+            }
+        }
+        const QString providerName = turnProvider;
 
         QJsonObject body{
             {"agent", agentName},

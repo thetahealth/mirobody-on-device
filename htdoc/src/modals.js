@@ -17,7 +17,6 @@ const state  = config.state;
 const LANGUAGES        = config.LANGUAGES;
 const FONT_TIERS       = config.FONT_TIERS;
 const BASE_URL_PRESETS = config.BASE_URL_PRESETS;
-const APP_VERSION      = config.APP_VERSION;
 
 const widgets = require("./widgets");
 const button  = widgets.button;
@@ -43,14 +42,12 @@ function showLanguageModal(current, onPick) {
         boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
         display: "flex", flexDirection: "column"
     });
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface,
-        padding: "4px 8px 12px"
-    }), t("language")));
-
     function dismiss() {
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     };
+    var head = widgets.modalHeader(t("language"), dismiss);
+    head.style.padding = "4px 8px 12px";   // align with the list items' 12px inset
+    card.appendChild(head);
 
     var list = ui.dom("div", { display: "flex", flexDirection: "column", overflowY: "auto" });
     for (var i = 0; i < LANGUAGES.length; i ++) {
@@ -127,39 +124,36 @@ function showConfirmModal(title, message, confirmText, danger, onConfirm) {
 
 //----------------------------------------------------------------------------
 
-// About modal: the app name and the build version. Mirrors the app's
-// AboutDialog. Dismissed by Close or a backdrop click.
-function showAboutModal() {
+// Simple alert modal: title + message + a single OK button (plus a backdrop
+// click). For pure notifications where a Cancel would be meaningless (unlike
+// showConfirmModal's two-button decision). onOk (optional) runs after dismiss.
+function showAlertModal(title, message, okText, onOk) {
     var backdrop = ui.dom("div", {
         position: "fixed", inset: "0", background: "rgba(0, 0, 0, 0.4)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "16px", zIndex: "1000"
+        padding: "16px", zIndex: "1200"
     });
     var card = ui.dom("div", {
         background: color.background, borderRadius: "14px", padding: "20px 22px",
         width: "100%", maxWidth: "360px",
         boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
-        display: "flex", flexDirection: "column", gap: "14px"
+        display: "flex", flexDirection: "column", gap: "12px"
     });
-
     card.appendChild(ui.setText(ui.dom("div", {
         fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), t("about")));
-
-    var body = ui.dom("div", { display: "flex", flexDirection: "column", gap: "4px" });
-    body.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1rem", fontWeight: "500", color: color.onSurface
-    }), "Mirobody"));
-    body.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "0.875rem", color: color.onSurfaceVar
-    }), t("version", APP_VERSION)));
-    card.appendChild(body);
+    }), title));
+    card.appendChild(ui.setText(ui.dom("div", {
+        fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.5"
+    }), message));
 
     function dismiss() {
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     };
+
+    var ok = button(okText || t("ehrOk"), true);
+    ok.addEventListener("click", function () { dismiss(); if (typeof onOk === "function") { onOk(); } });
     var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end" });
-    actions.appendChild(button(t("close"), true, { click: dismiss }));
+    actions.appendChild(ok);
     card.appendChild(actions);
 
     backdrop.addEventListener("click", function (evt) {
@@ -188,9 +182,7 @@ function showBackendModal() {
         display: "flex", flexDirection: "column", gap: "12px"
     });
 
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), t("backendUrl")));
+    card.appendChild(widgets.modalHeader(t("backendUrl"), dismiss));
     card.appendChild(ui.setText(ui.dom("div", {
         fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.4"
     }), t("backendSubtitle")));
@@ -265,9 +257,10 @@ function showFontSizeModal(current, onChange) {
         boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
         display: "flex", flexDirection: "column", gap: "16px"
     });
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), t("fontSize")));
+    function dismiss() {
+        if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
+    };
+    card.appendChild(widgets.modalHeader(t("fontSize"), dismiss));
 
     function tierIndex(offset) {
         for (var i = 0; i < FONT_TIERS.length; i ++) {
@@ -307,13 +300,6 @@ function showFontSizeModal(current, onChange) {
     card.appendChild(slider);
     card.appendChild(labels);
 
-    function dismiss() {
-        if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
-    };
-    var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end" });
-    actions.appendChild(button(t("close"), true, { click: dismiss }));
-    card.appendChild(actions);
-
     backdrop.addEventListener("click", function (evt) {
         if (evt.target === backdrop) { dismiss(); }
     });
@@ -349,11 +335,10 @@ function showCostModal(cost) {
         flexDirection : "column",
         gap           : "14px"
     });
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize   : "1.05rem",
-        fontWeight : "600",
-        color      : color.onSurface
-    }), t("statsTitle")));
+    function dismiss() {
+        if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
+    };
+    card.appendChild(widgets.modalHeader(t("statsTitle"), dismiss));
     // One row per stat: label flush left, value flush right (space-between).
     var rows = ui.dom("div", {
         display       : "flex",
@@ -390,14 +375,6 @@ function showCostModal(cost) {
     statRow(t("statsTotalCost"),   "$" + (Number(cost.total_cost) || 0).toFixed(4));
     card.appendChild(rows);
 
-    function dismiss() {
-        if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
-    };
-
-    var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end" });
-    actions.appendChild(button(t("close"), true, { click: dismiss }));
-    card.appendChild(actions);
-
     backdrop.addEventListener("click", function (evt) {
         if (evt.target === backdrop) { dismiss(); }
     });
@@ -422,11 +399,8 @@ function showManageCircleModal() {
         boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
         display: "flex", flexDirection: "column", gap: "12px"
     });
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), t("circleManageTitle")));
-
     function dismiss() { if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); } }
+    card.appendChild(widgets.modalHeader(t("circleManageTitle"), dismiss));
 
     var bodyWrap = ui.dom("div", {
         flex: "1 1 auto", overflowY: "auto", minHeight: "0",
@@ -749,11 +723,8 @@ function showManageCircleModal() {
     }
     createBtn.addEventListener("click", doCreate);
     newName.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); doCreate(); } });
-    var closeBtn = button(t("close"), false, { click: dismiss });
-    ui.setStyle(closeBtn, { flex: "0 0 auto" });
     footer.appendChild(newName);
     footer.appendChild(createBtn);
-    footer.appendChild(closeBtn);
     card.appendChild(footer);
 
     backdrop.addEventListener("click", function (evt) { if (evt.target === backdrop) { dismiss(); } });
@@ -779,11 +750,8 @@ function showShareModal(conversationId) {
         boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
         display: "flex", flexDirection: "column", gap: "12px"
     });
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), t("shareTitle")));
-
     function dismiss() { if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); } }
+    card.appendChild(widgets.modalHeader(t("shareTitle"), dismiss));
     function mount() {
         backdrop.addEventListener("click", function (evt) { if (evt.target === backdrop) { dismiss(); } });
         backdrop.appendChild(card);
@@ -795,9 +763,6 @@ function showShareModal(conversationId) {
         card.appendChild(ui.setText(ui.dom("div", {
             fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.5"
         }), t("shareNoConversation")));
-        var a0 = ui.dom("div", { display: "flex", justifyContent: "flex-end" });
-        a0.appendChild(button(t("close"), true, { click: dismiss }));
-        card.appendChild(a0);
         mount();
         return;
     }
@@ -906,7 +871,7 @@ exports.showManageCircleModal = showManageCircleModal;
 exports.showShareModal    = showShareModal;
 exports.showLanguageModal = showLanguageModal;
 exports.showConfirmModal  = showConfirmModal;
-exports.showAboutModal    = showAboutModal;
+exports.showAlertModal    = showAlertModal;
 exports.showBackendModal  = showBackendModal;
 exports.showFontSizeModal = showFontSizeModal;
 exports.showCostModal     = showCostModal;

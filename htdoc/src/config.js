@@ -144,7 +144,16 @@ var state = {
     // The chat "currently for" subject: "" / "0" => the user themselves; otherwise
     // a care-circle member's user id (someone who shared their health data), sent
     // as `subject` so the AI's family_health tool defaults to them.
-    currentSubjectId : ""
+    currentSubjectId : "",
+    // Incognito ("privacy mode"): a session-only toggle (never persisted). While
+    // on, turns aren't mirrored to IndexedDB and each request carries
+    // `incognito:true` so the server skips durable persistence + memory. Starts
+    // off on every load, so a reload always leaves incognito.
+    incognito : false,
+    // The normal session stashed while incognito is active ({messages, conv,
+    // readOnly}), restored on exit so the real conversation is untouched. null
+    // when not incognito.
+    incognitoSaved : null
 };
 
 // Two layouts: a centered card on wide screens, a full-width column on phones.

@@ -1,5 +1,6 @@
 package ai.thetahealth.mirobody.ui.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,20 +13,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,11 +43,15 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Conversation-history list, hosted inside the chat drawer (below "New chat",
+ * above the settings footer). No own scaffold/top-bar — the drawer frames it.
+ */
 @Composable
-fun HistoryScreen(
-    onBack: () -> Unit,
-    isActive: Boolean = true,
+internal fun HistoryList(
+    isActive: Boolean,
+    onOpen: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val container = LocalAppContainer.current
     val vm: HistoryViewModel = viewModel(
@@ -67,70 +67,48 @@ fun HistoryScreen(
         if (isActive) vm.refresh()
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = stringResource(R.string.common_back),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                title = {
-                    Text(
-                        stringResource(R.string.history_title),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                },
-            )
-        },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-            when {
-                state.loading && state.items.isEmpty() ->
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+    Box(modifier = modifier) {
+        when {
+            state.loading && state.items.isEmpty() ->
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
 
-                state.error != null -> Column(
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = state.error.orEmpty(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    TextButton(onClick = { vm.refresh() }) {
-                        Text(stringResource(R.string.common_retry), color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-
-                state.items.isEmpty() -> Text(
-                    text = stringResource(R.string.history_empty),
+            state.error != null -> Column(
+                modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = state.error.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                    color = MaterialTheme.colorScheme.error,
                 )
+                TextButton(onClick = { vm.refresh() }) {
+                    Text(stringResource(R.string.common_retry), color = MaterialTheme.colorScheme.primary)
+                }
+            }
 
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                ) {
-                    items(state.items, key = { it.sessionId }) { item ->
-                        HistoryRow(item, onDelete = { vm.deleteHistory(item.sessionId) })
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                        )
-                    }
+            state.items.isEmpty() -> Text(
+                text = stringResource(R.string.history_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.Center).padding(24.dp),
+            )
+
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = 8.dp),
+            ) {
+                items(state.items, key = { it.sessionId }) { item ->
+                    // A rule above each row (the last row has none below it).
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                    )
+                    HistoryRow(
+                        item,
+                        onOpen = { onOpen(item.sessionId) },
+                        onDelete = { vm.deleteHistory(item.sessionId) },
+                    )
                 }
             }
         }
@@ -138,7 +116,7 @@ fun HistoryScreen(
 }
 
 @Composable
-private fun HistoryRow(item: SessionSummary, onDelete: () -> Unit) {
+private fun HistoryRow(item: SessionSummary, onOpen: () -> Unit, onDelete: () -> Unit) {
     val untitled = stringResource(R.string.history_untitled)
     val title = item.summary.takeIf { it.isNotBlank() }
         ?: item.sessionId.takeIf { it.isNotBlank() }
@@ -151,7 +129,9 @@ private fun HistoryRow(item: SessionSummary, onDelete: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onOpen),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text(

@@ -16,7 +16,8 @@ final class ChatRepository {
     }
 
     func listProviders() async throws -> [ProviderInfo] {
-        try await api.get("/api/providers")
+        let groups: [ProviderGroup] = try await api.get("/api/providers")
+        return groups.flatMap { g in g.providers.map { ProviderInfo(agent: g.agent, provider: $0) } }
     }
 
     func history(page: Int = 0, pageSize: Int = 20) async throws -> [SessionSummary] {
@@ -31,7 +32,7 @@ final class ChatRepository {
     func chat(
         sessionId: String,
         question: String,
-        agentCode: String,
+        agent: String,
         provider: String,
         language: String,
         subject: Int64 = 0,
@@ -41,7 +42,7 @@ final class ChatRepository {
             ChatStreamRequest(
                 question: question,
                 sessionId: sessionId,
-                agent: agentCode,
+                agent: agent,
                 provider: provider,
                 language: language,
                 subject: subject > 0 ? String(subject) : nil

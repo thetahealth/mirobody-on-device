@@ -9,26 +9,18 @@ import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import ai.thetahealth.mirobody.ui.auth.EmailScreen
-import ai.thetahealth.mirobody.ui.auth.VerifyScreen
 import ai.thetahealth.mirobody.ui.chat.ChatScreen
 import ai.thetahealth.mirobody.ui.settings.BaseUrlScreen
-import java.net.URLDecoder
-import java.net.URLEncoder
 
 object Routes {
     const val SPLASH = "splash"
     const val BASE_URL = "settings/baseurl"
     const val EMAIL = "auth/email"
-    const val VERIFY = "auth/verify/{email}"
     const val CHAT = "chat"
-
-    fun verify(email: String) = "auth/verify/${URLEncoder.encode(email, "UTF-8")}"
 }
 
 @Composable
@@ -48,8 +40,7 @@ fun MirobodyNavGraph() {
                     val onPublicRoute = route == null ||
                         route == Routes.SPLASH ||
                         route == Routes.BASE_URL ||
-                        route == Routes.EMAIL ||
-                        route == Routes.VERIFY
+                        route == Routes.EMAIL
                     if (!onPublicRoute) {
                         nav.navigate(Routes.EMAIL) {
                             popUpTo(0) { inclusive = true }
@@ -62,6 +53,9 @@ fun MirobodyNavGraph() {
     NavHost(navController = nav, startDestination = Routes.SPLASH) {
         composable(Routes.SPLASH) {
             LaunchedEffect(Unit) {
+                // Move any old single-token slot into the per-account scheme before
+                // the first token read decides where to land.
+                container.settings.migrateLegacyIfNeeded()
                 val baseUrl = container.settings.baseUrl.first()
                 val token = container.settings.accessToken.first()
                 val target = when {
@@ -98,40 +92,31 @@ fun MirobodyNavGraph() {
 
         composable(Routes.EMAIL) {
             EmailScreen(
-                onCodeSent = { email -> nav.navigate(Routes.verify(email)) },
+                // Reset the stack to a single fresh chat -- covers both a first
+                // login and an "Add account" login (which had CHAT in the back
+                // stack). A fresh ChatScreen loads the now-current account's data.
                 onSignedIn = {
                     nav.navigate(Routes.CHAT) {
-                        popUpTo(Routes.EMAIL) { inclusive = true }
+                        popUpTo(0) { inclusive = true }
                     }
                 },
-            )
-        }
-
-        composable(
-            route = Routes.VERIFY,
-            arguments = listOf(navArgument("email") { type = NavType.StringType }),
-        ) { entry ->
-            val email = URLDecoder.decode(
-                entry.arguments?.getString("email").orEmpty(),
-                "UTF-8",
-            )
-            VerifyScreen(
-                email = email,
-                onVerified = {
-                    nav.navigate(Routes.CHAT) {
-                        popUpTo(Routes.EMAIL) { inclusive = true }
-                    }
-                },
-                onBack = { nav.popBackStack() },
             )
         }
 
         composable(Routes.CHAT) {
             ChatScreen(
-                onSignOut = {
-                    nav.navigate(Routes.EMAIL) {
-                        popUpTo(Routes.CHAT) { inclusive = true }
+                // Recreate the chat for the now-current account (after a switch or a
+                // sign-out that fell back to another account).
+                onRelaunch = {
+                    nav.navigate(Routes.CHAT) {
+                        popUpTo(0) { inclusive = true }
                     }
+                },
+                // Show login over the session to add an account; keep CHAT in the
+                // back stack so system-back cancels. Signing out with no account
+                // left nulls the token -> the collector above returns to login.
+                onAddAccount = {
+                    nav.navigate(Routes.EMAIL)
                 },
             )
         }

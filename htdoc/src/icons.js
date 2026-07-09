@@ -19,6 +19,12 @@ var SETTINGS_SVG =
 var CARET_SVG =
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">' +
     '<path d="M7 10l5 5 5-5z"/></svg>';
+// Person glyph: the fallback inside the top-left account avatar when there's no
+// email to draw an initial from. The avatar (a filled circle opening the personal
+// drawer) reads as "you / account", distinct from the settings gear on the right.
+var PERSON_SVG =
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">' +
+    '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
 // History drawer icons: back arrow (close) and a delete/trash glyph.
 var BACK_SVG =
     '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">' +
@@ -108,6 +114,42 @@ var GROUP_SVG =
     'V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19' +
     'h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>';
 
+// Incognito ("privacy mode") ghost, for the top-bar toggle. A rounded dome with
+// a scalloped hem and two eyes, drawn in currentColor so the button tints it.
+// Two variants distinguish the toggle state: the SOLID (filled) ghost when
+// incognito is ON, and the OUTLINE (hollow) ghost when OFF. The solid glyph is
+// also reused (scaled up) for the empty-state hero and the active-session banner.
+var INCOGNITO_SVG =
+    '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">' +
+    '<path d="M12 2C7.58 2 4 5.58 4 10v9.5c0 .84.98 1.3 1.63.77L7 19l1.63 1.3c.37.3.9.3 1.27 0' +
+    'L12 18.5l2.1 1.8c.37.3.9.3 1.27 0L17 19l1.37 1.27c.65.53 1.63.07 1.63-.77V10c0-4.42-3.58-8-8-8z' +
+    'm-2.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>';
+// Hollow (outline) counterpart, shown when incognito is OFF. Same 22px footprint
+// as the solid glyph (its native viewBox is 20x20) so the toggle doesn't jump
+// size when switching state. Body drawn as an even-odd ring (hollow shell) with
+// two solid eyes.
+var INCOGNITO_OUTLINE_SVG =
+    '<svg viewBox="0 0 20 20" width="22" height="22" fill="currentColor" aria-hidden="true">' +
+    '<path d="M6.99951 8.66672C7.5518 8.66672 7.99951 9.11443 7.99951 9.66672C7.9993 10.2188 7.55166 10.6667 6.99951 10.6667' +
+    'C6.44736 10.6667 5.99973 10.2188 5.99951 9.66672C5.99951 9.11443 6.44723 8.66672 6.99951 8.66672Z"/>' +
+    '<path d="M12.9995 8.66672C13.5518 8.66672 13.9995 9.11443 13.9995 9.66672C13.9993 10.2188 13.5517 10.6667 12.9995 10.6667' +
+    'C12.4474 10.6667 11.9997 10.2188 11.9995 9.66672C11.9995 9.11443 12.4472 8.66672 12.9995 8.66672Z"/>' +
+    '<path fill-rule="evenodd" clip-rule="evenodd" d="M10 2C14.326 2.00018 17.9998 5.67403 18 10V17.3123' +
+    'C17.9997 17.5427 17.8411 17.8079 17.6172 17.8623C17.3932 17.9165 17.1614 17.7456 17.0557 17.5408' +
+    'C16.7805 17.007 16.3658 16.5937 16.062 16.2878C15.7793 16.0034 15.4503 15.8338 14.9771 15.8337' +
+    'C14.2092 15.8339 13.4371 16.3862 12.9487 17.53C12.8701 17.7138 12.6887 17.8621 12.4888 17.8623' +
+    'C12.2888 17.8623 12.1076 17.7138 12.0288 17.53C11.5404 16.386 10.7674 15.8339 9.99951 15.8337' +
+    'C9.23161 15.8339 8.45959 16.386 7.97119 17.53C7.89253 17.7138 7.71118 17.8621 7.51123 17.8623' +
+    'C7.31122 17.8623 7.13006 17.7138 7.05127 17.53C6.56296 16.3862 5.78982 15.834 5.02197 15.8337' +
+    'C4.54861 15.8338 4.21974 16.0032 3.93701 16.2878C3.63309 16.5937 3.21952 17.0715 2.94434 17.6055' +
+    'C2.83865 17.8103 2.60589 17.9165 2.38184 17.8623C2.15801 17.8079 2.00033 17.6073 2 17.377V10' +
+    'C2.00018 5.67403 5.67403 2.00018 10 2ZM10 3C6.22631 3.00018 3.00018 6.22631 3 10V15.8633' +
+    'C3.0205 15.8414 3.20696 15.6049 3.22803 15.5837C3.67524 15.1336 4.251 14.8338 5.02197 14.8337' +
+    'C6.03838 14.8341 6.90232 15.4025 7.51025 16.2937C8.11828 15.4018 8.9824 14.8338 9.99951 14.8337' +
+    'C11.0163 14.8338 11.8798 15.4022 12.4878 16.2937C13.0959 15.4018 13.9601 14.8339 14.9771 14.8337' +
+    'C15.7481 14.8338 16.3247 15.1336 16.772 15.5837C16.772 15.5837 16.9796 15.812 17 15.8337V10' +
+    'C16.9998 6.22631 13.7737 3.00018 10 3Z"/></svg>';
+
 // Up-arrow for the circular composer send button (drawn in currentColor /
 // onPrimary). Stroke-based to read crisply at small sizes.
 var SEND_ARROW_SVG =
@@ -119,6 +161,7 @@ var SEND_ARROW_SVG =
 
 exports.SETTINGS_SVG = SETTINGS_SVG;
 exports.CARET_SVG    = CARET_SVG;
+exports.PERSON_SVG   = PERSON_SVG;
 exports.BACK_SVG     = BACK_SVG;
 exports.TRASH_SVG    = TRASH_SVG;
 exports.GOOGLE_SVG   = GOOGLE_SVG;
@@ -134,4 +177,6 @@ exports.FILE_SVG     = FILE_SVG;
 exports.CLOSE_SVG    = CLOSE_SVG;
 exports.SHARE_SVG    = SHARE_SVG;
 exports.GROUP_SVG    = GROUP_SVG;
+exports.INCOGNITO_SVG  = INCOGNITO_SVG;
+exports.INCOGNITO_OUTLINE_SVG = INCOGNITO_OUTLINE_SVG;
 exports.SEND_ARROW_SVG = SEND_ARROW_SVG;

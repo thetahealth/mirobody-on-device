@@ -4,44 +4,132 @@
 // The client is served same-origin from res/htdoc, so request URIs are
 // relative. In webpack dev mode the dev server proxies them to the C++ backend.
 
-var TOKEN_KEY = "mirobody-x-token";
+// Per-account token storage: each account's JWT lives under TOKEN_PREFIX+<sub>,
+// and CURRENT_KEY names the active sub. Several accounts can coexist in one
+// browser (quick-switch from the drawer) instead of one token clobbering the
+// next. LEGACY_KEY is the old single-token slot, migrated once on load.
+var TOKEN_PREFIX = "mirobody-x-token-";
+var CURRENT_KEY  = "mirobody-x-current";
+var LEGACY_KEY   = "mirobody-x-token";
 
-function getToken() {
-    return localStorage.getItem(TOKEN_KEY) || "";
-};
-function setToken(token) {
-    if (token) {
-        localStorage.setItem(TOKEN_KEY, token);
-    }
-};
-function clearToken() {
-    localStorage.removeItem(TOKEN_KEY);
-};
-
-// A stable identifier for the signed-in user, decoded from the JWT's `sub`
-// claim (the server sets it to the numeric user id; see UserService). Used to
-// namespace per-user local data so two accounts on one browser never share it.
-// Returns "" when there's no token or it can't be parsed (treated as "no user").
-function getUserId() {
-    var token = getToken();
-    if (!token) { return ""; }
+// Decode a JWT's payload (middle segment) into an object, or null when the token
+// is missing/malformed. Base64url -> UTF-8 JSON; escape()+decodeURIComponent
+// round-trips UTF-8 byte values from atob.
+function decodePayload(token) {
+    if (!token) { return null; }
     var parts = token.split(".");
-    if (parts.length < 2) { return ""; }
+    if (parts.length < 2) { return null; }
     try {
         var b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
         while (b64.length % 4) { b64 += "="; }
-        // escape()+decodeURIComponent round-trips UTF-8 byte values from atob.
-        var payload = JSON.parse(decodeURIComponent(escape(atob(b64))));
-        return String(payload.sub || payload.email || "");
+        return JSON.parse(decodeURIComponent(escape(atob(b64))));
     } catch (e) {
-        return "";
+        return null;
     }
 };
 
-exports.getToken   = getToken;
-exports.setToken   = setToken;
-exports.clearToken = clearToken;
-exports.getUserId  = getUserId;
+function currentSub() { return localStorage.getItem(CURRENT_KEY) || ""; }
+
+function getToken() {
+    var sub = currentSub();
+    return sub ? (localStorage.getItem(TOKEN_PREFIX + sub) || "") : "";
+};
+
+// Store a token under its own account slot and make it current. Dedupes by
+// email: the server re-salts `sub` per issuance (jwt subject_salt), so the same
+// account re-logging in gets a new sub -- drop any existing slot with the same
+// email first so there's one entry per account, not one per login.
+function setToken(token) {
+    if (!token) { return; }
+    var p = decodePayload(token);
+    var sub = (p && p.sub) ? String(p.sub) : "";
+    if (!sub) { return; }
+    var email = (p && p.email) ? String(p.email) : "";
+    if (email) {
+        listAccounts().forEach(function (a) {
+            if (a.sub !== sub && a.email === email) {
+                localStorage.removeItem(TOKEN_PREFIX + a.sub);
+            }
+        });
+    }
+    localStorage.setItem(TOKEN_PREFIX + sub, token);
+    localStorage.setItem(CURRENT_KEY, sub);
+};
+
+// Sign out the CURRENT account: drop its slot, then fall back to another stored
+// account if one exists (returns true, now current) or clear the pointer
+// (returns false -> the caller shows the login screen).
+function clearToken() {
+    var sub = currentSub();
+    if (sub) { localStorage.removeItem(TOKEN_PREFIX + sub); }
+    var rest = listAccounts();
+    if (rest.length) {
+        localStorage.setItem(CURRENT_KEY, rest[0].sub);
+        return true;
+    }
+    localStorage.removeItem(CURRENT_KEY);
+    return false;
+};
+
+// Make an already-stored account current. Returns false if its slot is gone.
+function switchAccount(sub) {
+    if (sub && localStorage.getItem(TOKEN_PREFIX + sub)) {
+        localStorage.setItem(CURRENT_KEY, sub);
+        return true;
+    }
+    return false;
+};
+
+// Every stored account as { sub, email, current }, the current one first.
+function listAccounts() {
+    var out = [];
+    var cur = currentSub();
+    for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (!k || k.indexOf(TOKEN_PREFIX) !== 0) { continue; }
+        var sub = k.slice(TOKEN_PREFIX.length);
+        var p = decodePayload(localStorage.getItem(k));
+        out.push({ sub: sub, email: (p && p.email) ? String(p.email) : "", current: sub === cur });
+    }
+    out.sort(function (a, b) { return (b.current ? 1 : 0) - (a.current ? 1 : 0); });
+    return out;
+};
+
+// One-time migration of the old single-token slot into the per-account scheme.
+function migrateLegacy() {
+    var legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy) {
+        setToken(legacy);
+        localStorage.removeItem(LEGACY_KEY);
+    }
+};
+migrateLegacy();
+
+function decodeToken() { return decodePayload(getToken()); }
+
+// A stable-per-session identifier for the signed-in user (the token's `sub`),
+// used to namespace per-user local data so accounts never share it. "" = nobody.
+function getUserId() {
+    var p = decodeToken();
+    return p ? String(p.sub || p.email || "") : "";
+};
+
+// The signed-in user's email, from the token's `email` claim (the mb_oauth access
+// token carries it; see oauth/service.cpp). "" when absent -- e.g. a social login
+// whose provider returned no email. Reliable across reloads, unlike the in-memory
+// state.email, so it's the source for display and the account switcher.
+function getUserEmail() {
+    var p = decodeToken();
+    return (p && p.email) ? String(p.email) : "";
+};
+
+exports.getToken      = getToken;
+exports.setToken      = setToken;
+exports.clearToken    = clearToken;
+exports.switchAccount = switchAccount;
+exports.listAccounts  = listAccounts;
+exports.getUserId     = getUserId;
+exports.getUserEmail  = getUserEmail;
 
 //----------------------------------------------------------------------------
 

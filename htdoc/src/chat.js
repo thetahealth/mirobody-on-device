@@ -32,11 +32,12 @@ const COPY_SVG   = icons.COPY_SVG;
 const ATTACH_SVG = icons.ATTACH_SVG;
 const FILE_SVG   = icons.FILE_SVG;
 const CLOSE_SVG  = icons.CLOSE_SVG;
+const INCOGNITO_SVG  = icons.INCOGNITO_SVG;
+const INCOGNITO_OUTLINE_SVG = icons.INCOGNITO_OUTLINE_SVG;
 const SEND_ARROW_SVG = icons.SEND_ARROW_SVG;
 
 const formatLocalTime = require("./format").formatLocalTime;
 const showCostModal   = require("./modals").showCostModal;
-const buildSettingsMenu = require("./topbar").buildSettingsMenu;
 
 var t = i18n.t;
 
@@ -73,9 +74,7 @@ function showOnDeviceModal() {
         boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
         display: "flex", flexDirection: "column", gap: "12px"
     });
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), "On-device private AI"));
+    card.appendChild(widgets.modalHeader("On-device private AI", function () { dismiss(); }));
     card.appendChild(ui.setText(ui.dom("div", {
         fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.4"
     }), "Gemma 4 runs entirely on this computer. Your messages never leave the "
@@ -114,7 +113,6 @@ function showOnDeviceModal() {
             actions.appendChild(button("Delete model", false, { click: function () {
                 bridge.deleteModel().then(function () { render("absent"); });
             } }));
-            actions.appendChild(button("Done", true, { click: dismiss }));
         } else if (downloading) {
             ui.setText(statusLine, "Downloading… "
                 + (typeof progress === "number" ? Math.round(progress * 100) + "%" : ""));
@@ -124,7 +122,6 @@ function showOnDeviceModal() {
         } else {
             ui.setText(statusLine, status === "failed"
                 ? "Download failed." : "Download required.");
-            actions.appendChild(button("Close", false, { click: dismiss }));
             actions.appendChild(button(status === "failed" ? "Retry" : "Download model", true, {
                 click: function () { bridge.startDownload(); render("downloading", 0); }
             }));
@@ -150,6 +147,77 @@ function showOnDeviceModal() {
 }
 
 //----------------------------------------------------------------------------
+// Incognito ("privacy mode"). Toggling swaps the entire chat session: entering
+// stashes the real conversation and starts a blank ephemeral one; leaving
+// restores the stash and discards the ephemeral turns. While on, buildChat's
+// submit() skips the IndexedDB mirror and each request carries `incognito:true`
+// so the server persists nothing and disables memory. The app re-renders so the
+// banner, the toggle's active tint, and the gating all follow. Never toggled
+// mid-stream (the button is inert then) so no in-flight bubble is torn down.
+function toggleIncognito() {
+    if (state.streaming) { return; }
+    if (!state.incognito) {
+        state.incognitoSaved = {
+            messages : state.messages,
+            conv     : state.currentConversationId,
+            readOnly : state.readOnly
+        };
+        state.messages = [];
+        state.currentConversationId = "";
+        state.readOnly = false;
+        state.incognito = true;
+    } else {
+        var saved = state.incognitoSaved || { messages: [], conv: "", readOnly: false };
+        state.messages = saved.messages || [];
+        state.currentConversationId = saved.conv || "";
+        state.readOnly = !!saved.readOnly;
+        state.incognitoSaved = null;
+        state.incognito = false;
+    }
+    app.render();
+}
+
+//----------------------------------------------------------------------------
+
+// A borderless <select> styled as a centered text button with a trailing caret
+// overlay (appearance:none hides the native arrow). Shared by the composer's
+// model picker and the subject picker so both dropdowns read identically.
+// `maxWidth` caps the control; returns { wrap, select }.
+function caretSelect(maxWidth) {
+    var select = ui.dom("select", {
+        appearance       : "none",
+        WebkitAppearance : "none",
+        MozAppearance    : "none",
+        paddingBlock       : "6px",
+        paddingInlineStart : "10px",
+        paddingInlineEnd   : "28px",   // room for the caret on the trailing edge
+        border           : "none",
+        borderRadius     : "10px",
+        font             : "inherit",
+        fontSize         : "0.875rem",
+        fontWeight       : "500",
+        color            : color.onSurface,
+        background       : "transparent",
+        outline          : "none",
+        cursor           : "pointer",
+        maxWidth         : maxWidth,
+        textAlignLast    : "center"
+    });
+    var wrap = ui.dom("div", {
+        position: "relative", display: "inline-flex", alignItems: "center",
+        maxWidth: "100%", borderRadius: "10px"
+    });
+    wrap.appendChild(select);
+    var car = ui.dom("span", {
+        position: "absolute", insetInlineEnd: "6px", display: "flex",
+        pointerEvents: "none", color: color.onSurfaceVar
+    });
+    ui.setHTML(car, CARET_SVG);
+    wrap.appendChild(car);
+    return { wrap: wrap, select: select };
+}
+
+//----------------------------------------------------------------------------
 
 function buildChat() {
     var wrap = ui.dom("section", {
@@ -164,28 +232,11 @@ function buildChat() {
     // Provider selector. Populated up front from /api/providers so the user
     // picks an agent/provider before sending.
 
-    // Reads like the app's ProviderMenu: a borderless text button (titleSmall:
-    // 14px/500) with a trailing caret, sitting in the top bar. appearance:none
-    // hides the native arrow so the CARET_SVG overlay shows instead.
-    var providerSelect = ui.dom("select", {
-        appearance       : "none",
-        WebkitAppearance : "none",
-        MozAppearance    : "none",
-        paddingBlock       : "8px",
-        paddingInlineStart : "12px",
-        paddingInlineEnd   : "30px",   // room for the caret on the trailing edge
-        border           : "none",
-        borderRadius     : "10px",
-        font             : "inherit",
-        fontSize         : "0.875rem",
-        fontWeight       : "500",
-        color            : color.onSurface,
-        background       : "transparent",
-        outline          : "none",
-        cursor           : "pointer",
-        maxWidth         : "55vw",
-        textAlignLast    : "center"
-    });
+    // Model picker: a borderless caret select (shared style; see caretSelect),
+    // placed in the composer's bottom control row (like the reference's "Fable 5").
+    var _model = caretSelect("55vw");
+    var providerWrap   = _model.wrap;
+    var providerSelect = _model.select;
     providerSelect.addEventListener("change", function () {
         state.provider = providerSelect.value;
         if (state.provider) {
@@ -201,19 +252,28 @@ function buildChat() {
         }
     });
 
-    function setProviderOptions(items) {
+    // provider(model) -> agent name ("" for the default agent), from the grouped
+    // /api/providers response; read at submit to send {agent, provider} verbatim.
+    var providerAgent = {};
+
+    function setProviderOptions(groups) {
         ui.clear(providerSelect);
+        providerAgent = {};
 
         var names = [];
-        for (var i = 0; i < items.length; i ++) {
-            if (!items[i] || !items[i].name) {
-                continue;
+        for (var i = 0; i < groups.length; i ++) {
+            var g = groups[i];
+            if (!g || !(g.providers instanceof Array)) { continue; }
+            var agent = g.agent || "";
+            for (var j = 0; j < g.providers.length; j ++) {
+                var p = g.providers[j];
+                if (!p || p === ONDEVICE_NAME) { continue; }   // on-device re-added below
+                providerAgent[p] = agent;
+                names.push(p);
+                var opt = ui.dom("option", null, { value: p });
+                ui.setText(opt, p);
+                providerSelect.appendChild(opt);
             }
-            if (items[i].name === ONDEVICE_NAME) { continue; }   // re-added below
-            names.push(items[i].name);
-            var opt = ui.dom("option", null, { value: items[i].name });
-            ui.setText(opt, items[i].name);
-            providerSelect.appendChild(opt);
         }
 
         // Desktop only: always offer the on-device provider (runs locally, offline).
@@ -248,28 +308,11 @@ function buildChat() {
     setProviderOptions(state.providers);
     app.slots.providerRefill = setProviderOptions;
 
-    // Wrap the select with the caret overlay and hand it to the top bar's center
-    // slot; the settings/sign-out menu goes to the right slot.
-    var providerWrap = ui.dom("div", {
-        position: "relative", display: "inline-flex", alignItems: "center",
-        maxWidth: "100%", borderRadius: "10px"
-    });
-    providerWrap.appendChild(providerSelect);
-    var caret = ui.dom("span", {
-        position: "absolute", insetInlineEnd: "8px", display: "flex",
-        pointerEvents: "none", color: color.onSurfaceVar
-    });
-    ui.setHTML(caret, CARET_SVG);
-    providerWrap.appendChild(caret);
-
-    app.slots.topCenter = providerWrap;
-
-    // Right slot: just the settings menu.
-    var rightWrap = ui.dom("div", {
-        display: "flex", alignItems: "center", gap: "2px"
-    });
-    rightWrap.appendChild(buildSettingsMenu());
-    app.slots.topRight = rightWrap;
+    // Right slot: the settings gear (language / font / backend / about), the same
+    // menu the login screen shows -- so app settings live in one consistent place
+    // across both screens. Session-scoped items (history, health connections,
+    // account, incognito) live in the left nav drawer (the hamburger) instead.
+    app.slots.topRight = require("./topbar").buildSettingsMenu();
 
     //----------------------------------------------------
 
@@ -452,23 +495,80 @@ function buildChat() {
             textAlign : "center",
             maxWidth  : "640px",
             width     : "100%",
+            boxSizing : "border-box",   // keep the 24px padding inside the width (no h-scroll on phones)
             display       : "flex",
             flexDirection : "column",
             alignItems    : "center",
             gap           : "22px",
             padding       : "24px"
         });
-        // Serif heading (Theta Health style).
-        box.appendChild(ui.setText(ui.dom("h2", {
-            fontFamily : serifFamily,
-            fontWeight : "600",
-            fontSize   : "clamp(1.6rem, 4vw, 2.1rem)",
-            color      : color.onSurface,
-            margin     : "0"
-        }), t("chatStart")));
+        // Incognito empty state: ghost + "You're incognito" + the not-saved note,
+        // mirroring the app's privacy screen. Otherwise the plain serif heading.
+        if (state.incognito) {
+            box.appendChild(ui.setHTML(ui.dom("div", {
+                color: color.primary, lineHeight: "0", fontSize: "0"
+            }), incognitoGlyph()));
+            box.appendChild(ui.setText(ui.dom("h2", {
+                fontFamily : serifFamily,
+                fontWeight : "600",
+                fontSize   : "clamp(1.6rem, 4vw, 2.1rem)",
+                color      : color.onSurface,
+                margin     : "0"
+            }), t("incognitoHeading")));
+            box.appendChild(ui.setText(ui.dom("div", {
+                fontSize : "0.9rem",
+                color    : color.onSurfaceVar,
+                maxWidth : "360px",
+                lineHeight : "1.5"
+            }), t("incognitoNote")));
+        } else {
+            // Serif heading (Theta Health style).
+            box.appendChild(ui.setText(ui.dom("h2", {
+                fontFamily : serifFamily,
+                fontWeight : "600",
+                fontSize   : "clamp(1.6rem, 4vw, 2.1rem)",
+                color      : color.onSurface,
+                margin     : "0"
+            }), t("chatStart")));
+        }
 
         thread.appendChild(box);
     };
+
+    // A larger ghost for the empty-state hero (the top-bar toggle uses the 22px
+    // version); scaled up via width/height on the same markup.
+    function incognitoGlyph() {
+        return INCOGNITO_SVG.replace('width="22" height="22"', 'width="56" height="56"');
+    };
+
+    // A slim incognito banner pinned above the thread when an incognito session
+    // already has messages (the empty state carries its own hero instead).
+    function incognitoBanner() {
+        var bar = ui.dom("div", {
+            display        : "flex",
+            alignItems     : "center",
+            justifyContent : "center",
+            gap            : "8px",
+            margin         : "0 0 8px",
+            padding        : "6px 12px",
+            borderRadius   : "10px",
+            background     : color.surfaceLow,
+            border         : "1px solid " + color.outlineVar,
+            color          : color.onSurfaceVar,
+            fontSize       : "0.8rem",
+            boxSizing      : "border-box",   // padding+border inside the stretched width (no h-scroll)
+            maxWidth       : "100%"
+        });
+        bar.appendChild(ui.setHTML(ui.dom("span", {
+            display: "flex", lineHeight: "0", color: color.primary
+        }), INCOGNITO_SVG.replace('width="22" height="22"', 'width="16" height="16"')));
+        bar.appendChild(ui.setText(ui.dom("span", {}), t("incognitoNote")));
+        return bar;
+    };
+
+    if (state.incognito && state.messages.length > 0) {
+        thread.appendChild(incognitoBanner());
+    }
 
     var i;
     for (i = 0; i < state.messages.length; i ++) {
@@ -763,9 +863,9 @@ function buildChat() {
     // Borderless now: the rounded `bar` below owns the outline and focus ring, so
     // the attach button, text area and Send button read as one composer.
     var input = ui.dom("textarea", {
-        flex         : "1 1 auto",
+        width        : "100%",
         resize       : "none",
-        padding      : "8px 4px",
+        padding      : "4px 6px 2px",
         border       : "none",
         font         : "inherit",
         fontSize     : "1rem",
@@ -796,24 +896,122 @@ function buildChat() {
     }, { type: "button", title: t("send") });
     ui.setHTML(send, SEND_ARROW_SVG);
 
-    // The rounded composer bar: attach (paperclip) | text area | Send. Its border
-    // tracks focus and drag-over (outlineVariant -> primary), as the field does.
-    var bar = ui.dom("div", {
-        display      : "flex",
-        alignItems   : "flex-end",
-        gap          : "8px",
-        padding      : "6px 8px 6px 6px",
-        border       : "1px solid " + color.outlineVar,
-        borderRadius : "24px",
-        background   : color.surfaceLow,
-        width        : "100%",
-        maxWidth     : THREAD_MAX,
-        marginInline : "auto",
-        boxSizing    : "border-box"
+    // Subject selector — picking a care-circle member sends `subject` so the AI's
+    // family_health tool defaults to that member ("how is Mom doing?"). Shown only
+    // when members shared their health data. The "Currently for" label text was
+    // dropped by request; the dropdown alone carries the subject (its "Me" option
+    // is the default). Responsive placement: on a wide screen it sits inline in the
+    // middle of the composer's control row (also acting as the flex spacer); on a
+    // narrow phone it moves into the top bar's otherwise-empty center slot. The
+    // breakpoint (isMobile) is re-read on each render, and index.js re-renders when
+    // it's crossed, so the placement follows a resize/rotation.
+    var isNarrow = isMobile();
+    var _subject = caretSelect(isNarrow ? "44vw" : "320px");
+    var subjectSelect = _subject.select;
+    subjectSelect.addEventListener("change", function () { state.currentSubjectId = subjectSelect.value; });
+    var subjectInner = ui.dom("div", {
+        display: "flex", alignItems: "center", gap: "6px", minWidth: "0"
     });
-    bar.appendChild(attach);
+    subjectInner.appendChild(_subject.wrap);
+
+    // Narrow: subjectInner goes into the top bar's center slot. Wide: an inline
+    // centered slot that also acts as the control row's flex spacer, so it must
+    // persist even when hidden (toggleSubject then flips only the inner content).
+    // Either way subjectInner starts hidden until we know a subject exists.
+    var subjectSlot = null;
+    subjectInner.style.display = "none";
+    if (isNarrow) {
+        app.slots.topCenter = subjectInner;
+    } else {
+        subjectSlot = ui.dom("div", {
+            flex: "1 1 0", minWidth: "0", display: "flex",
+            alignItems: "center", justifyContent: "center"
+        });
+        subjectSlot.appendChild(subjectInner);
+    }
+    function toggleSubject(shown) {
+        subjectInner.style.display = shown ? "flex" : "none";
+        // When the subject sits in the top bar's center slot (narrow), it's mutually
+        // exclusive with the "Mirobody" wordmark beside the logo: show the wordmark
+        // only when the dropdown isn't. Wide keeps the wordmark always (the subject
+        // is in the composer, not the top bar).
+        if (isNarrow && app.slots.setBrandVisible) {
+            app.slots.setBrandVisible(!shown);
+        }
+    }
+    function loadSubjects() {
+        net.get("/api/circle/health-shared-with-me", function (d) {
+            var users = (d && d.users instanceof Array) ? d.users : [];
+            ui.clear(subjectSelect);
+            var me = ui.dom("option", null, { value: "" }); ui.setText(me, t("chatSubjectMe"));
+            subjectSelect.appendChild(me);
+            var shown = 0;
+            for (var i = 0; i < users.length; i ++) {
+                var u = users[i];
+                if (u.member == null) { continue; }   // no usable handle — skip (don't make value "undefined")
+                var op = ui.dom("option", null, { value: String(u.member) });
+                ui.setText(op, u.nickname || u.email || ("#" + u.member));
+                subjectSelect.appendChild(op);
+                shown ++;
+            }
+            subjectSelect.value = state.currentSubjectId || "";
+            if (subjectSelect.value !== (state.currentSubjectId || "")) {   // stale selection
+                state.currentSubjectId = ""; subjectSelect.value = "";
+            }
+            toggleSubject(shown > 0);
+        }, function () { toggleSubject(false); });
+    }
+    loadSubjects();
+
+    // Two-row composer (GPT/Claude style): the text area fills the top; the bottom
+    // control row is + (attach) on the leading edge and Send on the trailing edge,
+    // with the model picker between them. The rounded container owns the outline +
+    // focus/drag ring so it reads as one field.
+    var controls = ui.dom("div", {
+        display: "flex", alignItems: "center", gap: "8px", width: "100%"
+    });
+    controls.appendChild(attach);
+    if (isNarrow) {
+        // Mobile: Send pinned to the trailing edge; the model picker centered in the
+        // flex-grow slot between attach and Send (attach/Send are equal-width, so the
+        // picker reads as horizontally centered in the bar).
+        var modelSlot = ui.dom("div", {
+            flex: "1 1 auto", minWidth: "0", display: "flex",
+            alignItems: "center", justifyContent: "center"
+        });
+        modelSlot.appendChild(providerWrap);
+        controls.appendChild(modelSlot);
+        controls.appendChild(send);
+    } else {
+        // Wide: attach and Send are equal-width (40px) fixed ends; between them the
+        // subject and model pickers split the bar into two equal halves (flex 1 1 0
+        // each), each picker horizontally centered in its own half. The model gets
+        // its own centered slot rather than sitting glued to Send.
+        var modelSlot = ui.dom("div", {
+            flex: "1 1 0", minWidth: "0", display: "flex",
+            alignItems: "center", justifyContent: "center"
+        });
+        modelSlot.appendChild(providerWrap);
+        controls.appendChild(subjectSlot);
+        controls.appendChild(modelSlot);
+        controls.appendChild(send);
+    }
+
+    var bar = ui.dom("div", {
+        display       : "flex",
+        flexDirection : "column",
+        gap           : "6px",
+        padding       : "8px 10px 8px 12px",
+        border        : "1px solid " + color.outlineVar,
+        borderRadius  : "20px",
+        background    : color.surfaceLow,
+        width         : "100%",
+        maxWidth      : THREAD_MAX,
+        marginInline  : "auto",
+        boxSizing     : "border-box"
+    });
     bar.appendChild(input);
-    bar.appendChild(send);
+    bar.appendChild(controls);
 
     input.addEventListener("focus", function () { bar.style.borderColor = color.primary; });
     input.addEventListener("blur",  function () { bar.style.borderColor = color.outlineVar; });
@@ -835,47 +1033,6 @@ function buildChat() {
         }
     });
 
-    // "Currently for" subject selector — shown only when care-circle members have
-    // shared their health data with this user. Picking one sends `subject` so the
-    // AI's family_health tool defaults to that member ("how is Mom doing?").
-    var subjectSelect = ui.dom("select", {
-        font: "inherit", fontSize: "0.85rem", padding: "4px 8px", borderRadius: "10px",
-        border: "1px solid " + color.outlineVar, background: color.surfaceLow,
-        color: color.onSurface, cursor: "pointer"
-    });
-    subjectSelect.addEventListener("change", function () { state.currentSubjectId = subjectSelect.value; });
-    var subjectRow = ui.dom("div", {
-        display: "none", alignItems: "center", gap: "8px",
-        width: "100%", maxWidth: THREAD_MAX, marginInline: "auto", padding: "0 10px 8px"
-    });
-    subjectRow.appendChild(ui.setText(ui.dom("span", {
-        fontSize: "0.8rem", color: color.onSurfaceVar, flex: "0 0 auto"
-    }), t("chatCurrentlyFor")));
-    subjectRow.appendChild(subjectSelect);
-    function loadSubjects() {
-        net.get("/api/circle/health-shared-with-me", function (d) {
-            var users = (d && d.users instanceof Array) ? d.users : [];
-            ui.clear(subjectSelect);
-            var me = ui.dom("option", null, { value: "" }); ui.setText(me, t("chatSubjectMe"));
-            subjectSelect.appendChild(me);
-            var shown = 0;
-            for (var i = 0; i < users.length; i ++) {
-                var u = users[i];
-                if (u.member == null) { continue; }   // no usable handle — skip (don't make value "undefined")
-                var op = ui.dom("option", null, { value: String(u.member) });
-                ui.setText(op, u.nickname || u.email || ("#" + u.member));
-                subjectSelect.appendChild(op);
-                shown ++;
-            }
-            subjectSelect.value = state.currentSubjectId || "";
-            if (subjectSelect.value !== (state.currentSubjectId || "")) {   // stale selection
-                state.currentSubjectId = ""; subjectSelect.value = "";
-            }
-            subjectRow.style.display = shown ? "flex" : "none";
-        }, function () { subjectRow.style.display = "none"; });
-    }
-    loadSubjects();
-
     var form = ui.dom("form", {
         flex          : "0 0 auto",
         display       : "flex",
@@ -885,8 +1042,7 @@ function buildChat() {
     });
     send.setAttribute("type", "submit");
     form.appendChild(previews);
-    form.appendChild(subjectRow);
-    form.appendChild(bar);
+    form.appendChild(bar);   // narrow "currently for" is in the top bar; wide is inline in the bar
     form.appendChild(fileInput);
 
     //----------------------------------------------------
@@ -899,11 +1055,16 @@ function buildChat() {
 
         if (state.messages.length === 0) {
             ui.clear(thread);
+            // First turn clears the empty-state hero (incognito ghost included);
+            // keep a slim banner so the session stays visibly private.
+            if (state.incognito) { thread.appendChild(incognitoBanner()); }
         }
 
         var userTs = Date.now();
         state.messages.push({ role: "user", content: text, ts: userTs });
-        db.saveMessages(state.messages);
+        // Incognito: keep the turn in memory (so the ephemeral thread is
+        // multi-turn) but never mirror it to IndexedDB.
+        if (!state.incognito) { db.saveMessages(state.messages); }
         // Snapshot the picked files in their arranged order for this turn, before
         // the chips are cleared; agent mode posts them as a multipart form below.
         var turnFiles = attachments.map(function (a) { return a.file; });
@@ -939,19 +1100,21 @@ function buildChat() {
                     cost     : assistantCost,
                     provider : turnProvider
                 });
-                db.saveMessages(state.messages);
+                if (!state.incognito) { db.saveMessages(state.messages); }
             }
         };
 
         //----------------------------------------------------
 
-        // Run the selected agent ("Agent/provider") and stream its {type, content}
-        // events. A straight one-shot SSE stream. (An empty selection is only
-        // possible when no models were on offer; handled after this block.)
+        // Run the selection and stream its {type, content} events. {agent, provider}
+        // come straight from the picked item (providerAgent map, built from the
+        // grouped /api/providers response) -- no string parsing. providerName is the
+        // model; agentName is "" for the default agent (the server resolves it).
+        // (An empty selection is only possible when no models were on offer; handled
+        // after this block.)
         if (state.provider) {
-            var slash = state.provider.indexOf("/");
-            var agentName = slash >= 0 ? state.provider.slice(0, slash) : state.provider;
-            var providerName = slash >= 0 ? state.provider.slice(slash + 1) : "";
+            var providerName = state.provider;
+            var agentName    = providerAgent[state.provider] || "";
 
             // An agent error arrives as a {type:"error"} chunk via onmessage, but
             // the stream then still closes and fires oncomplete -- guard so we
@@ -1217,6 +1380,7 @@ function buildChat() {
                 agentBody.append("language", state.language || "");
                 if (state.currentConversationId) { agentBody.append("conversation_id", state.currentConversationId); }
                 if (subjectId) { agentBody.append("subject", subjectId); }
+                if (state.incognito) { agentBody.append("incognito", "true"); }
                 for (var fi = 0; fi < turnFiles.length; fi ++) {
                     agentBody.append("file", turnFiles[fi], turnFiles[fi].name);
                     appendUploading(turnFiles[fi].name);
@@ -1224,7 +1388,7 @@ function buildChat() {
             } else {
                 agentBody = { agent: agentName, provider: providerName, question: text,
                               language: state.language, conversation_id: state.currentConversationId || "",
-                              subject: subjectId };
+                              subject: subjectId, incognito: state.incognito };
             }
 
             var streamOnMessage = function (chunk) { // onmessage
@@ -1232,8 +1396,13 @@ function buildChat() {
                 var ev = parseAgentChunk(chunk);
                 if (ev.conversation) {
                     // The server's thread id for this turn; remember it so the
-                    // next turn continues the same thread and Share targets it.
-                    if (ev.conversation.id) { state.currentConversationId = ev.conversation.id; }
+                    // next turn continues the same thread and Share targets it, and
+                    // mirror it to IndexedDB so a reload continues the same thread
+                    // too. Incognito ids are ephemeral, so never persist them.
+                    if (ev.conversation.id) {
+                        state.currentConversationId = ev.conversation.id;
+                        if (!state.incognito) { db.saveConversationId(state.currentConversationId); }
+                    }
                     return;
                 }
                 if (ui.isString(ev.reply)) {
@@ -1311,7 +1480,7 @@ function buildChat() {
         ui.setText(bubble, text);
         // Drop the unanswered user turn so a retry doesn't duplicate it.
         state.messages.pop();
-        db.saveMessages(state.messages);
+        if (!state.incognito) { db.saveMessages(state.messages); }
         finish(null);
     };
 
@@ -1403,3 +1572,4 @@ function parseAgentChunk(chunk) {
 //----------------------------------------------------------------------------
 
 exports.buildChat = buildChat;
+exports.toggleIncognito = toggleIncognito;

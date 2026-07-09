@@ -555,6 +555,14 @@ struct Config {
     // Resolved against the process working directory when relative.
     std::string sql_dir = "res/sql";
 
+    // Whether the server applies the DDL under `sql_dir` at startup (see
+    // database::apply_schema). true (the default) runs the idempotent schema
+    // init on every boot; set DB_INIT_SCHEMA: false to skip it entirely, for a
+    // deployment whose schema is created and migrated out of band and where the
+    // serving DB user should not (or cannot) issue DDL. Independent of the ENV
+    // gate in Server::start — both must permit the init for it to run.
+    bool db_init_schema = true;
+
     // Underlying key/value store, populated by load_config(). The lazy
     // getters below (postgresql) read from it on demand, so that multi-
     // instance configs distinguished by suffix (PG_HOST_A, PG_HOST_B, ...)

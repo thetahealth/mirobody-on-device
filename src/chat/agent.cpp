@@ -1,5 +1,6 @@
 #include "chat/agent.hpp"
 
+#include "config/config.hpp"
 #include "platform/log.hpp"
 
 #include <algorithm>
@@ -173,6 +174,12 @@ std::string AgentRegistry::first_name(bool public_only) const {
 }
 
 std::vector<std::string> AgentRegistry::provider_names(bool public_only) const {
+    // The default agent's providers are listed WITHOUT the "agent/" prefix -- just
+    // the model name -- so clients show only the model (no redundant "Baseline/").
+    // resolve_agent() maps such a bare provider back to the default agent when the
+    // turn comes in. Any *other* agent keeps the "agent/provider" form, which is
+    // needed to tell agents apart.
+    const std::string def = default_agent_name(public_only);
     std::vector<std::string> out;
     for (std::size_t i = 0; i < agents_.size(); ++i) {
         const AgentRegistration& reg = agents_[i];
@@ -181,15 +188,40 @@ std::vector<std::string> AgentRegistry::provider_names(bool public_only) const {
         std::unordered_map<std::string, ClientMap>::const_iterator it = clients_.find(reg.name);
         if (it == clients_.end()) continue;
         for (ClientMap::const_iterator p = it->second.begin(); p != it->second.end(); ++p) {
-            out.push_back(reg.name + "/" + p->first);
+            out.push_back(reg.name == def ? p->first : (reg.name + "/" + p->first));
         }
     }
     std::sort(out.begin(), out.end());
     return out;
 }
 
+std::string AgentRegistry::default_agent_name(bool public_only) const {
+    // A configured DEFAULT_AGENT wins when it names a registered agent (respecting
+    // the public filter); otherwise fall back to the first registered agent.
+    if (!default_agent_.empty()) {
+        const AgentRegistration* r = find(default_agent_);
+        if (r && (!public_only || r->is_public)) return default_agent_;
+    }
+    return first_name(public_only);
+}
+
+std::string AgentRegistry::resolve_agent(const std::string& token,
+                                         std::string& provider) const {
+    // A token naming a real agent is used as-is (old "agent/provider" submissions).
+    if (!token.empty() && find(token) != nullptr) return token;
+    // Otherwise the token is a bare provider (the prefix-less list) -- carry it as
+    // the provider if none was given -- and route through the default agent. An
+    // empty token likewise defaults, leaving any explicit provider intact.
+    if (!token.empty() && provider.empty()) provider = token;
+    return default_agent_name(/*public_only=*/true);
+}
+
 void AgentRegistry::load_clients(const Config& cfg) {
     clients_.clear();
+    // The configured default agent (DEFAULT_AGENT): the agent listed without an
+    // "agent/" prefix and the one a nameless / unrecognized request routes to.
+    // Empty or unknown falls back to the first public agent (see default_agent_name).
+    default_agent_ = cfg.store.get_str("DEFAULT_AGENT", "");
     for (std::size_t i = 0; i < agents_.size(); ++i) {
         const AgentRegistration& reg = agents_[i];
         if (!reg.load_clients) continue;

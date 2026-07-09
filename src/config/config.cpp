@@ -461,6 +461,7 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.http_headers        = store.get_dict("HTTP_HEADERS");
     cfg.http_roots          = read_http_roots(store);
     cfg.sql_dir             = store.get_str("SQL_DIR", cfg.sql_dir);
+    cfg.db_init_schema      = store.get_bool("DB_INIT_SCHEMA", cfg.db_init_schema);
 
     // SQLite backend (MIROBODY_DATABASE_BACKEND=SQLITE). Empty path opens an
     // in-memory database, but the migration step and the server open separate
@@ -660,6 +661,7 @@ void Config::print() const {
         }
     }
     std::fprintf(out, "  sql_dir         : %s\n",    sql_dir.empty() ? "<not set>" : sql_dir.c_str());
+    std::fprintf(out, "  db_init_schema  : %s\n",    db_init_schema ? "true" : "false");
 
     // LLM providers are only shown when their API key is set, mirroring the
     // postgres / redis / jwt sections below: an unconfigured provider is noise.

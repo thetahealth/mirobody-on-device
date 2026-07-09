@@ -1,16 +1,22 @@
+/* Global base, aligned to the web client's "Theta Health" scheme: warm cream
+   surfaces, near-black text. Per-page WXSS layers navy accents on top. */
 page {
   height: 100%;
-  background: #f5f5f5;
+  background: #f2efe9;              /* warm cream page background */
+  color: #1a1c1e;                  /* near-black text */
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
-  color: #1f1f1f;
 }
 
-.btn-primary {
-  background: #07c160;
-  color: #fff;
-  border-radius: 8rpx;
+/* Serif brand title, matching the web client's login/topbar. */
+.serif {
+  font-family: Georgia, "Times New Roman", "Songti SC", STSong, serif;
 }
-.btn-primary[disabled] {
-  background: #9be0b8;
-  color: #fff;
+
+/* Mini Program buttons draw a hairline via ::after and carry default margins;
+   reset both so our own borders/radii are the only ones visible. */
+button {
+  margin: 0;
+}
+button::after {
+  border: none;
 }

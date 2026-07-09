@@ -22,3 +22,23 @@ data class SessionSummary(
 data class HistoryDeleteRequest(
     @SerialName("session_id") val sessionId: String,
 )
+
+/** GET /api/conversation?id= — the full thread for one saved conversation. */
+@Serializable
+data class ConversationDetail(
+    val id: String = "",
+    val summary: String = "",
+    val owned: Boolean = true,
+    val access: String = "",
+    @SerialName("shared_by") val sharedBy: String = "",
+    val messages: List<ConversationMessage> = emptyList(),
+)
+
+@Serializable
+data class ConversationMessage(
+    val role: String = "",
+    val content: String = "",
+    val agent: String = "",
+    val provider: String = "",
+    @SerialName("created_at") val createdAt: Long = 0,
+)

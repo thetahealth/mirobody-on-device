@@ -2,7 +2,6 @@ package ai.thetahealth.mirobody.ui.health
 
 import ai.thetahealth.mirobody.R
 import ai.thetahealth.mirobody.ui.LocalAppContainer
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -40,7 +39,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
  */
 @Composable
 fun BleDeviceDialog(
-    currentLanguage: String,
     onDismiss: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -66,94 +64,88 @@ fun BleDeviceDialog(
 
     AlertDialog(
         onDismissRequest = { vm.disconnect(); onDismiss() },
-        title = { ProvideLocale(currentLanguage) { Text(stringResource(R.string.ble_title)) } },
+        title = { Text(stringResource(R.string.ble_title)) },
         text = {
-            ProvideLocale(currentLanguage) {
-                Column {
-                    Text(
-                        stringResource(R.string.ble_intro),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(top = 8.dp)) {
-                        items(state.devices, key = { it.address }) { d ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(enabled = !state.connected) { vm.connect(d.address) }
-                                    .padding(vertical = 6.dp),
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(d.name, style = MaterialTheme.typography.bodyMedium)
-                                    Text(
-                                        d.address,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                                if (d.supported) {
-                                    Text(
-                                        stringResource(R.string.ble_supported_tag),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
+            Column {
+                Text(
+                    stringResource(R.string.ble_intro),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp).padding(top = 8.dp)) {
+                    items(state.devices, key = { it.address }) { d ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !state.connected) { vm.connect(d.address) }
+                                .padding(vertical = 6.dp),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(d.name, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    d.address,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (d.supported) {
+                                Text(
+                                    stringResource(R.string.ble_supported_tag),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
                             }
                         }
                     }
-                    if (state.devices.isEmpty()) {
-                        Text(
-                            stringResource(R.string.ble_no_devices),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                }
+                if (state.devices.isEmpty()) {
+                    Text(
+                        stringResource(R.string.ble_no_devices),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
-                    if (state.status.isNotBlank()) {
-                        Text(state.status, modifier = Modifier.padding(top = 8.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    state.lastReading?.let {
-                        Text(it, modifier = Modifier.padding(top = 4.dp),
-                            style = MaterialTheme.typography.titleSmall)
-                    }
-                    if (state.posted > 0 || state.failed > 0) {
-                        Text(
-                            stringResource(R.string.ble_saved, state.posted, state.failed),
-                            modifier = Modifier.padding(top = 4.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    if (state.connected) {
-                        TextButton(onClick = { vm.disconnect() }, modifier = Modifier.padding(top = 4.dp)) {
-                            Text(stringResource(R.string.ble_disconnect))
-                        }
+                if (state.status.isNotBlank()) {
+                    Text(state.status, modifier = Modifier.padding(top = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                state.lastReading?.let {
+                    Text(it, modifier = Modifier.padding(top = 4.dp),
+                        style = MaterialTheme.typography.titleSmall)
+                }
+                if (state.posted > 0 || state.failed > 0) {
+                    Text(
+                        stringResource(R.string.ble_saved, state.posted, state.failed),
+                        modifier = Modifier.padding(top = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (state.connected) {
+                    TextButton(onClick = { vm.disconnect() }, modifier = Modifier.padding(top = 4.dp)) {
+                        Text(stringResource(R.string.ble_disconnect))
                     }
                 }
             }
         },
         confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(
-                    enabled = !state.connected,
-                    onClick = {
-                        if (state.scanning) vm.stopScan() else permissionLauncher.launch(permissions)
-                    },
-                ) {
-                    Text(
-                        if (state.scanning) stringResource(R.string.ble_stop)
-                        else stringResource(R.string.ble_scan),
-                    )
-                }
+            TextButton(
+                enabled = !state.connected,
+                onClick = {
+                    if (state.scanning) vm.stopScan() else permissionLauncher.launch(permissions)
+                },
+            ) {
+                Text(
+                    if (state.scanning) stringResource(R.string.ble_stop)
+                    else stringResource(R.string.ble_scan),
+                )
             }
         },
         dismissButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = { vm.disconnect(); onDismiss() }) {
-                    Text(stringResource(R.string.common_cancel))
-                }
+            TextButton(onClick = { vm.disconnect(); onDismiss() }) {
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )

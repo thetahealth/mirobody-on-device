@@ -31,7 +31,7 @@
 "verify_resending" = "Renvoi…";
 "verify_resend_code" = "Renvoyer le code";
 
-"chat_message_hint" = "Message";
+"chat_message_hint" = "Posez n'importe quelle question";
 "chat_history_cd" = "Historique";
 "chat_select_model" = "Choisir un modèle";
 "chat_no_providers" = "Aucun modèle disponible";
@@ -51,7 +51,7 @@
 "chat_sign_out_confirm_title" = "Se déconnecter ?";
 "chat_sign_out_confirm_message" = "Vous devrez vous reconnecter.";
 "chat_empty_title" = "Démarrer une conversation";
-"chat_empty_subtitle" = "Choisissez un modèle ci-dessus, puis envoyez votre premier message.";
+"chat_empty_subtitle" = "Choisissez un modèle ci-dessous, puis envoyez votre premier message.";
 
 "history_title" = "Historique";
 "history_empty" = "Aucun historique.";

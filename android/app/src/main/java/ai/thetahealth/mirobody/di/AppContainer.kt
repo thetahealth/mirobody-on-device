@@ -16,6 +16,8 @@ import ai.thetahealth.mirobody.data.circle.CircleApi
 import ai.thetahealth.mirobody.data.circle.CircleRepository
 import ai.thetahealth.mirobody.data.config.ServerConfigApi
 import ai.thetahealth.mirobody.data.config.ServerConfigStore
+import ai.thetahealth.mirobody.data.health.EhrApi
+import ai.thetahealth.mirobody.data.health.EhrRepository
 import ai.thetahealth.mirobody.data.health.HealthApi
 import ai.thetahealth.mirobody.data.health.HealthRepository
 import ai.thetahealth.mirobody.data.health.HealthSourceFactory
@@ -30,6 +32,8 @@ import ai.thetahealth.mirobody.data.net.ErrorBus
 import ai.thetahealth.mirobody.data.net.NetworkFactory
 import ai.thetahealth.mirobody.data.net.UnauthorizedInterceptor
 import ai.thetahealth.mirobody.data.settings.SettingsStore
+import ai.thetahealth.mirobody.data.vendor.VendorApi
+import ai.thetahealth.mirobody.data.vendor.VendorRepository
 import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -80,8 +84,16 @@ class AppContainer(context: Context) {
     private val circleApi: CircleApi = retrofit.create()
     private val serverConfigApi: ServerConfigApi = retrofit.create()
     private val healthApi: HealthApi = retrofit.create()
+    private val vendorApi: VendorApi = retrofit.create()
+    private val ehrApi: EhrApi = retrofit.create()
 
     val authRepository: AuthRepository = AuthRepository(authApi, settings)
+
+    // Vendor account management (Fitbit / Oura / Garmin / platforms) via /vendors/*.
+    val vendorRepository: VendorRepository = VendorRepository(vendorApi)
+
+    // EHR connect (SMART on FHIR) via /health/ehr/*.
+    val ehrRepository: EhrRepository = EhrRepository(ehrApi)
 
     // On-device private LLM (Gemma 4 via LiteRT-LM). The model file is downloaded on
     // demand by ModelManager; the engine loads it lazily on first local turn.
@@ -99,7 +111,7 @@ class AppContainer(context: Context) {
         onDeviceEngine = onDeviceEngine,
     )
 
-    val chatHistoryStore: ChatHistoryStore = ChatHistoryStore(appContext, NetworkFactory.json)
+    val chatHistoryStore: ChatHistoryStore = ChatHistoryStore(appContext, settings, NetworkFactory.json)
 
     val circleRepository: CircleRepository = CircleRepository(circleApi)
 

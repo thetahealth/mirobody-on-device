@@ -17,7 +17,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import ai.thetahealth.mirobody.R
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import kotlin.math.roundToInt
 
 /**
@@ -27,7 +26,6 @@ import kotlin.math.roundToInt
  */
 @Composable
 fun FontSizeDialog(
-    currentLanguage: String,
     current: Int,
     onPreview: (Int) -> Unit,
     onPick: (Int) -> Unit,
@@ -46,55 +44,45 @@ fun FontSizeDialog(
     var stagedIndex by remember(current) { mutableStateOf(initialIndex) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            ProvideLocale(currentLanguage) {
-                Text(stringResource(R.string.chat_font_size))
-            }
-        },
+        title = { Text(stringResource(R.string.chat_font_size)) },
         text = {
-            ProvideLocale(currentLanguage) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Slider(
-                        value = stagedIndex.toFloat(),
-                        onValueChange = { v ->
-                            val idx = v.roundToInt().coerceIn(0, tiers.lastIndex)
-                            if (idx != stagedIndex) {
-                                stagedIndex = idx
-                                onPreview(tiers[idx].first)
-                            }
-                        },
-                        valueRange = 0f..tiers.lastIndex.toFloat(),
-                        steps = tiers.size - 2,
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        tiers.forEachIndexed { index, (_, labelRes) ->
-                            val selected = index == stagedIndex
-                            Text(
-                                text = stringResource(labelRes),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Slider(
+                    value = stagedIndex.toFloat(),
+                    onValueChange = { v ->
+                        val idx = v.roundToInt().coerceIn(0, tiers.lastIndex)
+                        if (idx != stagedIndex) {
+                            stagedIndex = idx
+                            onPreview(tiers[idx].first)
                         }
+                    },
+                    valueRange = 0f..tiers.lastIndex.toFloat(),
+                    steps = tiers.size - 2,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    tiers.forEachIndexed { index, (_, labelRes) ->
+                        val selected = index == stagedIndex
+                        Text(
+                            text = stringResource(labelRes),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
         },
         confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = { onPick(tiers[stagedIndex].first) }) {
-                    Text(stringResource(R.string.common_done))
-                }
+            TextButton(onClick = { onPick(tiers[stagedIndex].first) }) {
+                Text(stringResource(R.string.common_done))
             }
         },
         dismissButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.common_cancel))
-                }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )

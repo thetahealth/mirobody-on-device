@@ -50,7 +50,7 @@ final class ChatViewModel: ObservableObject {
                 // Always append the on-device provider alongside the server's.
                 let list = try await repo.listProviders() + [ProviderInfo.onDevice]
                 providers = list
-                if selected == nil { selected = list.first { $0.name == savedName } ?? list.first }
+                if selected == nil { selected = list.first { $0.key == savedName } ?? list.first }
                 error = nil
             } catch {
                 errorBus.emit(error)
@@ -59,14 +59,14 @@ final class ChatViewModel: ObservableObject {
                 // keep it available rather than leaving the picker empty.
                 let list = [ProviderInfo.onDevice]
                 providers = list
-                if selected == nil { selected = list.first { $0.name == savedName } ?? list.first }
+                if selected == nil { selected = list.first { $0.key == savedName } ?? list.first }
             }
         }
     }
 
     func onProviderSelected(_ provider: ProviderInfo) {
         selected = provider
-        settings.setSelectedProviderName(provider.name)
+        settings.setSelectedProviderName(provider.key)
     }
 
     func addAttachment(_ attachment: ChatAttachment) {
@@ -110,8 +110,8 @@ final class ChatViewModel: ObservableObject {
                 stream = repo.chat(
                     sessionId: sessionId,
                     question: question,
-                    agentCode: selected.agentCode,
-                    provider: selected.code,
+                    agent: selected.agent,
+                    provider: selected.provider,
                     language: language,
                     attachments: turnAttachments
                 )

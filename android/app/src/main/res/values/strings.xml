@@ -14,6 +14,8 @@
     <!-- Email login -->
     <string name="email_title">Sign in</string>
     <string name="email_subtitle">We\'ll email you a one-time code.</string>
+    <string name="login_continue">Sign in to continue</string>
+    <string name="verification_code">Verification code</string>
     <string name="email_label">Email</string>
     <string name="email_required">Email is required</string>
     <string name="email_send_code">Send code</string>
@@ -36,7 +38,17 @@
     <string name="verify_resend_code">Resend code</string>
 
     <!-- Chat -->
-    <string name="chat_message_hint">Message</string>
+    <string name="chat_message_hint">Ask anything</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_incognito_start">Turn on incognito</string>
+    <string name="chat_incognito_stop">Turn off incognito</string>
+    <string name="chat_incognito_mode">Incognito</string>
+    <string name="chat_incognito_heading">You\'re incognito</string>
+    <string name="chat_incognito_note">Incognito chats aren\'t saved or added to memory.</string>
+    <string name="chat_menu_title">Menu</string>
+    <string name="chat_new_chat">New chat</string>
+    <string name="chat_account">Account</string>
+    <string name="chat_add_account">Add account</string>
     <string name="chat_history_cd">History</string>
     <string name="chat_select_model">Select model</string>
     <string name="chat_currently_for">Currently for</string>
@@ -52,6 +64,27 @@
     <string name="share_access_view">View</string>
     <string name="share_access_edit">Edit</string>
     <string name="share_save">Save</string>
+
+    <!-- Connected devices (vendor account management) -->
+    <string name="chat_vendors">Connected devices</string>
+    <string name="chat_vendors_subtitle">Connect or disconnect a device or service.</string>
+    <string name="chat_vendor_devices">Devices</string>
+    <string name="chat_vendor_platforms">Platforms</string>
+    <string name="chat_vendor_connect">Connect</string>
+    <string name="chat_vendor_disconnect">Disconnect</string>
+    <string name="chat_vendor_pending">Pending</string>
+    <string name="chat_vendor_unlink_confirm">Disconnect %1$s?</string>
+
+    <!-- Connect EHR (SMART on FHIR) -->
+    <string name="chat_ehr">Connect EHR</string>
+    <string name="chat_ehr_title">Connect my EHR</string>
+    <string name="chat_ehr_subtitle">Search for a hospital or clinic, then sign in to share your records (SMART on FHIR).</string>
+    <string name="chat_ehr_manual_label">Or enter a FHIR base URL</string>
+    <string name="chat_ehr_search_hint">Search providers (e.g. hospital name)</string>
+    <string name="chat_ehr_search">Search</string>
+    <string name="chat_ehr_connect">Connect</string>
+    <string name="chat_ehr_sync_now">Sync now</string>
+    <string name="chat_ehr_sync_done">Imported %1$d observations.</string>
 
     <!-- Care circle -->
     <string name="chat_care_circle">Care circle</string>
@@ -82,7 +115,7 @@
     <string name="chat_no_providers">No providers loaded</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">On-device private AI</string>
-    <string name="chat_ondevice_desc">Gemma 4 runs entirely on your device. Your messages never leave the phone and work offline. This needs a one-time download of about 2.5 GB and a device with enough memory.</string>
+    <string name="chat_ondevice_desc">Gemma 4 runs entirely on your device. Your messages never leave the phone and work offline. It needs a one-time download of about 2.5 GB of storage, and about 3 GB of free RAM to run.</string>
     <string name="chat_ondevice_download">Download model</string>
     <string name="chat_ondevice_downloading">Downloading…</string>
     <string name="chat_ondevice_continue_background">Continue</string>
@@ -134,7 +167,7 @@
     <string name="chat_sign_out_confirm_title">Sign out?</string>
     <string name="chat_sign_out_confirm_message">You\'ll need to sign in again.</string>
     <string name="chat_empty_title">Start a conversation</string>
-    <string name="chat_empty_subtitle">Pick a model above, then send your first message.</string>
+    <string name="chat_empty_subtitle">Pick a model below, then send your first message.</string>
 
     <!-- History -->
     <string name="history_title">History</string>

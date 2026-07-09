@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -48,7 +49,6 @@ import ai.thetahealth.mirobody.data.circle.dto.Circle
 import ai.thetahealth.mirobody.data.circle.dto.CircleInvite
 import ai.thetahealth.mirobody.data.circle.dto.CircleMember
 import ai.thetahealth.mirobody.ui.LocalAppContainer
-import ai.thetahealth.mirobody.ui.ProvideLocale
 
 private const val ROLE_OWNER = 2
 private const val ROLE_MAINTAINER = 1
@@ -64,7 +64,6 @@ private const val ACCESS_EDIT = 2
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CareCircleDialog(
-    currentLanguage: String,
     onDismiss: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -80,7 +79,6 @@ fun CareCircleDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        ProvideLocale(currentLanguage) {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Header
@@ -133,7 +131,6 @@ fun CareCircleDialog(
                     }
                 }
             }
-        }
     }
 }
 
@@ -336,6 +333,7 @@ private fun InviteIntoRow(onInvite: (String) -> Unit) {
                 val e = email.trim()
                 if (e.isNotEmpty()) { onInvite(e); email = "" }
             },
+            modifier = Modifier.height(56.dp),   // match the text field's height
         ) { Text(stringResource(R.string.circle_invite)) }
     }
 }
@@ -394,6 +392,7 @@ private fun CreateCircleRow(onCreate: (String) -> Unit) {
                 val n = name.trim()
                 if (n.isNotEmpty()) { onCreate(n); name = "" }
             },
+            modifier = Modifier.height(56.dp),   // match the text field's height
         ) { Text(stringResource(R.string.circle_create)) }
     }
 }

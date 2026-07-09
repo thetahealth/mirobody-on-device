@@ -31,7 +31,7 @@
 "verify_resending" = "재전송 중…";
 "verify_resend_code" = "코드 다시 보내기";
 
-"chat_message_hint" = "메시지";
+"chat_message_hint" = "무엇이든 물어보세요";
 "chat_history_cd" = "기록";
 "chat_select_model" = "모델 선택";
 "chat_no_providers" = "사용 가능한 모델이 없습니다";
@@ -51,7 +51,7 @@
 "chat_sign_out_confirm_title" = "로그아웃하시겠습니까?";
 "chat_sign_out_confirm_message" = "다음에 다시 로그인해야 합니다.";
 "chat_empty_title" = "대화 시작하기";
-"chat_empty_subtitle" = "위에서 모델을 선택한 후 첫 메시지를 보내세요.";
+"chat_empty_subtitle" = "아래에서 모델을 선택한 후 첫 메시지를 보내세요.";
 
 "history_title" = "기록";
 "history_empty" = "기록이 없습니다.";

@@ -18,6 +18,9 @@ data class ChatStreamRequest(
     // Opaque care-circle member handle for the "currently for" subject (whose
     // health the AI's family_health tool should default to). Null/omitted = self.
     val subject: String? = null,
+    // Privacy mode: when true the server persists nothing for this turn and
+    // disables memory (src/chat/params.cpp). Omitted when false (encodeDefaults off).
+    val incognito: Boolean = false,
 )
 
 @Serializable

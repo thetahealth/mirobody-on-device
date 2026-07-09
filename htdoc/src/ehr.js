@@ -70,9 +70,7 @@ function showEhrModal() {
         display: "flex", flexDirection: "column", gap: "12px", overflow: "hidden"
     });
 
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), t("ehrConnectTitle")));
+    card.appendChild(widgets.modalHeader(t("ehrConnectTitle"), function () { dismiss(); }));
     card.appendChild(ui.setText(ui.dom("div", {
         fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.4"
     }), t("ehrConnectSubtitle")));
@@ -163,13 +161,11 @@ function showEhrModal() {
     });
 
     var syncNow = button(t("ehrSyncNow"), false, { click: function () { dismiss(); syncEhr(); } });
-    var cancel = button(t("cancel"), false, { click: dismiss });
     card.appendChild(ui.dom("div", {
         height: "1px", background: color.outlineVar, opacity: "0.6", margin: "4px 0"
     }));
-    var actions = ui.dom("div", { display: "flex", justifyContent: "space-between", gap: "8px" });
+    var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end", gap: "8px" });
     actions.appendChild(syncNow);
-    actions.appendChild(cancel);
     card.appendChild(actions);
 
     backdrop.addEventListener("click", function (evt) {

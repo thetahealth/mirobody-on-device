@@ -23,7 +23,7 @@
     <string name="verify_resending">Reenviando…</string>
     <string name="verify_resend_code">Reenviar código</string>
 
-    <string name="chat_message_hint">Mensaje</string>
+    <string name="chat_message_hint">Pregunta lo que quieras</string>
     <string name="chat_history_cd">Historial</string>
     <string name="chat_select_model">Elegir modelo</string>
     <string name="chat_currently_for">Actualmente para</string>
@@ -67,6 +67,23 @@
     <string name="circle_delete_circle">Eliminar círculo</string>
     <string name="circle_delete_confirm">¿Eliminar «%1$s»? Los miembros perderán el acceso a todo lo compartido solo a través de este círculo.</string>
     <string name="chat_no_providers">No hay modelos disponibles</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">IA privada en el dispositivo</string>
+    <string name="chat_ondevice_desc">Gemma 4 se ejecuta completamente en tu dispositivo. Tus mensajes nunca salen del teléfono y funcionan sin conexión. Requiere una descarga única de unos 2,5 GB y un dispositivo con suficiente memoria.</string>
+    <string name="chat_ondevice_download">Descargar modelo</string>
+    <string name="chat_ondevice_downloading">Descargando…</string>
+    <string name="chat_ondevice_continue_background">Continuar</string>
+    <string name="chat_ondevice_ready">Listo — funciona sin conexión</string>
+    <string name="chat_ondevice_absent">Descarga necesaria (~2,5 GB)</string>
+    <string name="chat_ondevice_failed">Error de descarga</string>
+    <string name="chat_ondevice_retry">Reintentar descarga</string>
+    <string name="chat_ondevice_delete">Eliminar modelo</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">Pulir borrador en el dispositivo</string>
+    <string name="chat_polish_rephrase">Reformular</string>
+    <string name="chat_polish_shorten">Hacerlo más corto</string>
+    <string name="chat_polish_professional">Más profesional</string>
+    <string name="chat_polish_friendly">Más amable</string>
     <string name="chat_language">Idioma</string>
     <string name="chat_font_size">Tamaño de fuente</string>
     <string name="chat_font_size_smaller">Muy pequeño</string>
@@ -91,7 +108,7 @@
     <string name="chat_sign_out_confirm_title">¿Cerrar sesión?</string>
     <string name="chat_sign_out_confirm_message">Tendrás que iniciar sesión de nuevo.</string>
     <string name="chat_empty_title">Iniciar una conversación</string>
-    <string name="chat_empty_subtitle">Elige un modelo arriba y envía tu primer mensaje.</string>
+    <string name="chat_empty_subtitle">Elige un modelo abajo y envía tu primer mensaje.</string>
 
     <string name="history_title">Historial</string>
     <string name="history_empty">Sin historial todavía.</string>
@@ -137,4 +154,51 @@
     <string name="chat_image_saved">Guardado en la galería</string>
     <string name="chat_image_save_failed">Error al guardar</string>
     <string name="chat_image_save_permission_denied">Permiso de almacenamiento denegado</string>
+    <!-- Newer keys previously missing in this locale (fell back to English). -->
+    <string name="login_continue">Inicia sesión para continuar</string>
+    <string name="verification_code">Código de verificación</string>
+    <string name="chat_send">Enviar</string>
+    <string name="chat_menu_title">Menú</string>
+    <string name="chat_new_chat">Nuevo chat</string>
+    <string name="chat_account">Cuenta</string>
+    <string name="chat_add_account">Añadir cuenta</string>
+    <string name="chat_incognito_start">Activar modo incógnito</string>
+    <string name="chat_incognito_stop">Desactivar modo incógnito</string>
+    <string name="chat_incognito_mode">Incógnito</string>
+    <string name="chat_incognito_heading">Estás en modo incógnito</string>
+    <string name="chat_incognito_note">Los chats en incógnito no se guardan ni se añaden a la memoria.</string>
+    <string name="chat_vendors">Dispositivos conectados</string>
+    <string name="chat_vendors_subtitle">Conecta o desconecta un dispositivo o servicio.</string>
+    <string name="chat_vendor_devices">Dispositivos</string>
+    <string name="chat_vendor_platforms">Plataformas</string>
+    <string name="chat_vendor_connect">Conectar</string>
+    <string name="chat_vendor_disconnect">Desconectar</string>
+    <string name="chat_vendor_pending">Pendiente</string>
+    <string name="chat_vendor_unlink_confirm">¿Desconectar %1$s?</string>
+    <string name="chat_ehr">Conectar HCE</string>
+    <string name="chat_ehr_title">Conectar mi HCE</string>
+    <string name="chat_ehr_subtitle">Busca un hospital o clínica y luego inicia sesión para compartir tus registros (SMART on FHIR).</string>
+    <string name="chat_ehr_manual_label">O introduce una URL base de FHIR</string>
+    <string name="chat_ehr_search_hint">Buscar centros (p. ej. nombre del hospital)</string>
+    <string name="chat_ehr_search">Buscar</string>
+    <string name="chat_ehr_connect">Conectar</string>
+    <string name="chat_ehr_sync_now">Sincronizar ahora</string>
+    <string name="chat_ehr_sync_done">Se importaron %1$d observaciones.</string>
+    <string name="auth_apple_failed">Error al iniciar sesión con Apple</string>
+    <string name="auth_wechat_failed">Error al iniciar sesión con WeChat</string>
+    <string name="chat_bluetooth">Dispositivos Bluetooth</string>
+    <string name="chat_bluetooth_hdp">Bluetooth HDP (heredado)</string>
+    <string name="ble_title">Dispositivos de salud Bluetooth</string>
+    <string name="ble_intro">Conecta un sensor Bluetooth LE estándar (banda de frecuencia cardíaca, tensiómetro, termómetro). Las lecturas se guardan en tu historial de salud. Los relojes y anillos usan protocolos propios: conéctalos en «Dispositivos conectados».</string>
+    <string name="ble_scan">Buscar</string>
+    <string name="ble_stop">Detener</string>
+    <string name="ble_no_devices">Aún no hay dispositivos: toca Buscar</string>
+    <string name="ble_supported_tag">salud</string>
+    <string name="ble_disconnect">Desconectar</string>
+    <string name="ble_saved">%1$d guardadas, %2$d fallidas</string>
+    <string name="hdp_title">Dispositivos HDP heredados</string>
+    <string name="hdp_intro">Conecta dispositivos médicos Bluetooth clásico IEEE 11073 (termómetros, básculas y oxímetros antiguos). Empareja el dispositivo en los ajustes de Android y luego empieza a escuchar; las lecturas se guardan en tu historial de salud.</string>
+    <string name="hdp_unsupported">HDP solo está disponible en Android 9 y anteriores. En dispositivos más nuevos usa Bluetooth (BLE).</string>
+    <string name="hdp_start">Empezar a escuchar</string>
+    <string name="hdp_stop">Detener</string>
 </resources>

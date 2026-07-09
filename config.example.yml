@@ -250,6 +250,13 @@ LOCAL_STORAGE_SECRET:     'REPLACE_THIS_VALUE_IN_PRODUCTION'  # HMAC key (option
 # SKIPPED unless the ENV var is set to a NON-managed value (anything other than
 # test / gray / prod; note an UNSET ENV also skips). For a fresh local DB run
 # e.g. `ENV=local`. See src/database/README.md for the full backend guide.
+#
+# Whether to run that DDL init at all. true (the default) applies the schema on
+# every boot (idempotent — IF NOT EXISTS, safe to repeat). Set it to false to
+# skip DDL entirely, for a deployment whose schema is created and migrated out
+# of band and whose serving DB user should not issue DDL. This is an additional
+# gate on top of the ENV check above — both must permit init for it to run.
+# DB_INIT_SCHEMA: false
 
 
 # The keys below configure the default (unsuffixed) PostgreSQL instance,
@@ -327,13 +334,14 @@ PG_MAX_CONNECTION: 20
 #-----------------------------------------------------------------------------
 # User login.
 
-# Predefined email addresses and verification codes for testing/demo
-# purposes. Uncomment the block to enable instant demo login: each entry
-# maps an email to the verification code that acts as its password.
-EMAIL_PREDEFINE_CODES:
-  demo1@mirobody.ai: '777777'
-  demo2@mirobody.ai: '777777'
-  demo3@mirobody.ai: '777777'
+# Demo login: each entry maps an email to a verification code that acts as its
+# password. Commented out by default on purpose -- these codes are well-known, so
+# enabling it lets anyone who can reach the server sign in. Uncomment only for
+# local development, and change the codes if you ever expose it.
+# EMAIL_PREDEFINE_CODES:
+#   demo1@mirobody.ai: '777777'
+#   demo2@mirobody.ai: '777777'
+#   demo3@mirobody.ai: '777777'
 
 # Predefined verification codes by *domain* (the part after '@'), for when a
 # whole example.com domain should share one code instead of listing every address.
@@ -594,7 +602,7 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 #     DEXCOM_BASE_URL overrides this mapping.
 # DEXCOM_CLIENT_ID: ''
 # DEXCOM_CLIENT_SECRET: ''
-# DEXCOM_ENVIRONMENT: 'sandbox'
+DEXCOM_ENVIRONMENT: 'sandbox'
 
 
 # -- Chat rate limit --------------------------------------------------------
@@ -835,6 +843,15 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 
 #-----------------------------------------------------------------------------
 # LLM Configuration.
+
+# Default agent. Its providers are advertised by /api/providers WITHOUT the
+# "<agent>/" prefix -- so the model picker shows just the model name (e.g.
+# "gemini-2.5-flash", not "Baseline/gemini-2.5-flash") -- and any chat request
+# that names no agent (or names a model instead of an agent) is routed to it.
+# Empty or an unknown name falls back to the first registered public agent, so
+# the single built-in "Baseline" agent is the default either way; set this only
+# if you add more agents and want a specific one to be the unprefixed default.
+DEFAULT_AGENT: 'Baseline'
 
 
 # >>> [RECOMMENDED for getting started] <<<

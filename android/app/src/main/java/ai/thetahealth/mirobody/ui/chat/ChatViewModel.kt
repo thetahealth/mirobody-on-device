@@ -92,6 +92,9 @@ data class ChatUiState(
     val polishAvailable: Boolean = false,
     // A rewrite is in flight (composer "Polish" shows a spinner, send is blocked).
     val polishing: Boolean = false,
+    // Privacy mode: entering swaps the session for a fresh ephemeral one; while on,
+    // turns aren't mirrored locally and each request carries incognito:true.
+    val incognito: Boolean = false,
 )
 
 class ChatViewModel(
@@ -108,6 +111,9 @@ class ChatViewModel(
     val state: StateFlow<ChatUiState> = _state.asStateFlow()
 
     private var streamJob: Job? = null
+
+    // Session stashed when entering incognito, restored on exit (messages + thread id).
+    private var incognitoSaved: Pair<List<ChatMessage>, String>? = null
 
     init {
         loadProviders()
@@ -174,7 +180,7 @@ class ChatViewModel(
                     // Always append the on-device provider so it's selectable alongside
                     // the server's providers.
                     val list = remote + ProviderInfo.onDevice
-                    val restored = list.firstOrNull { it.name == savedName }
+                    val restored = list.firstOrNull { it.key == savedName }
                     _state.update {
                         it.copy(
                             providers = list,
@@ -191,7 +197,7 @@ class ChatViewModel(
                     _state.update {
                         it.copy(
                             providers = list,
-                            selected = it.selected ?: list.firstOrNull { p -> p.name == savedName } ?: list.first(),
+                            selected = it.selected ?: list.firstOrNull { p -> p.key == savedName } ?: list.first(),
                             error = t.message,
                         )
                     }
@@ -218,6 +224,76 @@ class ChatViewModel(
         _state.update { it.copy(subject = member) }
     }
 
+    /**
+     * Toggle privacy mode, swapping the whole session (mirrors the web client).
+     * Entering stashes the current thread and starts a fresh ephemeral one; leaving
+     * restores it. Inert while a reply is streaming.
+     */
+    fun toggleIncognito() {
+        val s = _state.value
+        if (s.sending) return
+        streamJob?.cancel()
+        if (!s.incognito) {
+            incognitoSaved = s.messages to s.conversationId
+            _state.update { it.copy(messages = emptyList(), conversationId = "", incognito = true) }
+        } else {
+            val (savedMessages, savedConv) = incognitoSaved ?: (emptyList<ChatMessage>() to "")
+            incognitoSaved = null
+            _state.update { it.copy(messages = savedMessages, conversationId = savedConv, incognito = false) }
+        }
+    }
+
+    /**
+     * Open a saved conversation from history into the chat view and continue it:
+     * adopt its session id as the thread key so the next turn appends to it. Leaves
+     * incognito (this is a real, persisted thread) and mirrors it locally if owned.
+     */
+    fun openConversation(sessionId: String) {
+        if (_state.value.sending) return
+        streamJob?.cancel()
+        incognitoSaved = null
+        viewModelScope.launch {
+            runCatching { repo.conversation(sessionId) }
+                .onSuccess { detail ->
+                    val msgs = detail.messages
+                        .filter { it.role == "user" || it.role == "assistant" }
+                        .mapIndexed { i, m ->
+                            ChatMessage(
+                                id = "h-$sessionId-$i",
+                                role = if (m.role == "assistant") Role.Assistant else Role.User,
+                                text = m.content,
+                                provider = if (m.role == "assistant") {
+                                    if (m.agent.isBlank()) m.provider else "${m.agent}/${m.provider}"
+                                } else "",
+                            )
+                        }
+                    _state.update {
+                        it.copy(
+                            messages = msgs,
+                            sessionId = sessionId,
+                            conversationId = detail.id.ifBlank { sessionId },
+                            incognito = false,
+                            input = "",
+                        )
+                    }
+                    if (detail.owned) history.save(msgs)
+                }
+                .onFailure { errorBus.emit(it) }
+        }
+    }
+
+    /**
+     * Clear the current thread and start a new one (the drawer's "New chat"). Also
+     * clears the local mirror unless incognito (nothing is stored there anyway).
+     */
+    fun newChat() {
+        if (_state.value.sending) return
+        streamJob?.cancel()
+        val wasIncognito = _state.value.incognito
+        _state.update { it.copy(messages = emptyList(), conversationId = "", input = "") }
+        if (!wasIncognito) viewModelScope.launch { history.clear() }
+    }
+
     fun addAttachment(attachment: ChatAttachment) {
         _state.update { it.copy(attachments = it.attachments + attachment) }
     }
@@ -236,7 +312,7 @@ class ChatViewModel(
     fun onProviderSelected(provider: ProviderInfo) {
         _state.update { it.copy(selected = provider) }
         viewModelScope.launch {
-            settings.setSelectedProviderName(provider.name)
+            settings.setSelectedProviderName(provider.key)
         }
     }
 
@@ -258,7 +334,7 @@ class ChatViewModel(
             id = "a-${System.currentTimeMillis()}",
             role = Role.Assistant,
             streaming = true,
-            provider = selected.name,
+            provider = selected.label,
         )
         _state.update {
             it.copy(
@@ -271,7 +347,8 @@ class ChatViewModel(
         }
         // Save now so the question survives an app kill mid-stream; the in-flight
         // assistant placeholder is filtered out by the store until it has content.
-        persist()
+        // Incognito turns are never mirrored locally.
+        if (!s.incognito) persist()
 
         streamJob?.cancel()
         streamJob = viewModelScope.launch {
@@ -287,11 +364,12 @@ class ChatViewModel(
                     repo.chat(
                         sessionId = s.sessionId,
                         question = question,
-                        agentCode = selected.agentCode,
-                        provider = selected.code,
+                        agent = selected.agent,
+                        provider = selected.provider,
                         language = s.language,
                         subject = s.subject,
                         attachments = attachments,
+                        incognito = s.incognito,
                     )
                 }
                 flow.collect { event -> applyEvent(assistantMsg.id, event) }
@@ -300,7 +378,7 @@ class ChatViewModel(
                 updateMessage(assistantMsg.id) { it.copy(streaming = false, error = t.message) }
             }
             _state.update { it.copy(sending = false) }
-            persist()   // settled turn (reply / error) is now safe to store
+            if (!s.incognito) persist()   // settled turn (reply / error) is now safe to store
         }
     }
 

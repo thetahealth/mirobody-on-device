@@ -27,9 +27,10 @@
 # ------------------------------------------------------------------------------
 # Stage 1: builder
 # ------------------------------------------------------------------------------
-# Ubuntu 24.04 LTS ships libwebsockets 4.3 (the code needs >= 4.1 for
-# LWS_PROTOCOL_LIST_TERM) plus modern hiredis / yaml-cpp / libpq. Debian
-# bookworm's libwebsockets is too old and fails to compile websocket_client.cpp.
+# Ubuntu 24.04 LTS provides modern hiredis / yaml-cpp / libpq / image codecs.
+# libwebsockets is built from source below instead of the apt package: Ubuntu's
+# libwebsockets-dev is compiled WITHOUT LWS_WITH_HTTP_STREAM_COMPRESSION, so it
+# would serve every response uncompressed (verified: lws_config.h #undef's it).
 FROM ubuntu:24.04 AS builder
 
 # SQL backend linked into the binary. POSTGRESQL is the CMake default for server
@@ -50,7 +51,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         git \
         unzip \
-        libwebsockets-dev \
         libcurl4-openssl-dev \
         libssl-dev \
         zlib1g-dev \
@@ -117,6 +117,33 @@ RUN git clone --depth 1 --branch "v${XLNT_VERSION}" --recurse-submodules \
     && cmake --install /tmp/xlnt/build \
     && ldconfig \
     && rm -rf /tmp/xlnt
+
+# libwebsockets from source, WITH http stream compression. Ubuntu's
+# libwebsockets-dev ships with LWS_WITH_HTTP_STREAM_COMPRESSION #undef'd, so it
+# would gzip/deflate NOTHING -- every static asset (assets/index.js is ~520 KB)
+# and API response would go out uncompressed. Building it here with the flag (and
+# LWS_WITH_ZLIB, satisfied by zlib1g-dev above) makes the server deflate responses
+# in prod, matching the dev (vcpkg) build which has it on. Installed to /usr/local
+# so find_package(libwebsockets CONFIG) resolves this build and links its
+# `websockets_shared` target (see CMakeLists.txt); the .so flows through the ldd
+# step into the runtime image. Pinned to a 4.3.x tag: matches the API the code is
+# written to (needs >= 4.1 for LWS_PROTOCOL_LIST_TERM; 4.0 fails to compile
+# websocket_client). Must be >= 4.3.4: CVE-2025-1866 is an out-of-bounds pointer
+# bug in the stream-compression path (the flag we enable here), fixed in 4.3.4;
+# v4.3.10 is the current 4.3 patch tag, well past it. (The bug is Win32-only, so
+# this Linux image wouldn't hit it regardless, but pin a patched tag anyway.)
+ARG LWS_REF=v4.3.10
+RUN git clone --depth 1 --branch "${LWS_REF}" \
+        https://github.com/warmcat/libwebsockets.git /tmp/lws \
+    && cmake -S /tmp/lws -B /tmp/lws/build -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLWS_WITH_HTTP_STREAM_COMPRESSION=ON \
+        -DLWS_WITH_ZLIB=ON \
+        -DLWS_WITHOUT_TESTAPPS=ON \
+    && cmake --build /tmp/lws/build --parallel "$(nproc)" \
+    && cmake --install /tmp/lws/build \
+    && ldconfig \
+    && rm -rf /tmp/lws
 
 # Optional document formats are OFF by default to keep this server image lean.
 # To enable them, add the deps and the matching CMake flags below:

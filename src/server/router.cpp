@@ -109,6 +109,12 @@ struct Router::Impl {
     // Empty disables static serving.
     std::vector<std::pair<std::string, std::string>> http_roots;
 
+    // Extra headers emitted only for HTML-document responses (a CRLF-terminated
+    // "Name: value\r\n" buffer). The document-scoped security headers (CSP,
+    // X-Frame-Options, Referrer-Policy, Cross-Origin-Opener-Policy) live here
+    // rather than on every response -- see set_document_headers / serve_static_file.
+    std::string document_headers;
+
     // LocalStorage HTTP mount (LOCAL_STORAGE_*). When storage_mount and
     // storage_dir are set, GETs whose path is under storage_mount are served
     // from storage_dir -- which, unlike http_root, may live OUTSIDE the web root
@@ -624,10 +630,19 @@ bool serve_static_file(lws* wsi, Router::Impl* impl, const std::string& url_path
     // the browser to revalidate rather than serve a stale cached copy after a
     // rebuild. lws still sends Last-Modified and answers If-Modified-Since with
     // a 304, so an unchanged file is a cheap revalidation, not a full refetch.
-    static const char kCacheHeader[] = "Cache-Control: no-cache\x0d\x0a";
+    // For the HTML document only, append the document-scoped security headers
+    // (CSP etc.): they govern the page context and are inert on other assets, so
+    // emitting them per-response would just waste bandwidth. lws copies the
+    // buffer, so a local combined string is fine.
+    std::string other_headers = "Cache-Control: no-cache\x0d\x0a";
+    const bool is_html = mime && std::strncmp(mime, "text/html", 9) == 0;
+    if (is_html && !impl->document_headers.empty()) {
+        other_headers += impl->document_headers;
+    }
     int r = lws_serve_http_file(wsi, path.c_str(),
                                 mime ? mime : "application/octet-stream",
-                                kCacheHeader, sizeof(kCacheHeader) - 1);
+                                other_headers.c_str(),
+                                static_cast<int>(other_headers.size()));
     // >0: file fully sent and transaction completed -> close. ==0: transfer
     // started, lws drives the rest via FILE_COMPLETION -> leave the wsi alone.
     // <0: error -> close.
@@ -1483,6 +1498,10 @@ void Router::set_file_mount(std::string url_prefix, storage::Storage* storage, s
 
 void Router::set_uri_prefix(std::string prefix) {
     impl_->uri_prefix = std::move(prefix);
+}
+
+void Router::set_document_headers(std::string block) {
+    impl_->document_headers = std::move(block);
 }
 
 void Router::apply_to(lws_context_creation_info& info) {

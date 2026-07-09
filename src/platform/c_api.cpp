@@ -309,8 +309,9 @@ extern "C" int mirobody_chat(
     }
 
     // Split the "Agent/model" pair (as returned by mirobody_get_providers) into
-    // the agent name and the model. No '/' => the whole token is the agent name;
-    // an empty agent => the first public agent; an empty model => its default.
+    // the agent name and the model. No '/' => the whole token is one field (an
+    // agent name, or -- with the prefix-less list -- a bare model). resolve_agent
+    // below sorts that out.
     const std::string pair = c_to_std(provider);
     std::string agent_name, model;
     const std::string::size_type slash = pair.find('/');
@@ -320,19 +321,21 @@ extern "C" int mirobody_chat(
         agent_name = pair.substr(0, slash);
         model      = pair.substr(slash + 1);
     }
-    if (agent_name.empty()) {
-        agent_name = mirobody::chat::agent_registry().first_name();
-    }
-    if (agent_name.empty()) {
-        mirobody::platform::log_error("mirobody_chat: no agents registered");
-        return -3;
-    }
 
     mirobody::chat::AgentRequest req;
     req.question = msg;
     req.messages.push_back(mirobody::llm::ChatMessage{"user", msg, {}});
     req.provider = model;
     req.user_id  = static_cast<std::int64_t>(user_id);
+
+    // A token naming no agent is a bare provider under the default agent (the
+    // prefix-less list); an empty token likewise defaults. resolve_agent carries
+    // the bare token into req.provider when no model was split out.
+    agent_name = mirobody::chat::agent_registry().resolve_agent(agent_name, req.provider);
+    if (agent_name.empty()) {
+        mirobody::platform::log_error("mirobody_chat: no agents registered");
+        return -3;
+    }
 
     std::unique_ptr<mirobody::chat::Agent> instance =
         mirobody::chat::agent_registry().create(agent_name, req);

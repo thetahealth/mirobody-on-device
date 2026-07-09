@@ -28,14 +28,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
 import ai.thetahealth.mirobody.ui.LocalAppContainer
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BaseUrlDialog(
-    currentLanguage: String,
     onDismiss: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -48,94 +46,84 @@ fun BaseUrlDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            ProvideLocale(currentLanguage) {
-                Text(stringResource(R.string.baseurl_title))
-            }
-        },
+        title = { Text(stringResource(R.string.baseurl_title)) },
         text = {
-            ProvideLocale(currentLanguage) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.baseurl_subtitle),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Column {
+                Text(
+                    text = stringResource(R.string.baseurl_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                ExposedDropdownMenuBox(
+                    expanded = presetsExpanded,
+                    onExpandedChange = { presetsExpanded = it },
+                ) {
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = {
+                            input = it
+                            error = null
+                            presetsExpanded = false
+                        },
+                        placeholder = { Text("http://10.0.2.2:18080") },
+                        singleLine = true,
+                        isError = error != null,
+                        supportingText = error?.let { { Text(it) } },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = presetsExpanded)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        ),
                     )
-                    Spacer(Modifier.height(12.dp))
-                    ExposedDropdownMenuBox(
+                    ExposedDropdownMenu(
                         expanded = presetsExpanded,
-                        onExpandedChange = { presetsExpanded = it },
+                        onDismissRequest = { presetsExpanded = false },
                     ) {
-                        OutlinedTextField(
-                            value = input,
-                            onValueChange = {
-                                input = it
-                                error = null
-                                presetsExpanded = false
-                            },
-                            placeholder = { Text("http://10.0.2.2:18080") },
-                            singleLine = true,
-                            isError = error != null,
-                            supportingText = error?.let { { Text(it) } },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = presetsExpanded)
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                            ),
-                        )
-                        ExposedDropdownMenu(
-                            expanded = presetsExpanded,
-                            onDismissRequest = { presetsExpanded = false },
-                        ) {
-                            BASE_URL_PRESETS.forEach { preset ->
-                                DropdownMenuItem(
-                                    text = { Text(preset) },
-                                    onClick = {
-                                        input = preset
-                                        error = null
-                                        presetsExpanded = false
-                                    },
-                                )
-                            }
+                        BASE_URL_PRESETS.forEach { preset ->
+                            DropdownMenuItem(
+                                text = { Text(preset) },
+                                onClick = {
+                                    input = preset
+                                    error = null
+                                    presetsExpanded = false
+                                },
+                            )
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.baseurl_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.baseurl_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = {
-                    val trimmed = input.trim().trimEnd('/')
-                    if (trimmed.toHttpUrlOrNull() == null) {
-                        error = invalidMsg
-                    } else {
-                        scope.launch {
-                            container.settings.setBaseUrl(trimmed)
-                            onDismiss()
-                        }
+            TextButton(onClick = {
+                val trimmed = input.trim().trimEnd('/')
+                if (trimmed.toHttpUrlOrNull() == null) {
+                    error = invalidMsg
+                } else {
+                    scope.launch {
+                        container.settings.setBaseUrl(trimmed)
+                        onDismiss()
                     }
-                }) {
-                    Text(stringResource(R.string.common_save))
                 }
+            }) {
+                Text(stringResource(R.string.common_save))
             }
         },
         dismissButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.common_cancel))
-                }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )

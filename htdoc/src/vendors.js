@@ -64,12 +64,25 @@ function monogram(id) {
     return ui.setText(el, nameOf(id).charAt(0).toUpperCase());
 }
 
-// Brand icon: the server-provided data-URI icon (same-origin, no third-party call),
-// falling back to the monogram when the bundle has no icon for this id or the data
-// URI fails to render.
+// Neutral placeholder holding the icon's slot while the icon bundle is still
+// loading, so the full list can render immediately and the row doesn't reflow
+// when the real icon lands.
+function iconPlaceholder() {
+    return ui.dom("span", {
+        width: "24px", height: "24px", borderRadius: "6px", flexShrink: "0",
+        background: color.surfaceLow, border: "1px solid " + color.outlineVar,
+        display: "inline-block"
+    });
+}
+
+// Brand icon: the server-provided data-URI icon (same-origin, no third-party call).
+// While the bundle is still loading (ICONS null) a neutral placeholder holds the
+// slot; once loaded, falls back to the monogram when the bundle has no icon for
+// this id or the data URI fails to render.
 function brandIcon(id) {
+    if (ICONS === null) { return iconPlaceholder(); }
     var mono = monogram(id);
-    var uri = ICONS && ICONS[id];
+    var uri = ICONS[id];
     if (!uri) { return mono; }
     var img = ui.dom("img", {
         width: "24px", height: "24px", borderRadius: "6px", flexShrink: "0",
@@ -107,12 +120,10 @@ function unlinkVendor(vendorId, displayName, onDone) {
             net.post("/vendors/" + encodeURIComponent(vendorId) + "/unlink", {}, function () {
                 if (typeof onDone === "function") { onDone(); }
                 else {
-                    modals.showConfirmModal(t("vendorUnlinkedTitle"), t("vendorUnlinkedMsg"),
-                        t("ehrOk"), false, function () {});
+                    modals.showAlertModal(t("vendorUnlinkedTitle"), t("vendorUnlinkedMsg"), t("ehrOk"));
                 }
             }, function (msg) {
-                modals.showConfirmModal(t("ehrErrorTitle"), msg || t("ehrErrorMsg"),
-                    t("ehrOk"), false, function () {});
+                modals.showAlertModal(t("ehrErrorTitle"), msg || t("ehrErrorMsg"), t("ehrOk"));
             });
         });
 }
@@ -127,11 +138,11 @@ function connectVendor(vendorId, displayName) {
             window.location.href = data.authorize_url;
         } else {
             var modals = require("./modals");
-            modals.showConfirmModal(t("vendorConnectTitle"), t("ehrErrorMsg"), t("ehrOk"), false, function () {});
+            modals.showAlertModal(t("vendorConnectTitle"), t("ehrErrorMsg"), t("ehrOk"));
         }
     }, function (msg) {
         var modals = require("./modals");
-        modals.showConfirmModal(t("vendorConnectTitle"), msg || t("ehrErrorMsg"), t("ehrOk"), false, function () {});
+        modals.showAlertModal(t("vendorConnectTitle"), msg || t("ehrErrorMsg"), t("ehrOk"));
     });
 }
 
@@ -146,24 +157,18 @@ function consumeVendorRedirect() {
     }
     var modals = require("./modals");
     if (status === "connected") {
-        modals.showConfirmModal(t("vendorConnectedTitle"), t("vendorConnectedMsg"),
-            t("ehrOk"), false, function () {});
+        modals.showAlertModal(t("vendorConnectedTitle"), t("vendorConnectedMsg"), t("ehrOk"));
     } else {
-        modals.showConfirmModal(t("ehrErrorTitle"), t("ehrErrorMsg"), t("ehrOk"), false, function () {});
+        modals.showAlertModal(t("ehrErrorTitle"), t("ehrErrorMsg"), t("ehrOk"));
     }
     return true;
 }
 
-// A small uppercase group header.
-function groupHeader(text) {
-    return ui.setText(ui.dom("div", {
-        fontSize: "0.75rem", fontWeight: "700", letterSpacing: "0.08em",
-        textTransform: "uppercase", color: color.onSurface, margin: "12px 0 4px"
-    }), text);
-}
-
-// One catalog row: icon + name (+ Pending badge), and Connect / Disconnect on the right.
-function vendorRow(id, link, reload) {
+// One catalog row: icon + name (+ Pending badge), and Connect / Disconnect on the
+// right. `known` is whether the connected state has loaded; until it has, the
+// action slot is left empty (the row height is reserved) so the full list can show
+// immediately without guessing Connect vs Disconnect.
+function vendorRow(id, link, reload, known) {
     var name = nameOf(id);
     var row = ui.dom("div", {
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -174,14 +179,17 @@ function vendorRow(id, link, reload) {
     left.appendChild(ui.setText(ui.dom("span", {
         fontSize: "0.9rem", color: color.onSurface, overflow: "hidden", textOverflow: "ellipsis"
     }), name));
-    if (link && !link.verified) {
+    if (known && link && !link.verified) {
         left.appendChild(ui.setText(ui.dom("span", {
             fontSize: "0.7rem", color: color.onSurfaceVar, border: "1px solid " + color.outlineVar,
             borderRadius: "6px", padding: "1px 6px", flexShrink: "0"
         }), t("vendorPending")));
     }
     row.appendChild(left);
-    if (link) {
+    if (!known) {
+        // Connected state not loaded yet — leave the action slot empty; the button
+        // appears once /vendors lands.
+    } else if (link) {
         row.appendChild(rowButton(t("vendorUnlink"), true, function () {
             unlinkVendor(id, name, reload);
         }));
@@ -193,42 +201,9 @@ function vendorRow(id, link, reload) {
     return row;
 }
 
-// Fetch GET /vendors, then render the full catalog grouped, marking connected ones.
-function loadList(listWrap, status) {
-    ui.clear(listWrap);
-    ui.setText(status, "");
-
-    function fetchVendors() {
-        net.get("/vendors", function (data) {
-            var connected = {};
-            var links = data || [];
-            for (var i = 0; i < links.length; i++) { connected[links[i].id] = links[i]; }
-            ui.clear(listWrap);
-            for (var g = 0; g < CATALOG.length; g++) {
-                listWrap.appendChild(groupHeader(t(CATALOG[g].labelKey)));
-                // Sort each group by display name so the list is scannable.
-                var ids = CATALOG[g].ids.slice().sort(function (a, b) {
-                    return nameOf(a).localeCompare(nameOf(b));
-                });
-                for (var j = 0; j < ids.length; j++) {
-                    listWrap.appendChild(vendorRow(ids[j], connected[ids[j]] || null,
-                        function () { loadList(listWrap, status); }));
-                }
-            }
-        }, function (msg) { ui.setText(status, msg || t("ehrErrorMsg")); });
-    }
-
-    // Load the icon bundle once (cached in ICONS), then the connected list. If the
-    // bundle fails, render anyway with monograms.
-    if (ICONS) {
-        fetchVendors();
-    } else {
-        net.get("/vendors/icons", function (icons) { ICONS = icons || {}; fetchVendors(); },
-                function () { ICONS = {}; fetchVendors(); });
-    }
-}
-
-// Modal: the full device / platform catalog with per-vendor Connect / Disconnect.
+// Modal: the device / platform catalog split into two tabs (Devices / Platforms),
+// with per-vendor Connect / Disconnect. Defaults to Devices — the consumer
+// wearables most users connect; the B2B platforms sit behind the second tab.
 function showVendorsModal() {
     var backdrop = ui.dom("div", {
         position: "fixed", inset: "0", background: "rgba(0, 0, 0, 0.4)",
@@ -242,31 +217,106 @@ function showVendorsModal() {
         display: "flex", flexDirection: "column", gap: "10px", overflow: "hidden"
     });
 
-    card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "1.05rem", fontWeight: "600", color: color.onSurface
-    }), t("vendorManageTitle")));
+    // Header: title + top-right close (X), shared across all dialogs.
+    card.appendChild(widgets.modalHeader(t("vendorManageTitle"), function () { dismiss(); }));
+
     card.appendChild(ui.setText(ui.dom("div", {
         fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.4"
     }), t("vendorManageSubtitle")));
 
+    // Active tab = index into CATALOG. The connected-links map is cached across
+    // tab switches (fetched once, refreshed only after a connect/disconnect), so
+    // flipping tabs just re-renders the visible group without another request.
+    var activeGroup = 0;
+    var connected   = null;   // id -> link; null until the first fetch lands
+
+    // Segmented Devices / Platforms control (selected tab in navy). One button
+    // per CATALOG group; the tabs mirror with `dir` since they're plain flex.
+    var tabBtns = [];
+    function styleTabs() {
+        for (var i = 0; i < tabBtns.length; i++) {
+            var on = (i === activeGroup);
+            tabBtns[i].style.background = on ? color.primary : "transparent";
+            tabBtns[i].style.color      = on ? color.onPrimary : color.onSurfaceVar;
+        }
+    }
+    var tabs = ui.dom("div", {
+        display: "flex", gap: "4px", padding: "3px",
+        background: color.surfaceLow, borderRadius: "10px",
+        border: "1px solid " + color.outlineVar
+    });
+    for (var g = 0; g < CATALOG.length; g++) {
+        (function (idx) {
+            var b = ui.dom("button", {
+                flex: "1 1 0", padding: "6px 10px", border: "none", borderRadius: "8px",
+                cursor: "pointer", font: "inherit", fontSize: "0.85rem", fontWeight: "600",
+                background: "transparent", color: color.onSurfaceVar
+            }, { type: "button" });
+            ui.setText(b, t(CATALOG[idx].labelKey));
+            b.addEventListener("click", function () {
+                if (activeGroup === idx) { return; }
+                activeGroup = idx;
+                styleTabs();
+                renderList();
+            });
+            tabBtns.push(b);
+            tabs.appendChild(b);
+        })(g);
+    }
+    card.appendChild(tabs);
+
+    // The list sizes to its content and only scrolls once it exceeds the cap, so
+    // the shorter tab (Devices) shows every row without a scrollbar when there's
+    // room, while the taller tab (Platforms) scrolls with the native scrollbar.
+    // The cap keeps the tall tab from ballooning the dialog; it scales down on
+    // short screens via the vh term.
     var listWrap = ui.dom("div", {
-        overflow: "auto", display: "flex", flexDirection: "column", gap: "6px", minHeight: "48px"
+        maxHeight: "min(60vh, 460px)",
+        overflow: "auto", display: "flex", flexDirection: "column", gap: "6px"
     });
     card.appendChild(listWrap);
 
     var status = ui.dom("div", { fontSize: "0.8rem", color: color.onSurfaceVar, minHeight: "1em" });
     card.appendChild(status);
 
+    // Render the active group's rows from the static catalog immediately, marking
+    // connected ones from the cached `connected` map. Renders the full list even
+    // before data lands: icon slots show placeholders (ICONS null) and the action
+    // buttons are withheld (connected null) until their fetches complete.
+    function renderList() {
+        ui.clear(listWrap);
+        var known = connected !== null;
+        var conn = connected || {};
+        var ids = CATALOG[activeGroup].ids.slice().sort(function (a, b) {
+            return nameOf(a).localeCompare(nameOf(b));
+        });
+        for (var j = 0; j < ids.length; j++) {
+            listWrap.appendChild(vendorRow(ids[j], conn[ids[j]] || null, refresh, known));
+        }
+    }
+
+    // Show the full catalog at once, then fill in the connected state and real
+    // icons as their fetches land (each re-renders on completion). Independent
+    // requests so a slow one doesn't hold back the list. Also the row reload after
+    // a connect/disconnect.
+    function refresh() {
+        ui.setText(status, "");
+        renderList();   // immediate: full list with placeholders
+        if (ICONS === null) {
+            net.get("/vendors/icons", function (icons) { ICONS = icons || {}; renderList(); },
+                    function () { ICONS = {}; renderList(); });
+        }
+        net.get("/vendors", function (data) {
+            connected = {};
+            var links = data || [];
+            for (var i = 0; i < links.length; i++) { connected[links[i].id] = links[i]; }
+            renderList();
+        }, function (msg) { ui.setText(status, msg || t("ehrErrorMsg")); });
+    }
+
     function dismiss() {
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     }
-
-    card.appendChild(ui.dom("div", {
-        height: "1px", background: color.outlineVar, opacity: "0.6", margin: "4px 0"
-    }));
-    var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end" });
-    actions.appendChild(button(t("close"), false, { click: dismiss }));
-    card.appendChild(actions);
 
     backdrop.addEventListener("click", function (evt) {
         if (evt.target === backdrop) { dismiss(); }
@@ -274,7 +324,8 @@ function showVendorsModal() {
     backdrop.appendChild(card);
     document.body.appendChild(backdrop);
 
-    loadList(listWrap, status);
+    styleTabs();
+    refresh();
 }
 
 exports.unlinkVendor = unlinkVendor;

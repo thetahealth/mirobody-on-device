@@ -13,16 +13,24 @@
 
 var net = require("./net");
 
-var DB_NAME     = "mirobody";
-var DB_VERSION  = 1;
-var STORE       = "kv";
-var CONV_PREFIX = "conversation:";
+var DB_NAME       = "mirobody";
+var DB_VERSION    = 1;
+var STORE         = "kv";
+var CONV_PREFIX   = "conversation:";
+var CONVID_PREFIX = "conversation-id:";
 
 // The IndexedDB key for the current user's conversation, or "" when nobody is
 // signed in (caller treats "" as "nothing to load / save / clear").
 function convKey() {
     var id = net.getUserId();
     return id ? CONV_PREFIX + id : "";
+}
+
+// Companion key holding the server thread id for that mirrored conversation, so a
+// reload continues the same thread instead of forking a new one.
+function convIdKey() {
+    var id = net.getUserId();
+    return id ? CONVID_PREFIX + id : "";
 }
 
 // Open (creating/upgrading) the database. Resolves with the IDBDatabase.
@@ -90,13 +98,36 @@ exports.saveMessages = function (messages) {
     }).catch(function () {});
 };
 
-// Drop the current user's stored conversation (e.g. on sign-out). Best-effort.
-// Must be called while the user is still signed in (before clearToken), since
-// the key is derived from the token.
-exports.clear = function () {
-    var key = convKey();
+// Load the stored server thread id for the mirrored conversation; "" when none.
+exports.loadConversationId = function () {
+    var key = convIdKey();
+    if (!key) { return Promise.resolve(""); }
+    return withStore("readonly", function (store) {
+        return store.get(key);
+    }).then(function (value) {
+        return (typeof value === "string") ? value : "";
+    }).catch(function () {
+        return "";
+    });
+};
+
+// Persist the server thread id alongside the mirrored messages. Best-effort.
+exports.saveConversationId = function (id) {
+    var key = convIdKey();
     if (!key) { return Promise.resolve(); }
     return withStore("readwrite", function (store) {
-        return store.delete(key);
+        return store.put(String(id || ""), key);
+    }).catch(function () {});
+};
+
+// Drop the current user's stored conversation + its thread id (e.g. on sign-out).
+// Best-effort. Must be called while the user is still signed in (before
+// clearToken), since the keys are derived from the token.
+exports.clear = function () {
+    var mk = convKey(), ik = convIdKey();
+    if (!mk && !ik) { return Promise.resolve(); }
+    return withStore("readwrite", function (store) {
+        if (mk) { store.delete(mk); }
+        if (ik) { store.delete(ik); }
     }).catch(function () {});
 };

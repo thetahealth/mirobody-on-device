@@ -37,7 +37,7 @@
 "verify_resend_code" = "שליחת קוד מחדש";
 
 /* Chat */
-"chat_message_hint" = "הודעה";
+"chat_message_hint" = "שאל כל דבר";
 "chat_history_cd" = "היסטוריה";
 "chat_select_model" = "בחר מודל";
 "chat_no_providers" = "לא נטענו ספקים";
@@ -57,7 +57,7 @@
 "chat_sign_out_confirm_title" = "להתנתק?";
 "chat_sign_out_confirm_message" = "יהיה עליך להתחבר שוב.";
 "chat_empty_title" = "התחל שיחה";
-"chat_empty_subtitle" = "בחר מודל למעלה ושלח את ההודעה הראשונה שלך.";
+"chat_empty_subtitle" = "בחר מודל למטה ושלח את ההודעה הראשונה שלך.";
 
 /* History */
 "history_title" = "היסטוריה";

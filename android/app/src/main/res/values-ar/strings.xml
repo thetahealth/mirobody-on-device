@@ -34,7 +34,7 @@
     <string name="verify_resend_code">إعادة إرسال الرمز</string>
 
     <!-- Chat -->
-    <string name="chat_message_hint">رسالة</string>
+    <string name="chat_message_hint">اسأل عن أي شيء</string>
     <string name="chat_history_cd">السجل</string>
     <string name="chat_select_model">اختر النموذج</string>
     <string name="chat_currently_for">حاليًا لـ</string>
@@ -78,6 +78,23 @@
     <string name="circle_delete_circle">حذف الدائرة</string>
     <string name="circle_delete_confirm">حذف ”%1$s“؟ سيفقد الأعضاء الوصول إلى كل ما تمت مشاركته عبر هذه الدائرة فقط.</string>
     <string name="chat_no_providers">لم يتم تحميل أي مزوّدين</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">ذكاء اصطناعي خاص على الجهاز</string>
+    <string name="chat_ondevice_desc">يعمل Gemma 4 بالكامل على جهازك. لا تغادر رسائلك الهاتف أبدًا وتعمل دون اتصال بالإنترنت. يتطلب ذلك تنزيلًا لمرة واحدة بحجم 2.5 غيغابايت تقريبًا وجهازًا يتوفر على ذاكرة كافية.</string>
+    <string name="chat_ondevice_download">تنزيل النموذج</string>
+    <string name="chat_ondevice_downloading">جارٍ التنزيل…</string>
+    <string name="chat_ondevice_continue_background">متابعة</string>
+    <string name="chat_ondevice_ready">جاهز — يعمل دون اتصال</string>
+    <string name="chat_ondevice_absent">التنزيل مطلوب (~2.5 غيغابايت)</string>
+    <string name="chat_ondevice_failed">فشل التنزيل</string>
+    <string name="chat_ondevice_retry">إعادة محاولة التنزيل</string>
+    <string name="chat_ondevice_delete">حذف النموذج</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">تحسين المسودة على الجهاز</string>
+    <string name="chat_polish_rephrase">إعادة الصياغة</string>
+    <string name="chat_polish_shorten">اجعلها أقصر</string>
+    <string name="chat_polish_professional">أكثر احترافية</string>
+    <string name="chat_polish_friendly">أكثر ودية</string>
     <string name="chat_language">اللغة</string>
     <string name="chat_font_size">حجم الخط</string>
     <string name="chat_font_size_smaller">أصغر</string>
@@ -102,7 +119,7 @@
     <string name="chat_sign_out_confirm_title">تسجيل الخروج؟</string>
     <string name="chat_sign_out_confirm_message">ستحتاج إلى تسجيل الدخول مرة أخرى.</string>
     <string name="chat_empty_title">ابدأ محادثة</string>
-    <string name="chat_empty_subtitle">اختر نموذجًا بالأعلى ثم أرسل رسالتك الأولى.</string>
+    <string name="chat_empty_subtitle">اختر نموذجًا بالأسفل ثم أرسل رسالتك الأولى.</string>
 
     <!-- History -->
     <string name="history_title">السجل</string>
@@ -145,4 +162,51 @@
     <string name="chat_image_saved">تم الحفظ في المعرض</string>
     <string name="chat_image_save_failed">فشل الحفظ</string>
     <string name="chat_image_save_permission_denied">تم رفض إذن التخزين</string>
+    <!-- Newer keys previously missing in this locale (fell back to English). -->
+    <string name="login_continue">سجّل الدخول للمتابعة</string>
+    <string name="verification_code">رمز التحقق</string>
+    <string name="chat_send">إرسال</string>
+    <string name="chat_menu_title">القائمة</string>
+    <string name="chat_new_chat">محادثة جديدة</string>
+    <string name="chat_account">الحساب</string>
+    <string name="chat_add_account">إضافة حساب</string>
+    <string name="chat_incognito_start">تفعيل الوضع المتخفّي</string>
+    <string name="chat_incognito_stop">إيقاف الوضع المتخفّي</string>
+    <string name="chat_incognito_mode">الوضع المتخفّي</string>
+    <string name="chat_incognito_heading">أنت في الوضع المتخفّي</string>
+    <string name="chat_incognito_note">لا يتم حفظ المحادثات المتخفّية أو إضافتها إلى الذاكرة.</string>
+    <string name="chat_vendors">الأجهزة المتصلة</string>
+    <string name="chat_vendors_subtitle">توصيل أو فصل جهاز أو خدمة.</string>
+    <string name="chat_vendor_devices">الأجهزة</string>
+    <string name="chat_vendor_platforms">المنصّات</string>
+    <string name="chat_vendor_connect">توصيل</string>
+    <string name="chat_vendor_disconnect">فصل</string>
+    <string name="chat_vendor_pending">قيد الانتظار</string>
+    <string name="chat_vendor_unlink_confirm">هل تريد فصل %1$s؟</string>
+    <string name="chat_ehr">توصيل السجل الصحي</string>
+    <string name="chat_ehr_title">توصيل سجلي الصحي</string>
+    <string name="chat_ehr_subtitle">ابحث عن مستشفى أو عيادة، ثم سجّل الدخول لمشاركة سجلاتك (SMART on FHIR).</string>
+    <string name="chat_ehr_manual_label">أو أدخل عنوان FHIR الأساسي</string>
+    <string name="chat_ehr_search_hint">ابحث عن مزوّدين (مثل اسم المستشفى)</string>
+    <string name="chat_ehr_search">بحث</string>
+    <string name="chat_ehr_connect">توصيل</string>
+    <string name="chat_ehr_sync_now">مزامنة الآن</string>
+    <string name="chat_ehr_sync_done">تم استيراد %1$d قياسًا.</string>
+    <string name="auth_apple_failed">فشل تسجيل الدخول عبر Apple</string>
+    <string name="auth_wechat_failed">فشل تسجيل الدخول عبر WeChat</string>
+    <string name="chat_bluetooth">أجهزة البلوتوث</string>
+    <string name="chat_bluetooth_hdp">‏Bluetooth HDP (قديم)</string>
+    <string name="ble_title">أجهزة صحية عبر البلوتوث</string>
+    <string name="ble_intro">وصّل مستشعر Bluetooth LE قياسيًا (حزام معدل ضربات القلب، كفة ضغط الدم، مقياس حرارة). تُحفظ القراءات في سجلك الصحي. تستخدم الساعات والخواتم بروتوكولات خاصة — وصّلها من «الأجهزة المتصلة».</string>
+    <string name="ble_scan">بحث</string>
+    <string name="ble_stop">إيقاف</string>
+    <string name="ble_no_devices">لا توجد أجهزة بعد — اضغط على بحث</string>
+    <string name="ble_supported_tag">صحة</string>
+    <string name="ble_disconnect">فصل</string>
+    <string name="ble_saved">تم حفظ %1$d، وفشل %2$d</string>
+    <string name="hdp_title">أجهزة HDP القديمة</string>
+    <string name="hdp_intro">وصّل أجهزة طبية تعمل بالبلوتوث الكلاسيكي وفق IEEE 11073 (موازين ومقاييس حرارة وأكسجة قديمة). اقرن الجهاز من إعدادات Android ثم ابدأ الاستماع؛ تُحفظ القراءات في سجلك الصحي.</string>
+    <string name="hdp_unsupported">‏HDP متاح فقط على Android 9 وما قبله. على الأجهزة الأحدث استخدم البلوتوث (BLE).</string>
+    <string name="hdp_start">بدء الاستماع</string>
+    <string name="hdp_stop">إيقاف</string>
 </resources>

@@ -1,0 +1,4 @@
+<resources>
+    <!-- On dark backgrounds the brand mark's upper glyph inverts to white. -->
+    <color name="brand_logo_mark">#FFFFFF</color>
+</resources>

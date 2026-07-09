@@ -426,9 +426,10 @@ function buildLogin() {
     card.appendChild(status);
 
     // The Android APK — served from the doc root (htdoc/static/mirobody.apk,
-    // copied to res/htdoc/ at build). On Android, a plain download link installs
-    // it directly. On PC the APK can't be installed locally, so show a QR code
-    // that points to the download URL for the user to scan with their phone.
+    // copied to res/htdoc/ at build). Only the Android app exists, so: on Android,
+    // a tap-to-download link (installs directly); on desktop, a QR code to scan
+    // with a phone; on other mobiles (iPhone etc.) nothing -- an APK can't be
+    // installed there, and you can't scan your own screen.
     var apkUrl = net.appBase() + "/mirobody.apk";
     if (config.isAndroid()) {
         var apkLink = ui.dom("a", {
@@ -437,7 +438,7 @@ function buildLogin() {
         }, { href: apkUrl, download: "mirobody.apk" });
         ui.setText(apkLink, t("downloadAndroid"));
         card.appendChild(apkLink);
-    } else {
+    } else if (!config.isMobile()) {
         var apkQr = ui.dom("div", {
             display: "flex", flexDirection: "column", alignItems: "center",
             marginTop: "20px", gap: "8px"

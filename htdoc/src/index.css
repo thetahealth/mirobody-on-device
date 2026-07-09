@@ -18,6 +18,31 @@ textarea::placeholder {
     opacity: 1;                    /* Firefox dims placeholders by default; undo it */
 }
 
+/* Inline icon SVGs sit inside clickable elements; without this a click/drag
+   drops the text-selection highlight (or mobile tap-highlight) box on them.
+   Icons are never selectable content, so suppress both. */
+svg {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Thin, subtle scrollbars so desktop (classic, chunky) scrollbars read as calmly
+   as the mobile overlay ones. The thumb is onSurfaceVar at low opacity over a
+   transparent track, rounded to match the UI. WebKit (Chrome/Safari/Edge) via
+   ::-webkit-scrollbar, Firefox via scrollbar-*; other engines keep native. */
+* {
+    scrollbar-width: thin;                                /* Firefox */
+    scrollbar-color: rgba(82, 86, 92, 0.4) transparent;   /* thumb / track */
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+    background: rgba(82, 86, 92, 0.35);                    /* onSurfaceVar @ 35% */
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(82, 86, 92, 0.55); }
+
 @keyframes mb-blink {
     to {
         visibility: hidden;

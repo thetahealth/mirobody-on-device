@@ -79,7 +79,11 @@ bool Server::start() {
         // server. ENV is the same deployment-environment selector used for the
         // remote config pull (see config.cpp / README "Remote config"); the match is
         // case-insensitive so "prod" and "PROD" both count.
-        if (const char* env = std::getenv("ENV")) {
+        //
+        // Also skipped when DB_INIT_SCHEMA is false — an explicit opt-out for a
+        // deployment that manages its schema out of band and whose serving DB user
+        // must not issue DDL. Defaults true, so the init runs unless disabled.
+        if (const char* env = cfg_.db_init_schema ? std::getenv("ENV") : nullptr) {
             std::string env_upper(env);
             for (char& c : env_upper) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
 
@@ -324,13 +328,16 @@ bool Server::start() {
     info.port = cfg_.listen_port;
     info.iface = cfg_.listen_addr.empty() ? nullptr : cfg_.listen_addr.c_str();
 
-    // Security headers applied to every response (including static files). We set
-    // these ourselves instead of LWS_SERVER_OPTION_HTTP_HEADERS_SECURITY_BEST_-
-    // PRACTICES_ENFORCE: lws's built-in CSP is default-src 'none' / script-src
-    // 'self' / connect-src 'self', which blocks the web client's Google sign-in
-    // (it loads the Firebase SDK from gstatic and calls Google's token
-    // endpoints). This CSP allows exactly those origins and keeps the rest
-    // locked down (nosniff, no-referrer, no framing of this site).
+    // Security headers. We set these ourselves instead of
+    // LWS_SERVER_OPTION_HTTP_HEADERS_SECURITY_BEST_PRACTICES_ENFORCE: lws's
+    // built-in CSP is default-src 'none' / script-src 'self' / connect-src 'self',
+    // which blocks the web client's Google sign-in (it loads the Firebase SDK from
+    // gstatic and calls Google's token endpoints). This CSP allows exactly those
+    // origins and keeps the rest locked down.
+    //
+    // The CSP (and the other document-scoped headers) is emitted ONLY for the HTML
+    // document, not on every asset/API response where it has no effect -- see the
+    // router->set_document_headers call below. Only nosniff stays global.
     //
     // The Firebase auth domain in frame-src is "<projectId>.firebaseapp.com",
     // derived from cfg_.firebase_project_id; it is omitted entirely when no
@@ -338,9 +345,9 @@ bool Server::start() {
     // (appleid.cdn-apple.com for the JS, appleid.apple.com for the sign-in
     // popup/iframe) are added only when APPLE_CLIENT_ID is set -- the web client
     // uses Apple's own SDK on Apple platforms (iOS/macOS) and falls back to the
-    // Firebase apple.com provider elsewhere. csp_header_value_ and sec_headers_
-    // are members so the strings/array outlive context_ (lws keeps the pointers
-    // rather than copying them).
+    // Firebase apple.com provider elsewhere. csp_header_value_ / sec_headers_ are
+    // members so their strings outlive context_ (set_document_headers copies its
+    // argument, but the global sec_headers_ array is referenced by lws by pointer).
     const bool apple = !cfg_.apple_client_id.empty();
     csp_header_value_  = "default-src 'self'; ";
     // 'wasm-unsafe-eval' lets the Tanka login panel compile + instantiate Tanka's
@@ -366,20 +373,26 @@ bool Server::start() {
         "style-src 'self' 'unsafe-inline'; "
         "font-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none';";
 
-    // Allocate first, then wire the `next` links to the real array addresses:
-    // referencing &sec_headers_[i] inside the new-expression would read the
-    // still-null unique_ptr (reset() takes ownership only after `new` returns).
-    auto* hdrs = new lws_protocol_vhost_options[5]{};
-    hdrs[0] = { &hdrs[1], nullptr, "content-security-policy:", csp_header_value_.c_str() };
-    hdrs[1] = { &hdrs[2], nullptr, "x-content-type-options:",  "nosniff" };
-    hdrs[2] = { &hdrs[3], nullptr, "referrer-policy:",         "no-referrer" };
-    hdrs[3] = { &hdrs[4], nullptr, "x-frame-options:",         "DENY" };
+    // Only x-content-type-options is emitted on EVERY response (lws global
+    // headers): nosniff hardens MIME handling of every asset, scripts/styles
+    // included. The document-scoped headers below (CSP, X-Frame-Options,
+    // Referrer-Policy, COOP) have no effect off the HTML document, so they are
+    // emitted only when the document itself is served (Router::set_document_headers)
+    // rather than bloating every asset and API response with a ~500-byte CSP.
+    auto* hdrs = new lws_protocol_vhost_options[1]{};
+    hdrs[0] = { nullptr, nullptr, "x-content-type-options:", "nosniff" };
+    sec_headers_.reset(hdrs);
+    info.headers = hdrs;
+
+    // Document-only security headers, emitted just for the HTML entry. COOP note:
     // signInWithPopup opens a cross-origin popup and polls window.closed; the
     // default COOP severs that handle. same-origin-allow-popups keeps this site
     // isolated while letting it retain control of popups it opens.
-    hdrs[4] = { nullptr,  nullptr, "cross-origin-opener-policy:", "same-origin-allow-popups" };
-    sec_headers_.reset(hdrs);
-    info.headers = hdrs;
+    router_->set_document_headers(
+        std::string("content-security-policy: ") + csp_header_value_ + "\r\n" +
+        "x-frame-options: DENY\r\n"
+        "referrer-policy: no-referrer\r\n"
+        "cross-origin-opener-policy: same-origin-allow-popups\r\n");
 
     info.options = LWS_SERVER_OPTION_VALIDATE_UTF8;
     router_->apply_to(info);

@@ -23,7 +23,7 @@
     <string name="verify_resending">再送信中…</string>
     <string name="verify_resend_code">コードを再送信</string>
 
-    <string name="chat_message_hint">メッセージ</string>
+    <string name="chat_message_hint">何でも質問してください</string>
     <string name="chat_history_cd">履歴</string>
     <string name="chat_select_model">モデルを選択</string>
     <string name="chat_currently_for">現在の対象</string>
@@ -67,6 +67,23 @@
     <string name="circle_delete_circle">サークルを削除</string>
     <string name="circle_delete_confirm">「%1$s」を削除しますか？このサークルだけで共有された内容には、メンバーがアクセスできなくなります。</string>
     <string name="chat_no_providers">利用可能なモデルがありません</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">デバイス内プライベートAI</string>
+    <string name="chat_ondevice_desc">Gemma 4 はすべて端末内で動作します。メッセージが端末外に出ることはなく、オフラインでも使えます。初回のみ約 2.5 GB のダウンロードと、十分なメモリを備えた端末が必要です。</string>
+    <string name="chat_ondevice_download">モデルをダウンロード</string>
+    <string name="chat_ondevice_downloading">ダウンロード中…</string>
+    <string name="chat_ondevice_continue_background">続ける</string>
+    <string name="chat_ondevice_ready">準備完了 — オフラインで動作</string>
+    <string name="chat_ondevice_absent">ダウンロードが必要（約 2.5 GB）</string>
+    <string name="chat_ondevice_failed">ダウンロードに失敗しました</string>
+    <string name="chat_ondevice_retry">再ダウンロード</string>
+    <string name="chat_ondevice_delete">モデルを削除</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">端末内で下書きを整える</string>
+    <string name="chat_polish_rephrase">言い換える</string>
+    <string name="chat_polish_shorten">もっと短く</string>
+    <string name="chat_polish_professional">もっとフォーマルに</string>
+    <string name="chat_polish_friendly">もっとフレンドリーに</string>
     <string name="chat_language">言語</string>
     <string name="chat_font_size">文字サイズ</string>
     <string name="chat_font_size_smaller">最小</string>
@@ -91,7 +108,7 @@
     <string name="chat_sign_out_confirm_title">ログアウトしますか？</string>
     <string name="chat_sign_out_confirm_message">次回は再度ログインが必要です。</string>
     <string name="chat_empty_title">会話を始めましょう</string>
-    <string name="chat_empty_subtitle">上でモデルを選んで、最初のメッセージを送信してください。</string>
+    <string name="chat_empty_subtitle">下でモデルを選んで、最初のメッセージを送信してください。</string>
 
     <string name="history_title">履歴</string>
     <string name="history_empty">履歴はまだありません。</string>
@@ -137,4 +154,51 @@
     <string name="chat_image_saved">ギャラリーに保存しました</string>
     <string name="chat_image_save_failed">保存に失敗しました</string>
     <string name="chat_image_save_permission_denied">ストレージの権限が拒否されました</string>
+    <!-- Newer keys previously missing in this locale (fell back to English). -->
+    <string name="login_continue">続行するにはサインイン</string>
+    <string name="verification_code">確認コード</string>
+    <string name="chat_send">送信</string>
+    <string name="chat_menu_title">メニュー</string>
+    <string name="chat_new_chat">新しいチャット</string>
+    <string name="chat_account">アカウント</string>
+    <string name="chat_add_account">アカウントを追加</string>
+    <string name="chat_incognito_start">シークレットをオンにする</string>
+    <string name="chat_incognito_stop">シークレットをオフにする</string>
+    <string name="chat_incognito_mode">シークレット</string>
+    <string name="chat_incognito_heading">シークレット モードです</string>
+    <string name="chat_incognito_note">シークレット チャットは保存されず、メモリにも追加されません。</string>
+    <string name="chat_vendors">接続済みデバイス</string>
+    <string name="chat_vendors_subtitle">デバイスやサービスを接続または切断します。</string>
+    <string name="chat_vendor_devices">デバイス</string>
+    <string name="chat_vendor_platforms">プラットフォーム</string>
+    <string name="chat_vendor_connect">接続</string>
+    <string name="chat_vendor_disconnect">切断</string>
+    <string name="chat_vendor_pending">保留中</string>
+    <string name="chat_vendor_unlink_confirm">%1$s を切断しますか？</string>
+    <string name="chat_ehr">EHR に接続</string>
+    <string name="chat_ehr_title">自分の EHR に接続</string>
+    <string name="chat_ehr_subtitle">病院やクリニックを検索し、サインインして記録を共有します（SMART on FHIR）。</string>
+    <string name="chat_ehr_manual_label">または FHIR ベース URL を入力</string>
+    <string name="chat_ehr_search_hint">医療機関を検索（例：病院名）</string>
+    <string name="chat_ehr_search">検索</string>
+    <string name="chat_ehr_connect">接続</string>
+    <string name="chat_ehr_sync_now">今すぐ同期</string>
+    <string name="chat_ehr_sync_done">%1$d 件の観測データを取り込みました。</string>
+    <string name="auth_apple_failed">Apple サインインに失敗しました</string>
+    <string name="auth_wechat_failed">WeChat サインインに失敗しました</string>
+    <string name="chat_bluetooth">Bluetooth デバイス</string>
+    <string name="chat_bluetooth_hdp">Bluetooth HDP（レガシー）</string>
+    <string name="ble_title">Bluetooth 健康デバイス</string>
+    <string name="ble_intro">標準的な Bluetooth LE センサー（心拍ベルト、血圧計、体温計）を接続します。測定値は健康記録に保存されます。時計や指輪は独自プロトコルのため、「接続済みデバイス」から接続してください。</string>
+    <string name="ble_scan">スキャン</string>
+    <string name="ble_stop">停止</string>
+    <string name="ble_no_devices">デバイスがありません — スキャンをタップ</string>
+    <string name="ble_supported_tag">健康</string>
+    <string name="ble_disconnect">切断</string>
+    <string name="ble_saved">保存 %1$d 件、失敗 %2$d 件</string>
+    <string name="hdp_title">レガシー HDP デバイス</string>
+    <string name="hdp_intro">クラシック Bluetooth の IEEE 11073 医療機器（旧式の体温計、体重計、パルスオキシメーター）を接続します。Android の設定でデバイスをペアリングしてから受信を開始してください。測定値は健康記録に保存されます。</string>
+    <string name="hdp_unsupported">HDP は Android 9 以下でのみ利用できます。新しい端末では Bluetooth（BLE）をご利用ください。</string>
+    <string name="hdp_start">受信を開始</string>
+    <string name="hdp_stop">停止</string>
 </resources>

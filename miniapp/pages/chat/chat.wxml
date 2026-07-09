@@ -1,4 +1,37 @@
-<view class="chat">
+<view class="page">
+  <!-- Toolbar, mirroring the web client's CenterAlignedTopAppBar: the hamburger
+       (left) opens the nav drawer, the "Mirobody" brand is centered, and the
+       settings gear (right) opens the app-settings menu (language). -->
+  <view class="toolbar">
+    <view class="tb-side">
+      <view class="hamburger" bindtap="openDrawer">
+        <view class="bar"></view>
+        <view class="bar"></view>
+        <view class="bar"></view>
+      </view>
+    </view>
+    <text class="brand serif">Mirobody</text>
+    <view class="tb-side tb-right">
+      <view class="settings-wrap">
+        <view class="gear" bindtap="toggleSettings">⚙</view>
+        <view class="settings-menu {{settingsOpen ? 'show' : ''}}">
+          <picker
+            mode="selector"
+            range="{{langNames}}"
+            value="{{langIndex}}"
+            bindchange="onLanguageChange">
+            <view class="menu-row">
+              <text>语言</text>
+              <text class="menu-hint">{{langLabel}}</text>
+            </view>
+          </picker>
+        </view>
+      </view>
+    </view>
+  </view>
+  <!-- Tap-catcher: closes the settings menu on an outside tap. -->
+  <view wx:if="{{settingsOpen}}" class="settings-mask" bindtap="closeSettings"></view>
+
   <!-- Message list -->
   <scroll-view
     class="log"
@@ -6,7 +39,10 @@
     scroll-into-view="{{scrollInto}}"
     scroll-with-animation="true">
     <view wx:if="{{messages.length === 0}}" class="empty">
-      有什么可以帮你的吗？
+      {{incognito ? '隐私模式：本次对话不会被保存，也不会写入记忆' : '有什么可以帮你的吗？'}}
+    </view>
+    <view wx:if="{{incognito && messages.length}}" class="incognito-banner">
+      隐私模式：本次对话不会被保存
     </view>
     <view
       wx:for="{{messages}}"
@@ -18,36 +54,118 @@
     </view>
   </scroll-view>
 
-  <!-- Composer -->
-  <view class="composer">
-    <picker
-      class="provider"
-      mode="selector"
-      range="{{providers}}"
-      range-key="name"
-      value="{{providerIndex}}"
-      bindchange="onProviderChange">
-      <view class="provider-label">
-        {{providers.length ? providers[providerIndex].name : '加载中…'}}
+  <!-- Composer. Hidden while the drawer is open because the textarea is a native
+       component that would otherwise bleed above the drawer overlay. -->
+  <view class="composer" hidden="{{drawerOpen}}">
+    <!-- picked-but-not-yet-sent attachments -->
+    <scroll-view wx:if="{{attachments.length}}" class="previews" scroll-x="true">
+      <view wx:for="{{attachments}}" wx:key="id" class="chip">
+        <image wx:if="{{item.isImage}}" class="chip-img" src="{{item.path}}" mode="aspectFill"></image>
+        <view wx:else class="chip-file">
+          <view class="chip-name">{{item.name}}</view>
+          <view class="chip-size">{{item.sizeLabel}}</view>
+        </view>
+        <view class="chip-x" data-id="{{item.id}}" catchtap="onRemoveAttach">×</view>
       </view>
-    </picker>
+    </scroll-view>
 
-    <view class="input-row">
-      <input
-        class="input"
+    <!-- rounded bar: textarea on top, control row below (one composer) -->
+    <view class="bar {{barFocus ? 'focus' : ''}}">
+      <textarea
+        class="ta"
         value="{{input}}"
-        placeholder="输入消息"
-        confirm-type="send"
+        placeholder="询问任何问题"
+        placeholder-class="input-ph"
+        auto-height="true"
+        cursor-spacing="24"
         bindinput="onInput"
-        bindconfirm="onSend" />
-      <button
-        class="btn-primary send"
-        size="mini"
-        loading="{{streaming}}"
-        disabled="{{streaming || !input}}"
-        bindtap="onSend">
-        发送
-      </button>
+        bindfocus="onBarFocus"
+        bindblur="onBarBlur"></textarea>
+
+      <!-- Control row: attach and Send are fixed ends; between them the subject
+           and model pickers split the bar into two equal halves, each centered
+           in its own half (mirrors the web client's composer). -->
+      <view class="controls">
+        <view class="attach" bindtap="onAttach">＋</view>
+
+        <view class="half">
+          <picker
+            wx:if="{{showSubject}}"
+            class="subject"
+            mode="selector"
+            range="{{subjectNames}}"
+            value="{{subjectIndex}}"
+            bindchange="onSubjectChange">
+            <view class="pill">{{subjectNames[subjectIndex]}}</view>
+          </picker>
+        </view>
+
+        <view class="half">
+          <picker
+            class="provider"
+            mode="selector"
+            range="{{providers}}"
+            range-key="provider"
+            value="{{providerIndex}}"
+            bindchange="onProviderChange">
+            <view class="pill">{{providers.length ? providers[providerIndex].provider : '加载中…'}}</view>
+          </picker>
+        </view>
+
+        <view
+          class="send-btn {{streaming ? 'stop' : ''}} {{(!input && !streaming) ? 'disabled' : ''}}"
+          bindtap="onSendOrStop">{{streaming ? '■' : '↑'}}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Left nav drawer -->
+  <view class="mask {{drawerOpen ? 'show' : ''}}" bindtap="closeDrawer"></view>
+  <view class="drawer {{drawerOpen ? 'open' : ''}}">
+    <view class="drawer-head">
+      <text class="drawer-title serif">Mirobody</text>
+    </view>
+
+    <!-- Two equal-width text buttons: New chat and the incognito toggle, matching
+         the web client's drawer row. -->
+    <view class="drawer-actions">
+      <view class="act-btn" bindtap="onNewChat">新对话</view>
+      <view class="act-btn {{incognito ? 'on' : ''}}" bindtap="onToggleIncognito">隐私模式</view>
+    </view>
+
+    <!-- History (the only scrolling area) -->
+    <scroll-view class="history" scroll-y="true">
+      <view wx:if="{{historyLoading}}" class="hist-state">加载中…</view>
+      <view wx:elif="{{historyError}}" class="hist-state tappable" bindtap="loadHistory">加载失败，点击重试</view>
+      <view wx:elif="{{history.length === 0}}" class="hist-state">暂无历史会话</view>
+      <block wx:else>
+        <view wx:for="{{history}}" wx:key="session_id" class="hist-row">
+          <view class="hist-main" data-id="{{item.session_id}}" bindtap="onResume">
+            <view class="hist-title">{{item.title}}</view>
+            <view wx:if="{{item.time}}" class="hist-time">{{item.time}}</view>
+          </view>
+          <view class="hist-del" data-id="{{item.session_id}}" catchtap="onDeleteHistory">删除</view>
+        </view>
+      </block>
+    </scroll-view>
+
+    <!-- Pinned footer: health & data (steps sync, care circle) and account. -->
+    <view class="drawer-foot">
+      <view class="nav-row" bindtap="onSyncSteps">
+        <text>微信运动步数同步</text>
+        <text class="nav-hint">{{syncing ? '同步中…' : ''}}</text>
+      </view>
+      <view class="nav-row" bindtap="onOpenCircle">
+        <text>关怀圈</text>
+      </view>
+
+      <view class="foot-divider"></view>
+
+      <!-- Language moved to the top-bar settings gear; the email isn't shown
+           (matches the web client). The drawer is navigation only. -->
+      <view class="nav-row danger" bindtap="onConfirmSignOut">
+        <text>退出登录</text>
+      </view>
     </view>
   </view>
 </view>

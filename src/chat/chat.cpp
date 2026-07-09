@@ -89,7 +89,11 @@ Chat::Chat(const Config& cfg, database::Database& db)
 
 void Chat::response(const std::string& agent_name, AgentRequest& req,
                     const llm::EventHandler& on_event) {
-    std::unique_ptr<Agent> agent = agent_registry().create(agent_name, req);
+    // Resolve the client token: a real agent name stays as-is; a bare provider
+    // (from the prefix-less /api/providers list) or an empty token routes through
+    // the default agent, with the token carried as the provider. See resolve_agent.
+    const std::string resolved = agent_registry().resolve_agent(agent_name, req.provider);
+    std::unique_ptr<Agent> agent = agent_registry().create(resolved, req);
     if (!agent) {
         emit_error(on_event, "no such agent: " + agent_name);
         return;
@@ -99,7 +103,9 @@ void Chat::response(const std::string& agent_name, AgentRequest& req,
     // request is identified and the client sent only its current turn -- a
     // client that manages its own multi-turn history (messages > 1) carries
     // its context itself and bypasses it.
-    const bool memory = req.cache != nullptr && req.user_id > 0 &&
+    // Incognito turns bypass the cache-backed memory too: nothing is loaded from
+    // or appended to it, so the exchange leaves no server-side trace.
+    const bool memory = !req.incognito && req.cache != nullptr && req.user_id > 0 &&
                         !req.session_id.empty() && req.messages.size() <= 1;
     std::string user_text;
     if (memory) {
@@ -145,7 +151,7 @@ void Chat::response(const std::string& agent_name, AgentRequest& req,
 
     // Persist the finished answer to the durable thread (modern backends), linked
     // to the question persist_history recorded before streaming.
-    persist_response(req, agent_name, reply);
+    persist_response(req, resolved, reply);
 }
 
 //------------------------------------------------------------------------------

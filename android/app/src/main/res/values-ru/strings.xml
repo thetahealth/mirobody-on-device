@@ -23,7 +23,7 @@
     <string name="verify_resending">Отправка…</string>
     <string name="verify_resend_code">Отправить заново</string>
 
-    <string name="chat_message_hint">Сообщение</string>
+    <string name="chat_message_hint">Спросите о чём угодно</string>
     <string name="chat_history_cd">История</string>
     <string name="chat_select_model">Выбрать модель</string>
     <string name="chat_currently_for">Сейчас для</string>
@@ -67,6 +67,23 @@
     <string name="circle_delete_circle">Удалить круг</string>
     <string name="circle_delete_confirm">Удалить «%1$s»? Участники потеряют доступ ко всему, чем поделились только через этот круг.</string>
     <string name="chat_no_providers">Нет доступных моделей</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">Приватный ИИ на устройстве</string>
+    <string name="chat_ondevice_desc">Gemma 4 работает полностью на вашем устройстве. Ваши сообщения никогда не покидают телефон и работают офлайн. Требуется разовая загрузка около 2,5 ГБ и устройство с достаточным объёмом памяти.</string>
+    <string name="chat_ondevice_download">Скачать модель</string>
+    <string name="chat_ondevice_downloading">Загрузка…</string>
+    <string name="chat_ondevice_continue_background">Продолжить</string>
+    <string name="chat_ondevice_ready">Готово — работает офлайн</string>
+    <string name="chat_ondevice_absent">Требуется загрузка (~2,5 ГБ)</string>
+    <string name="chat_ondevice_failed">Не удалось загрузить</string>
+    <string name="chat_ondevice_retry">Повторить загрузку</string>
+    <string name="chat_ondevice_delete">Удалить модель</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">Улучшить черновик на устройстве</string>
+    <string name="chat_polish_rephrase">Перефразировать</string>
+    <string name="chat_polish_shorten">Сделать короче</string>
+    <string name="chat_polish_professional">Более официально</string>
+    <string name="chat_polish_friendly">Более дружелюбно</string>
     <string name="chat_language">Язык</string>
     <string name="chat_font_size">Размер шрифта</string>
     <string name="chat_font_size_smaller">Очень мелкий</string>
@@ -91,7 +108,7 @@
     <string name="chat_sign_out_confirm_title">Выйти?</string>
     <string name="chat_sign_out_confirm_message">Потребуется снова войти.</string>
     <string name="chat_empty_title">Начните разговор</string>
-    <string name="chat_empty_subtitle">Выберите модель выше и отправьте первое сообщение.</string>
+    <string name="chat_empty_subtitle">Выберите модель ниже и отправьте первое сообщение.</string>
 
     <string name="history_title">История</string>
     <string name="history_empty">История пуста.</string>
@@ -137,4 +154,51 @@
     <string name="chat_image_saved">Сохранено в галерею</string>
     <string name="chat_image_save_failed">Не удалось сохранить</string>
     <string name="chat_image_save_permission_denied">Доступ к хранилищу отклонён</string>
+    <!-- Newer keys previously missing in this locale (fell back to English). -->
+    <string name="login_continue">Войдите, чтобы продолжить</string>
+    <string name="verification_code">Код подтверждения</string>
+    <string name="chat_send">Отправить</string>
+    <string name="chat_menu_title">Меню</string>
+    <string name="chat_new_chat">Новый чат</string>
+    <string name="chat_account">Аккаунт</string>
+    <string name="chat_add_account">Добавить аккаунт</string>
+    <string name="chat_incognito_start">Включить инкогнито</string>
+    <string name="chat_incognito_stop">Выключить инкогнито</string>
+    <string name="chat_incognito_mode">Инкогнито</string>
+    <string name="chat_incognito_heading">Режим инкогнито</string>
+    <string name="chat_incognito_note">Чаты в режиме инкогнито не сохраняются и не добавляются в память.</string>
+    <string name="chat_vendors">Подключённые устройства</string>
+    <string name="chat_vendors_subtitle">Подключение или отключение устройства либо сервиса.</string>
+    <string name="chat_vendor_devices">Устройства</string>
+    <string name="chat_vendor_platforms">Платформы</string>
+    <string name="chat_vendor_connect">Подключить</string>
+    <string name="chat_vendor_disconnect">Отключить</string>
+    <string name="chat_vendor_pending">Ожидание</string>
+    <string name="chat_vendor_unlink_confirm">Отключить %1$s?</string>
+    <string name="chat_ehr">Подключить ЭМК</string>
+    <string name="chat_ehr_title">Подключить мою ЭМК</string>
+    <string name="chat_ehr_subtitle">Найдите больницу или клинику, затем войдите, чтобы делиться своими записями (SMART on FHIR).</string>
+    <string name="chat_ehr_manual_label">Или введите базовый URL FHIR</string>
+    <string name="chat_ehr_search_hint">Поиск учреждений (напр. название больницы)</string>
+    <string name="chat_ehr_search">Найти</string>
+    <string name="chat_ehr_connect">Подключить</string>
+    <string name="chat_ehr_sync_now">Синхронизировать</string>
+    <string name="chat_ehr_sync_done">Импортировано наблюдений: %1$d.</string>
+    <string name="auth_apple_failed">Не удалось войти через Apple</string>
+    <string name="auth_wechat_failed">Не удалось войти через WeChat</string>
+    <string name="chat_bluetooth">Bluetooth-устройства</string>
+    <string name="chat_bluetooth_hdp">Bluetooth HDP (устаревший)</string>
+    <string name="ble_title">Bluetooth-устройства для здоровья</string>
+    <string name="ble_intro">Подключите стандартный датчик Bluetooth LE (нагрудный пульсометр, манжету давления, термометр). Показания сохраняются в вашей медицинской карте. Часы и кольца используют закрытые протоколы — подключайте их в разделе «Подключённые устройства».</string>
+    <string name="ble_scan">Поиск</string>
+    <string name="ble_stop">Стоп</string>
+    <string name="ble_no_devices">Пока нет устройств — нажмите «Поиск»</string>
+    <string name="ble_supported_tag">здоровье</string>
+    <string name="ble_disconnect">Отключить</string>
+    <string name="ble_saved">Сохранено %1$d, не удалось %2$d</string>
+    <string name="hdp_title">Устаревшие устройства HDP</string>
+    <string name="hdp_intro">Подключите медицинские устройства классического Bluetooth IEEE 11073 (старые термометры, весы, пульсоксиметры). Выполните сопряжение в настройках Android, затем начните приём; показания сохраняются в вашей медицинской карте.</string>
+    <string name="hdp_unsupported">HDP доступен только на Android 9 и ниже. На новых устройствах используйте Bluetooth (BLE).</string>
+    <string name="hdp_start">Начать приём</string>
+    <string name="hdp_stop">Стоп</string>
 </resources>

@@ -31,7 +31,7 @@
 "verify_resending" = "Отправка…";
 "verify_resend_code" = "Отправить заново";
 
-"chat_message_hint" = "Сообщение";
+"chat_message_hint" = "Спросите о чём угодно";
 "chat_history_cd" = "История";
 "chat_select_model" = "Выбрать модель";
 "chat_no_providers" = "Нет доступных моделей";
@@ -51,7 +51,7 @@
 "chat_sign_out_confirm_title" = "Выйти?";
 "chat_sign_out_confirm_message" = "Потребуется снова войти.";
 "chat_empty_title" = "Начните разговор";
-"chat_empty_subtitle" = "Выберите модель выше и отправьте первое сообщение.";
+"chat_empty_subtitle" = "Выберите модель ниже и отправьте первое сообщение.";
 
 "history_title" = "История";
 "history_empty" = "История пуста.";

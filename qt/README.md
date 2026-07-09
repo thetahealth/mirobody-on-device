@@ -112,8 +112,9 @@ on-device provider is present but inert.
 
 Launch `mirobody_qt`, open **⚙ → Backend**, and point it at a mirobody server
 (the default is `http://127.0.0.1:8080`, matching `config.yml`'s `HTTP_PORT`).
-Sign in with an email + code — with the demo codes in `config.yml`
-(`EMAIL_PREDEFINE_CODES`), e.g. `demo1@mirobody.ai` / `777777`.
+Sign in with an email + code — once demo login is enabled on that backend
+(uncomment `EMAIL_PREDEFINE_CODES` in its `config.yml`, off by default), e.g.
+`demo1@mirobody.ai` / `777777`.
 
 **Bluetooth permission.** BLE scanning is gated by the OS. On macOS the app must
 carry an `NSBluetoothAlwaysUsageDescription` string (Info.plist) and `BleHealth`

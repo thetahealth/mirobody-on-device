@@ -58,6 +58,14 @@ find_package(PNG REQUIRED)
 find_package(TIFF REQUIRED)
 find_package(WebP CONFIG REQUIRED)
 
+# libtiff in the mobile prebuilt sysroots is built with the LZMA codec, so
+# TIFF::TIFF references lzma_* symbols (e.g. lzma_lzma_preset). The stock
+# FindTIFF module links only libtiff itself and does not surface that
+# transitive dependency, so resolve LibLZMA and link it explicitly when the
+# sysroot provides it. On desktop (vcpkg) TIFF's own config already pulls in
+# lzma, so this find is optional and the extra link is harmless.
+find_package(LibLZMA QUIET)
+
 # zlib — used by src/indicator/lexicon.cpp to (de)compress the lexicon artifact.
 # Already present transitively via libpng; required explicitly so lexicon.cpp can
 # include <zlib.h> and link ZLIB::ZLIB directly.
@@ -173,10 +181,14 @@ find_package(BLAS)
 
 # --- Sentry (crash / error reporting) -----------------------------------------
 # sentry-native is linked only into the standalone desktop/server executable and
-# initialised in src/main.cpp from the SENTRY_DSN config value. It is
-# a required dependency of that executable; the mobile/Python/JNI targets do not
-# build src/main.cpp and so do not link it.
-find_package(sentry CONFIG REQUIRED)
+# initialised in src/main.cpp from the SENTRY_DSN config value. It is a required
+# dependency of that executable; the mobile (Android/iOS) targets don't build
+# src/main.cpp and so don't link it (see the target definitions below) -- and the
+# mobile prebuilt sysroots omit sentry-native, so skip the lookup there rather than
+# fail find_package(REQUIRED).
+if(NOT (ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
+    find_package(sentry CONFIG REQUIRED)
+endif()
 
 # Short git SHA captured at configure time. Used as the Sentry release fallback
 # ("local-<sha>") in dev builds, mirroring the Python MCP server's
@@ -386,6 +398,16 @@ target_link_libraries(agent_impls PRIVATE mirobody_core)
 # error instead of a confusing compile failure deep inside a header.
 target_compile_features(mirobody_core PUBLIC cxx_std_11)
 
+# On Android, compile the core with per-symbol sections and hidden visibility so
+# the JNI .so's link-time --gc-sections / --exclude-libs can actually drop and
+# localize the unused parts of the statically-linked deps (see the `mirobody`
+# target below). Left off desktop/iOS so their exported C API is unaffected.
+if(ANDROID)
+    target_compile_options(mirobody_core PRIVATE
+        -fvisibility=hidden -fvisibility-inlines-hidden
+        -ffunction-sections -fdata-sections)
+endif()
+
 target_link_libraries(mirobody_core PUBLIC
     CURL::libcurl
     OpenSSL::SSL
@@ -398,6 +420,11 @@ target_link_libraries(mirobody_core PUBLIC
     ZLIB::ZLIB
     ${_MIROBODY_DB_LINK}
 )
+
+# See the LibLZMA find above: libtiff's LZMA codec needs liblzma at link time.
+if(TARGET LibLZMA::LibLZMA)
+    target_link_libraries(mirobody_core PUBLIC LibLZMA::LibLZMA)
+endif()
 
 # --- Document transcoder dependencies (src/transcode/document.cpp) ------------
 # document.cpp is part of mirobody_core (above) and stays C++11. Its format
@@ -535,6 +562,24 @@ if(ANDROID)
         $<TARGET_OBJECTS:agent_impls>
     )
     target_link_libraries(mirobody PRIVATE mirobody_core log android)
+
+    # Shrink the shipped libmirobody.so. The 260 MB of prebuilt static deps and
+    # mirobody_core get linked in here, so by default their globals land in the
+    # .so's dynamic symbol table (bloat) and nothing unused is dropped.
+    #   --exclude-libs,ALL : localize all symbols pulled from static archives so
+    #                        they are NOT re-exported (biggest win; also lets
+    #                        --gc-sections reclaim them).
+    #   --gc-sections + -ffunction/-fdata-sections : drop unreferenced code/data.
+    #   -fvisibility=hidden : only JNIEXPORT entry points stay exported, so JNI
+    #                         still resolves; everything else is hidden.
+    #   --strip-all : strip symbols at link on non-debug builds (AGP also strips).
+    target_compile_options(mirobody PRIVATE
+        -fvisibility=hidden -fvisibility-inlines-hidden
+        -ffunction-sections -fdata-sections)
+    target_link_options(mirobody PRIVATE
+        -Wl,--gc-sections
+        -Wl,--exclude-libs,ALL
+        $<$<NOT:$<CONFIG:Debug>>:-Wl,--strip-all>)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
     # iOS target: build a static library that exposes the C API in
     # src/mirobody.h. The host app links libmirobody.a + libmirobody_core.a
@@ -673,7 +718,7 @@ endif()
 
 option(MIROBODY_BUILD_TOOLS "Build debug CLIs under cli/" ON)
 if(MIROBODY_BUILD_TOOLS AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
-    foreach(_tool mirothinker openai_chat openai_responses gemini gemini_live openai_realtime google_jwt firebase_jwt jwt_keygen mcp agent aws_s3 aliyun_oss azure_blob vendor image document fhir indicator file_parser file_rekey)
+    foreach(_tool mirothinker openai_chat openai_responses gemini gemini_live openai_realtime google_jwt firebase_jwt jwt_keygen fernet mcp agent aws_s3 aliyun_oss azure_blob vendor image document fhir indicator file_parser file_rekey)
         add_executable(${_tool} cli/${_tool}.cpp)
         target_link_libraries(${_tool} PRIVATE mirobody_core)
         target_include_directories(${_tool} PRIVATE cli)

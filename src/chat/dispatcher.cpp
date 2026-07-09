@@ -313,7 +313,10 @@ void Dispatcher::dispatch(Packet& pkt, std::int64_t user_id, Responder& out) {
     switch (pkt.code()) {
         case kOpChat: {
             ChatParams cp = ChatParams::parse(pkt, user_id);
-            if (cp.agent.empty()) {
+            // Nothing selected at all is an error; an empty agent WITH a provider is
+            // fine -- Chat::response (resolve_agent) routes it through the default
+            // agent. Normally the client sends the model as the agent token anyway.
+            if (cp.agent.empty() && cp.request.provider.empty()) {
                 emit_error(out, "empty agent name");
                 break;
             }
@@ -325,7 +328,9 @@ void Dispatcher::dispatch(Packet& pkt, std::int64_t user_id, Responder& out) {
             // read_file reach the per-user index + object store through these).
             cp.request.cache   = cache_;
             cp.request.storage = storage_;
-            cp.request.memory  = memory_;
+            // Incognito turns get no memory handle, so the remember tool is inert
+            // and nothing is written to long-term memory.
+            cp.request.memory  = cp.request.incognito ? nullptr : memory_;
             cp.request.db      = db_;
             // The "currently for" subject arrives as an opaque care-circle member
             // handle (not a users PK). Resolve + authorize it to the real target
@@ -339,8 +344,13 @@ void Dispatcher::dispatch(Packet& pkt, std::int64_t user_id, Responder& out) {
             // Persist this turn's question (best-effort, before streaming) and
             // tell the client which thread it landed in, so it can continue or
             // share that conversation. The answer is persisted once the turn ends.
-            const std::int64_t cid = chat_.persist_history(cp.request);
-            if (cid > 0) out.send(ConversationEvent(cid));
+            // Incognito turns skip this entirely: no durable thread is created (so
+            // conversation_id stays 0, which also makes persist_response a no-op),
+            // and no conversation id is surfaced to the client.
+            if (!cp.request.incognito) {
+                const std::int64_t cid = chat_.persist_history(cp.request);
+                if (cid > 0) out.send(ConversationEvent(cid));
+            }
             chat_.response(cp.agent, cp.request, sink);
             break;
         }

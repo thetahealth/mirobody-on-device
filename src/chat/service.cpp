@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -128,22 +129,40 @@ void ChatService::register_rest_routes(server::Router& router) {
 
 void ChatService::handle_providers(const server::Request& req, server::Response& res) {
     (void)req;
-    // "agent/provider" pairs for every public agent that has a client loaded.
+    // Provider list for every public agent that has a client loaded, GROUPED by
+    // agent: each entry is { agent, providers[] }. The default agent carries an
+    // EMPTY agent name (the server drops its name from provider_names), so the
+    // picker shows just the models and the turn routes through the default agent
+    // (see resolve_agent). A client submits the chosen {agent, provider} verbatim.
     const std::vector<std::string> names = agent_registry().provider_names(/*public_only=*/true);
+
+    // Group the flat "agent/provider" (or bare, for the default agent) list by
+    // agent. std::map keeps agents ordered, with the default agent's empty name
+    // first; providers keep provider_names' sorted order within each group.
+    std::map<std::string, std::vector<std::string> > groups;
+    for (std::size_t i = 0; i < names.size(); ++i) {
+        const std::string& full  = names[i];
+        const std::size_t  slash = full.find('/');
+        const std::string  agent    = (slash == std::string::npos) ? std::string() : full.substr(0, slash);
+        const std::string  provider = (slash == std::string::npos) ? full : full.substr(slash + 1);
+        groups[agent].push_back(provider);
+    }
 
     rapidjson::Document d;
     d.SetArray();
     rapidjson::Document::AllocatorType& a = d.GetAllocator();
-    for (std::size_t i = 0; i < names.size(); ++i) {
-        const std::string& full  = names[i];                 // "agent/provider"
-        const std::size_t  slash = full.find('/');
-        const std::string  code  = (slash == std::string::npos) ? full : full.substr(slash + 1);
-
+    for (std::map<std::string, std::vector<std::string> >::const_iterator g = groups.begin();
+         g != groups.end(); ++g) {
         rapidjson::Value item(rapidjson::kObjectType);
-        item.AddMember("code",
-                       rapidjson::Value(code.c_str(), static_cast<rapidjson::SizeType>(code.size()), a), a);
-        item.AddMember("name",
-                       rapidjson::Value(full.c_str(), static_cast<rapidjson::SizeType>(full.size()), a), a);
+        item.AddMember("agent",
+                       rapidjson::Value(g->first.c_str(),
+                                        static_cast<rapidjson::SizeType>(g->first.size()), a), a);
+        rapidjson::Value provs(rapidjson::kArrayType);
+        for (std::size_t j = 0; j < g->second.size(); ++j) {
+            const std::string& p = g->second[j];
+            provs.PushBack(rapidjson::Value(p.c_str(), static_cast<rapidjson::SizeType>(p.size()), a), a);
+        }
+        item.AddMember("providers", provs, a);
         d.PushBack(item, a);
     }
 

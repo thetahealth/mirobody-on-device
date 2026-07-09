@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
 import ai.thetahealth.mirobody.ui.ContentMaxWidth
 import ai.thetahealth.mirobody.ui.LocalAppContainer
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import kotlinx.coroutines.launch
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
@@ -225,15 +224,13 @@ private fun LanguageOnlyMenu(
         )
     }
     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-        ProvideLocale(currentLanguage) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.chat_language)) },
-                onClick = {
-                    expanded = false
-                    showLanguageDialog = true
-                },
-            )
-        }
+        DropdownMenuItem(
+            text = { Text(stringResource(R.string.chat_language)) },
+            onClick = {
+                expanded = false
+                showLanguageDialog = true
+            },
+        )
     }
     if (showLanguageDialog) {
         LanguageDialog(

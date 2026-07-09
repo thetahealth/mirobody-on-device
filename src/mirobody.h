@@ -49,19 +49,21 @@ int mirobody_listen_port(mirobody_server_t* handle);
 // Chat
 //------------------------------------------------------------------------------
 
-// Get the agent/provider pairs that have an LLM client loaded — the set a
-// caller can choose from for mirobody_chat. Each pair is a "Agent/model"
-// identifier (e.g. "Base/gpt-5-nano"), the same value the /api/providers
-// endpoint reports; the part before '/' is the agent and the part after it is
-// the provider you pass to mirobody_chat. Uses the process-wide config (loaded,
-// and the clients built, automatically on first use), so it works whether or
-// not a server is running.
+// Get the providers that have an LLM client loaded — the set a caller can choose
+// from for mirobody_chat. Each line is a token you pass straight to
+// mirobody_chat: a bare model for the default agent (e.g. "gpt-5-nano"), or an
+// "agent/model" pair for any non-default agent (e.g. "Other/gpt-5-nano"). Uses
+// the process-wide config (loaded, and the clients built, automatically on first
+// use), so it works whether or not a server is running.
 //
-// Returns a NUL-terminated, newline-separated list (one "Agent/model" per
-// line), or an empty string when none are configured. The buffer is owned by
-// mirobody and stays valid until the next mirobody_get_providers() call on the
-// same thread — copy it if you need to keep it. Returns NULL only on error
-// (client init failure).
+// (The HTTP /api/providers endpoint exposes the same set but as agent-grouped
+// JSON, [{ "agent": ..., "providers": [...] }]; this C ABI returns the flat
+// token form instead.)
+//
+// Returns a NUL-terminated, newline-separated list (one token per line), or an
+// empty string when none are configured. The buffer is owned by mirobody and
+// stays valid until the next mirobody_get_providers() call on the same thread —
+// copy it if you need to keep it. Returns NULL only on error (client init failure).
 const char* mirobody_get_providers(void);
 
 // Streaming callback for mirobody_chat, invoked once per event as the turn
@@ -90,11 +92,12 @@ typedef int (*mirobody_chat_handler)(
 // not mirobody_start() has been called — no server need be running. The LLM
 // provider credentials come from that config (e.g. OPENAI_API_KEY).
 //
-//   provider  an "Agent/model" pair as returned by mirobody_get_providers
-//             (e.g. "Base/gpt-5-nano") — pass one straight through. The part
-//             before the first '/' is the agent and the part after it is the
-//             model; an empty model => the agent's default. A value with no '/'
-//             is taken as the agent name. NULL or empty => the default agent and
+//   provider  a token from mirobody_get_providers — pass one straight through.
+//             Either an "agent/model" pair (part before the first '/' is the
+//             agent, after it the model) or a bare model for the default agent
+//             (e.g. "gpt-5-nano"). A bare token that names no registered agent is
+//             taken as a model and routed to the default agent; an empty model =>
+//             the agent's default model. NULL or empty => the default agent and
 //             its default model.
 //   message   the user's message. Required; NULL or empty returns an error.
 //   user_id   caller's row id, so auth-scoped MCP tools run as that user; pass

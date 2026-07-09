@@ -2,7 +2,6 @@ package ai.thetahealth.mirobody.ui.health
 
 import ai.thetahealth.mirobody.R
 import ai.thetahealth.mirobody.ui.LocalAppContainer
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -25,7 +24,6 @@ import androidx.lifecycle.viewmodel.viewModelFactory
  */
 @Composable
 fun HdpDeviceDialog(
-    currentLanguage: String,
     onDismiss: () -> Unit,
 ) {
     val container = LocalAppContainer.current
@@ -38,50 +36,44 @@ fun HdpDeviceDialog(
 
     AlertDialog(
         onDismissRequest = { vm.stop(); onDismiss() },
-        title = { ProvideLocale(currentLanguage) { Text(stringResource(R.string.hdp_title)) } },
+        title = { Text(stringResource(R.string.hdp_title)) },
         text = {
-            ProvideLocale(currentLanguage) {
-                Column {
+            Column {
+                Text(
+                    if (state.supported) stringResource(R.string.hdp_intro)
+                    else stringResource(R.string.hdp_unsupported),
+                )
+                if (state.status.isNotBlank()) {
+                    Text(state.status, modifier = Modifier.padding(top = 8.dp))
+                }
+                state.connectedDevice?.let {
+                    Text(it, modifier = Modifier.padding(top = 4.dp))
+                }
+                state.lastReading?.let {
+                    Text(it, modifier = Modifier.padding(top = 4.dp))
+                }
+                if (state.posted > 0 || state.failed > 0) {
                     Text(
-                        if (state.supported) stringResource(R.string.hdp_intro)
-                        else stringResource(R.string.hdp_unsupported),
+                        stringResource(R.string.ble_saved, state.posted, state.failed),
+                        modifier = Modifier.padding(top = 4.dp),
                     )
-                    if (state.status.isNotBlank()) {
-                        Text(state.status, modifier = Modifier.padding(top = 8.dp))
-                    }
-                    state.connectedDevice?.let {
-                        Text(it, modifier = Modifier.padding(top = 4.dp))
-                    }
-                    state.lastReading?.let {
-                        Text(it, modifier = Modifier.padding(top = 4.dp))
-                    }
-                    if (state.posted > 0 || state.failed > 0) {
-                        Text(
-                            stringResource(R.string.ble_saved, state.posted, state.failed),
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
                 }
             }
         },
         confirmButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(
-                    enabled = state.supported,
-                    onClick = { if (state.listening) vm.stop() else vm.start() },
-                ) {
-                    Text(
-                        if (state.listening) stringResource(R.string.hdp_stop)
-                        else stringResource(R.string.hdp_start),
-                    )
-                }
+            TextButton(
+                enabled = state.supported,
+                onClick = { if (state.listening) vm.stop() else vm.start() },
+            ) {
+                Text(
+                    if (state.listening) stringResource(R.string.hdp_stop)
+                    else stringResource(R.string.hdp_start),
+                )
             }
         },
         dismissButton = {
-            ProvideLocale(currentLanguage) {
-                TextButton(onClick = { vm.stop(); onDismiss() }) {
-                    Text(stringResource(R.string.common_cancel))
-                }
+            TextButton(onClick = { vm.stop(); onDismiss() }) {
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )

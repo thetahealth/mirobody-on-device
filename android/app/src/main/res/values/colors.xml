@@ -1,0 +1,5 @@
+<resources>
+    <!-- Brand mark's upper glyph: near-black on light backgrounds (see the
+         night variant for dark). Matches htdoc's #0f1115 title tone. -->
+    <color name="brand_logo_mark">#0F1115</color>
+</resources>

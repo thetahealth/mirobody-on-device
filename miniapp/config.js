@@ -12,12 +12,21 @@
 //   "不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书"
 //   so http://localhost:8080 is reachable. Production MUST be HTTPS and
 //   whitelisted.
+var LANG_KEY = 'mirobody-x-lang';
+
+// The conversation language sent with each chat request (the backend agents
+// read this: 'en', 'zh-CN', ...; see the chat body { ..., language }). Chosen
+// from the menu and persisted; defaults to Simplified Chinese. Exposed as a
+// getter so callers read the current value with plain `config.language`.
 module.exports = {
   // Dev: the local C++ server (config.yml HTTP_PORT 8080).
   // Prod: your HTTPS origin, optionally including an HTTP_URI_PREFIX path.
   baseUrl: 'http://localhost:8080',
 
-  // Default conversation language sent with each chat request. The backend
-  // agents read this ('en', 'zh-CN', ...); see chat body { ..., language }.
-  language: 'zh-CN',
+  get language() {
+    return wx.getStorageSync(LANG_KEY) || 'zh-CN';
+  },
+  setLanguage: function (code) {
+    wx.setStorageSync(LANG_KEY, code || 'zh-CN');
+  },
 };

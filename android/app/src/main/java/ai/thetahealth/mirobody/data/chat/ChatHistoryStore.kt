@@ -1,5 +1,6 @@
 package ai.thetahealth.mirobody.data.chat
 
+import ai.thetahealth.mirobody.data.settings.SettingsStore
 import ai.thetahealth.mirobody.ui.chat.ChatMessage
 import ai.thetahealth.mirobody.ui.chat.Role
 import android.content.Context
@@ -16,19 +17,24 @@ private val Context.chatHistoryDataStore by preferencesDataStore(name = "mirobod
 
 /**
  * Local persistence for the running chat conversation, so a relaunch restores it
- * instead of starting blank. One conversation is kept per install (its own
- * DataStore, separate from settings) as a JSON-encoded message list; cleared on
- * sign-out. Everything is best-effort -- a decode/encode failure yields an empty
- * history rather than throwing.
+ * instead of starting blank. Kept per account -- the message key is namespaced by
+ * the current account's `sub` -- so switching accounts shows that account's own
+ * conversation and signing one out clears only its slot. JSON-encoded; everything
+ * is best-effort -- a decode/encode failure yields an empty history, not a throw.
  */
-class ChatHistoryStore(context: Context, private val json: Json) {
+class ChatHistoryStore(context: Context, private val settings: SettingsStore, private val json: Json) {
 
     private val appContext = context.applicationContext
 
+    // Per-account key ("messages_<sub>"); "messages" (no suffix) when signed out.
+    private suspend fun messagesKey() =
+        stringPreferencesKey("messages" + (settings.currentSub()?.let { "_$it" } ?: ""))
+
     /** The stored conversation, or empty when nothing is saved / it can't be read. */
     suspend fun load(): List<ChatMessage> {
+        val key = messagesKey()
         val raw = appContext.chatHistoryDataStore.data
-            .map { it[KEY_MESSAGES] }
+            .map { it[key] }
             .first() ?: return emptyList()
         return runCatching { json.decodeFromString<List<ChatMessage>>(raw) }
             .getOrDefault(emptyList())
@@ -50,15 +56,13 @@ class ChatHistoryStore(context: Context, private val json: Json) {
             )
         }
         val raw = runCatching { json.encodeToString(settled) }.getOrNull() ?: return
-        appContext.chatHistoryDataStore.edit { it[KEY_MESSAGES] = raw }
+        val key = messagesKey()
+        appContext.chatHistoryDataStore.edit { it[key] = raw }
     }
 
-    /** Drop the stored conversation. */
+    /** Drop the current account's stored conversation (e.g. on sign-out). */
     suspend fun clear() {
-        appContext.chatHistoryDataStore.edit { it.remove(KEY_MESSAGES) }
-    }
-
-    private companion object {
-        val KEY_MESSAGES = stringPreferencesKey("messages")
+        val key = messagesKey()
+        appContext.chatHistoryDataStore.edit { it.remove(key) }
     }
 }

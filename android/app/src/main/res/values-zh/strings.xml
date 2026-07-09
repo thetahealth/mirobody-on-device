@@ -12,6 +12,8 @@
 
     <string name="email_title">登录</string>
     <string name="email_subtitle">我们会通过邮件发送一次性验证码。</string>
+    <string name="login_continue">登录以继续</string>
+    <string name="verification_code">验证码</string>
     <string name="email_label">邮箱</string>
     <string name="email_required">请输入邮箱</string>
     <string name="email_send_code">发送验证码</string>
@@ -23,7 +25,17 @@
     <string name="verify_resending">正在重发…</string>
     <string name="verify_resend_code">重新发送</string>
 
-    <string name="chat_message_hint">输入消息</string>
+    <string name="chat_message_hint">有什么想问的？</string>
+    <string name="chat_send">发送</string>
+    <string name="chat_incognito_start">开启隐私模式</string>
+    <string name="chat_incognito_stop">关闭隐私模式</string>
+    <string name="chat_incognito_mode">隐私模式</string>
+    <string name="chat_incognito_heading">已进入隐私模式</string>
+    <string name="chat_incognito_note">隐私对话不会被保存，也不会写入记忆。</string>
+    <string name="chat_menu_title">菜单</string>
+    <string name="chat_new_chat">新对话</string>
+    <string name="chat_account">账户</string>
+    <string name="chat_add_account">添加账号</string>
     <string name="chat_history_cd">历史</string>
     <string name="chat_select_model">选择模型</string>
     <string name="chat_currently_for">当前对象</string>
@@ -39,6 +51,27 @@
     <string name="share_access_view">查看</string>
     <string name="share_access_edit">编辑</string>
     <string name="share_save">保存</string>
+
+    <!-- Connected devices (vendor account management) -->
+    <string name="chat_vendors">已连接设备</string>
+    <string name="chat_vendors_subtitle">连接或断开设备与服务。</string>
+    <string name="chat_vendor_devices">设备</string>
+    <string name="chat_vendor_platforms">平台</string>
+    <string name="chat_vendor_connect">连接</string>
+    <string name="chat_vendor_disconnect">断开</string>
+    <string name="chat_vendor_pending">待验证</string>
+    <string name="chat_vendor_unlink_confirm">断开 %1$s？</string>
+
+    <!-- Connect EHR (SMART on FHIR) -->
+    <string name="chat_ehr">连接病历（EHR）</string>
+    <string name="chat_ehr_title">连接我的病历</string>
+    <string name="chat_ehr_subtitle">搜索医院或诊所，然后登录以共享你的病历（SMART on FHIR）。</string>
+    <string name="chat_ehr_manual_label">或输入 FHIR 基础地址</string>
+    <string name="chat_ehr_search_hint">搜索机构（如医院名称）</string>
+    <string name="chat_ehr_search">搜索</string>
+    <string name="chat_ehr_connect">连接</string>
+    <string name="chat_ehr_sync_now">立即同步</string>
+    <string name="chat_ehr_sync_done">已导入 %1$d 条观测数据。</string>
 
     <!-- Care circle -->
     <string name="chat_care_circle">关爱圈</string>
@@ -67,6 +100,23 @@
     <string name="circle_delete_circle">删除关爱圈</string>
     <string name="circle_delete_confirm">确定删除「%1$s」？仅通过该关爱圈分享的内容，成员将失去访问权限。</string>
     <string name="chat_no_providers">暂无可用模型</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">设备端私有 AI</string>
+    <string name="chat_ondevice_desc">Gemma 4 完全在你的设备上运行。你的消息不会离开手机，可离线使用。需一次性下载约 2.5 GB 存储空间，运行时约需 3 GB 空闲内存。</string>
+    <string name="chat_ondevice_download">下载模型</string>
+    <string name="chat_ondevice_downloading">正在下载…</string>
+    <string name="chat_ondevice_continue_background">继续</string>
+    <string name="chat_ondevice_ready">就绪 — 可离线运行</string>
+    <string name="chat_ondevice_absent">需要下载（约 2.5 GB）</string>
+    <string name="chat_ondevice_failed">下载失败</string>
+    <string name="chat_ondevice_retry">重新下载</string>
+    <string name="chat_ondevice_delete">删除模型</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">在设备端润色草稿</string>
+    <string name="chat_polish_rephrase">改写</string>
+    <string name="chat_polish_shorten">更简短</string>
+    <string name="chat_polish_professional">更正式</string>
+    <string name="chat_polish_friendly">更亲切</string>
     <string name="chat_language">语言</string>
     <string name="chat_font_size">字号</string>
     <string name="chat_font_size_smaller">更小</string>
@@ -91,7 +141,7 @@
     <string name="chat_sign_out_confirm_title">退出登录？</string>
     <string name="chat_sign_out_confirm_message">下次需要重新登录。</string>
     <string name="chat_empty_title">开始对话</string>
-    <string name="chat_empty_subtitle">选择上方模型，然后发送第一条消息。</string>
+    <string name="chat_empty_subtitle">选择下方模型，然后发送第一条消息。</string>
 
     <string name="history_title">历史</string>
     <string name="history_empty">暂无历史记录。</string>
@@ -137,4 +187,22 @@
     <string name="chat_image_saved">已保存到相册</string>
     <string name="chat_image_save_failed">保存失败</string>
     <string name="chat_image_save_permission_denied">存储权限被拒绝</string>
+    <!-- Bluetooth / HDP + social sign-in failures (were English-only) -->
+    <string name="auth_apple_failed">Apple 登录失败</string>
+    <string name="auth_wechat_failed">微信登录失败</string>
+    <string name="ble_title">蓝牙健康设备</string>
+    <string name="ble_intro">连接标准蓝牙 LE 传感器（心率带、血压袖带、体温计）。读数会保存到你的健康记录。手表和戒指使用私有协议——请在「已连接设备」中连接。</string>
+    <string name="ble_scan">扫描</string>
+    <string name="ble_stop">停止</string>
+    <string name="ble_no_devices">还没有设备——点击扫描</string>
+    <string name="ble_supported_tag">健康</string>
+    <string name="ble_disconnect">断开</string>
+    <string name="ble_saved">已保存 %1$d 条，失败 %2$d 条</string>
+    <string name="chat_bluetooth">蓝牙设备</string>
+    <string name="chat_bluetooth_hdp">蓝牙 HDP（旧版）</string>
+    <string name="hdp_title">旧版 HDP 设备</string>
+    <string name="hdp_intro">连接经典蓝牙 IEEE 11073 医疗设备（较旧的体温计、体重秤、血氧仪）。先在 Android 设置中配对设备，然后开始监听；读数会保存到你的健康记录。</string>
+    <string name="hdp_unsupported">HDP 仅在 Android 9 及以下可用。较新设备请改用蓝牙（BLE）。</string>
+    <string name="hdp_start">开始监听</string>
+    <string name="hdp_stop">停止</string>
 </resources>

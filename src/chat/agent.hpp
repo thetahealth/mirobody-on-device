@@ -79,6 +79,13 @@ struct AgentRequest {
     std::string  accept_language;                // client's top Accept-Language tag (e.g. "fr-FR"); empty => none
     std::string timezone;                        // IANA zone; empty => default
 
+    // Incognito ("privacy mode") turn: the client asked that this exchange leave
+    // no trace. The dispatcher then skips durable-thread persistence (no
+    // conversation id is surfaced) and withholds the memory handle (so the
+    // remember tool is inert), and Chat::response skips the cache-backed
+    // conversation memory. The turn still runs normally; only persistence is off.
+    bool                     incognito = false;
+
     std::vector<AgentFile>   files;
     bool                     enable_mcp = true;
     std::vector<std::string> allowed_tools;
@@ -175,10 +182,27 @@ public:
     // Instantiate an agent by name for `req`, or nullptr when unknown.
     std::unique_ptr<Agent> create(const std::string& name, const AgentRequest& req) const;
 
+    // The default agent -- the DEFAULT_AGENT config value when it names a public
+    // agent, else the first public agent (registration order), else "". This is the
+    // agent whose providers are listed WITHOUT the "agent/" prefix and the one a
+    // nameless / unrecognized request routes to. Set from config in load_clients.
+    std::string default_agent_name(bool public_only = true) const;
+
+    // Map a client-supplied agent token onto a real agent name. A token that
+    // names no registered agent is treated as a bare *provider* under the default
+    // agent -- which is how the prefix-less /api/providers list is routed: the
+    // client submits the model as the "agent", and it lands here. When the token is
+    // taken as a provider and `provider` was empty, `provider` is set to it. An
+    // empty token also defaults to the default agent. Returns "" only when no agents
+    // are registered. Old "agent/provider" submissions, whose token IS a real agent
+    // name, are returned unchanged (so nothing about them breaks).
+    std::string resolve_agent(const std::string& token, std::string& provider) const;
+
 private:
     std::vector<AgentRegistration>               agents_;
     std::unordered_map<std::string, std::size_t> index_;
     std::unordered_map<std::string, ClientMap>   clients_;   // agent -> provider -> client
+    std::string                                  default_agent_;   // DEFAULT_AGENT config (may be empty)
 };
 
 // Process-wide registry. A function-local static, constructed on the first

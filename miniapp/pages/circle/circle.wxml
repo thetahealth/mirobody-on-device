@@ -1,0 +1,129 @@
+<view class="circle">
+  <view wx:if="{{loading}}" class="state">加载中…</view>
+  <view wx:elif="{{error}}" class="state tappable" bindtap="load">加载失败，点击重试</view>
+
+  <block wx:else>
+    <!-- Invitations sent to me -->
+    <view wx:if="{{invites.length}}" class="section-title">收到的邀请</view>
+    <view wx:for="{{invites}}" wx:key="token" class="invite-row">
+      <view class="invite-label">{{item.label}}</view>
+      <view class="invite-actions">
+        <button class="btn-sm primary" data-token="{{item.token}}" bindtap="onAccept">接受</button>
+        <button class="btn-sm" data-token="{{item.token}}" bindtap="onDecline">拒绝</button>
+      </view>
+    </view>
+
+    <!-- My circles -->
+    <view wx:if="{{circles.length === 0}}" class="state">你还没有加入任何关怀圈</view>
+
+    <view wx:for="{{circles}}" wx:for-item="c" wx:for-index="cidx" wx:key="circle_id" class="card">
+      <view class="card-head">
+        <input
+          wx:if="{{c.isOwner}}"
+          class="name-input"
+          type="text"
+          value="{{c.name}}"
+          data-circle="{{c.circle_id}}"
+          data-old="{{c.name}}"
+          confirm-type="done"
+          bindconfirm="onRename"
+          bindblur="onRename" />
+        <text wx:else class="card-name">{{c.name}}</text>
+        <text class="role-badge">{{c.myRoleLabel}}</text>
+      </view>
+
+      <!-- My own health-data sharing level for this circle -->
+      <view class="health-row">
+        <text class="health-label">共享我的健康数据</text>
+        <picker
+          mode="selector"
+          range="{{healthNames}}"
+          value="{{c.healthIndex}}"
+          data-circle="{{c.circle_id}}"
+          data-current="{{c.healthKey}}"
+          bindchange="onHealth">
+          <view class="pick">{{healthNames[c.healthIndex]}}</view>
+        </picker>
+      </view>
+
+      <view wx:for="{{c.members}}" wx:for-item="m" wx:key="member" class="member-row">
+        <view class="member-main">
+          <input
+            wx:if="{{m.nickEditable}}"
+            class="nick-input"
+            type="text"
+            value="{{m.nickname}}"
+            placeholder="备注名"
+            placeholder-class="input-ph"
+            data-circle="{{c.circle_id}}"
+            data-member="{{m.member}}"
+            data-old="{{m.nickname}}"
+            confirm-type="done"
+            bindconfirm="onNickname"
+            bindblur="onNickname" />
+          <text wx:else class="member-name">{{m.name}}</text>
+
+          <view class="member-sub">
+            <text wx:if="{{m.email}}" class="member-email">{{m.email}}</text>
+            <text wx:if="{{m.ownerBadge}}" class="badge">所有者</text>
+            <text wx:if="{{m.maintainerBadge}}" class="badge">管理员</text>
+            <text wx:for="{{m.badges}}" wx:for-item="b" wx:key="*this" class="badge">{{b}}</text>
+          </view>
+        </view>
+
+        <picker
+          wx:if="{{m.roleEditable}}"
+          class="role-picker"
+          mode="selector"
+          range="{{roleNames}}"
+          value="{{m.roleIndex}}"
+          data-circle="{{c.circle_id}}"
+          data-member="{{m.member}}"
+          data-current="{{m.roleKey}}"
+          bindchange="onRole">
+          <view class="pick">{{roleNames[m.roleIndex]}}</view>
+        </picker>
+
+        <button
+          wx:if="{{m.canRemove}}"
+          class="btn-sm danger"
+          data-circle="{{c.circle_id}}"
+          data-member="{{m.member}}"
+          bindtap="onRemove">移除</button>
+      </view>
+
+      <!-- Invite (admins only) -->
+      <view wx:if="{{c.isAdmin}}" class="invite-box">
+        <input
+          class="input"
+          type="text"
+          placeholder="邀请邮箱"
+          placeholder-class="input-ph"
+          value="{{c.inviteEmail}}"
+          data-idx="{{cidx}}"
+          bindinput="onInviteInput" />
+        <button class="btn-sm primary" data-idx="{{cidx}}" bindtap="onInvite">邀请</button>
+      </view>
+
+      <!-- Delete (owner only) -->
+      <view wx:if="{{c.isOwner}}" class="card-foot">
+        <button class="btn-sm danger" data-circle="{{c.circle_id}}" data-name="{{c.name}}" bindtap="onDelete">
+          解散关怀圈
+        </button>
+      </view>
+    </view>
+
+    <!-- Create a new circle -->
+    <view class="section-title">新建关怀圈</view>
+    <view class="create-box">
+      <input
+        class="input"
+        type="text"
+        placeholder="关怀圈名称"
+        placeholder-class="input-ph"
+        value="{{newName}}"
+        bindinput="onNewNameInput" />
+      <button class="btn-sm primary" bindtap="onCreate">创建</button>
+    </view>
+  </block>
+</view>

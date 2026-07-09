@@ -224,16 +224,16 @@ struct ChatView: View {
                         if provider.isOnDevice && !vm.onDeviceStatus.isReady { showOnDeviceModel = true }
                     } label: {
                         if provider.isOnDevice {
-                            Label(provider.name, systemImage: "lock.fill")
+                            Label(provider.label, systemImage: "lock.fill")
                         } else {
-                            Text(provider.name)
+                            Text(provider.label)
                         }
                     }
                 }
             }
         } label: {
             HStack(spacing: 2) {
-                Text(vm.selected?.name.nonBlank ?? L("chat_select_model", lang))
+                Text(vm.selected?.label.nonBlank ?? L("chat_select_model", lang))
                     .mbFont(.titleSmall).foregroundColor(colors.onSurface)
                 Image(systemName: "chevron.down").font(.system(size: 12)).foregroundColor(colors.onSurfaceVariant)
             }

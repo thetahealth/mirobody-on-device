@@ -34,7 +34,7 @@
     <string name="verify_resend_code">שליחת קוד מחדש</string>
 
     <!-- Chat -->
-    <string name="chat_message_hint">הודעה</string>
+    <string name="chat_message_hint">שאל כל דבר</string>
     <string name="chat_history_cd">היסטוריה</string>
     <string name="chat_select_model">בחר מודל</string>
     <string name="chat_currently_for">כעת עבור</string>
@@ -78,6 +78,23 @@
     <string name="circle_delete_circle">מחק מעגל</string>
     <string name="circle_delete_confirm">למחוק את „%1$s“? החברים יאבדו גישה לכל מה ששותף רק דרך המעגל הזה.</string>
     <string name="chat_no_providers">לא נטענו ספקים</string>
+    <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
+    <string name="chat_ondevice_title">בינה מלאכותית פרטית במכשיר</string>
+    <string name="chat_ondevice_desc">Gemma 4 פועל כולו במכשיר שלך. ההודעות שלך לעולם לא עוזבות את הטלפון ופועלות במצב לא מקוון. נדרשת הורדה חד-פעמית של כ-2.5 GB ומכשיר עם מספיק זיכרון.</string>
+    <string name="chat_ondevice_download">הורדת המודל</string>
+    <string name="chat_ondevice_downloading">מוריד…</string>
+    <string name="chat_ondevice_continue_background">המשך</string>
+    <string name="chat_ondevice_ready">מוכן — פועל במצב לא מקוון</string>
+    <string name="chat_ondevice_absent">נדרשת הורדה (~2.5 GB)</string>
+    <string name="chat_ondevice_failed">ההורדה נכשלה</string>
+    <string name="chat_ondevice_retry">נסה שוב להוריד</string>
+    <string name="chat_ondevice_delete">מחק את המודל</string>
+    <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
+    <string name="chat_polish">שיפור טיוטה במכשיר</string>
+    <string name="chat_polish_rephrase">ניסוח מחדש</string>
+    <string name="chat_polish_shorten">קצר יותר</string>
+    <string name="chat_polish_professional">מקצועי יותר</string>
+    <string name="chat_polish_friendly">ידידותי יותר</string>
     <string name="chat_language">שפה</string>
     <string name="chat_font_size">גודל גופן</string>
     <string name="chat_font_size_smaller">קטן מאוד</string>
@@ -102,7 +119,7 @@
     <string name="chat_sign_out_confirm_title">להתנתק?</string>
     <string name="chat_sign_out_confirm_message">יהיה עליך להתחבר שוב.</string>
     <string name="chat_empty_title">התחל שיחה</string>
-    <string name="chat_empty_subtitle">בחר מודל למעלה ושלח את ההודעה הראשונה שלך.</string>
+    <string name="chat_empty_subtitle">בחר מודל למטה ושלח את ההודעה הראשונה שלך.</string>
 
     <!-- History -->
     <string name="history_title">היסטוריה</string>
@@ -145,4 +162,51 @@
     <string name="chat_image_saved">נשמר לגלריה</string>
     <string name="chat_image_save_failed">השמירה נכשלה</string>
     <string name="chat_image_save_permission_denied">הרשאת אחסון נדחתה</string>
+    <!-- Newer keys previously missing in this locale (fell back to English). -->
+    <string name="login_continue">התחברו כדי להמשיך</string>
+    <string name="verification_code">קוד אימות</string>
+    <string name="chat_send">שליחה</string>
+    <string name="chat_menu_title">תפריט</string>
+    <string name="chat_new_chat">שיחה חדשה</string>
+    <string name="chat_account">חשבון</string>
+    <string name="chat_add_account">הוספת חשבון</string>
+    <string name="chat_incognito_start">הפעלת מצב פרטי</string>
+    <string name="chat_incognito_stop">כיבוי מצב פרטי</string>
+    <string name="chat_incognito_mode">מצב פרטי</string>
+    <string name="chat_incognito_heading">אתה במצב פרטי</string>
+    <string name="chat_incognito_note">שיחות במצב פרטי אינן נשמרות ואינן מתווספות לזיכרון.</string>
+    <string name="chat_vendors">מכשירים מחוברים</string>
+    <string name="chat_vendors_subtitle">חיבור או ניתוק של מכשיר או שירות.</string>
+    <string name="chat_vendor_devices">מכשירים</string>
+    <string name="chat_vendor_platforms">פלטפורמות</string>
+    <string name="chat_vendor_connect">חיבור</string>
+    <string name="chat_vendor_disconnect">ניתוק</string>
+    <string name="chat_vendor_pending">ממתין</string>
+    <string name="chat_vendor_unlink_confirm">לנתק את %1$s?</string>
+    <string name="chat_ehr">חיבור תיק רפואי</string>
+    <string name="chat_ehr_title">חיבור התיק הרפואי שלי</string>
+    <string name="chat_ehr_subtitle">חפשו בית חולים או מרפאה, ואז התחברו כדי לשתף את הרשומות שלכם (SMART on FHIR).</string>
+    <string name="chat_ehr_manual_label">או הזינו כתובת FHIR בסיסית</string>
+    <string name="chat_ehr_search_hint">חיפוש ספקים (למשל שם בית חולים)</string>
+    <string name="chat_ehr_search">חיפוש</string>
+    <string name="chat_ehr_connect">חיבור</string>
+    <string name="chat_ehr_sync_now">סנכרון עכשיו</string>
+    <string name="chat_ehr_sync_done">יובאו %1$d תצפיות.</string>
+    <string name="auth_apple_failed">ההתחברות ל-Apple נכשלה</string>
+    <string name="auth_wechat_failed">ההתחברות ל-WeChat נכשלה</string>
+    <string name="chat_bluetooth">מכשירי Bluetooth</string>
+    <string name="chat_bluetooth_hdp">‏Bluetooth HDP (ישן)</string>
+    <string name="ble_title">מכשירי בריאות Bluetooth</string>
+    <string name="ble_intro">חברו חיישן Bluetooth LE סטנדרטי (רצועת דופק, שרוול לחץ דם, מדחום). הקריאות נשמרות ברשומה הרפואית שלכם. שעונים וטבעות משתמשים בפרוטוקולים סגורים — חברו אותם דרך «מכשירים מחוברים».</string>
+    <string name="ble_scan">סריקה</string>
+    <string name="ble_stop">עצירה</string>
+    <string name="ble_no_devices">אין עדיין מכשירים — הקישו על סריקה</string>
+    <string name="ble_supported_tag">בריאות</string>
+    <string name="ble_disconnect">ניתוק</string>
+    <string name="ble_saved">נשמרו %1$d, נכשלו %2$d</string>
+    <string name="hdp_title">מכשירי HDP ישנים</string>
+    <string name="hdp_intro">חברו מכשירים רפואיים ב-Bluetooth קלאסי לפי IEEE 11073 (מדחומים, משקלים ומדי חמצן ישנים). התאימו את המכשיר בהגדרות Android ואז התחילו להאזין; הקריאות נשמרות ברשומה הרפואית שלכם.</string>
+    <string name="hdp_unsupported">‏HDP זמין רק ב-Android 9 ומטה. במכשירים חדשים יותר השתמשו ב-Bluetooth‏ (BLE).</string>
+    <string name="hdp_start">התחלת האזנה</string>
+    <string name="hdp_stop">עצירה</string>
 </resources>

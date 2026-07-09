@@ -191,11 +191,18 @@ embedded server; point it elsewhere any time via Settings → Server URL.
 [`src/platform/android_jni.cpp`](../src/platform/android_jni.cpp)) and needs the server's native
 dependencies cross-compiled for the target ABI under `android/prebuilt/<ABI>/`.
 
-```powershell
 # Produce android/prebuilt/arm64-v8a/ (OpenSSL, curl, libwebsockets, yaml-cpp, hiredis,
 # rapidjson, sqlite3) via vcpkg's arm64-android triplet, pinned to vcpkg.json's baseline
-# and the NDK pinned in app/build.gradle.kts. ~30-60 min on a cold build.
-powershell -File android/build-prebuilt.ps1
+# and the NDK pinned in app/build.gradle.kts. ~30-60 min on a cold build. Use the script
+# for your OS (all three take an optional ABI arg, default arm64-v8a):
+
+```bat
+:: Windows (cmd, or double-click)
+android\build-prebuilt.cmd
+```
+```sh
+# macOS / Linux
+./android/build-prebuilt.sh
 ```
 
 `app/build.gradle.kts` wires the NDK/CMake build **only when `android/prebuilt/<ABI>/` exists**. Until

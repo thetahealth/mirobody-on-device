@@ -29,7 +29,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
-import ai.thetahealth.mirobody.ui.ProvideLocale
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -57,7 +56,7 @@ fun LanguageDialog(
     var staged by remember(current) { mutableStateOf(current) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { ProvideLocale(current) { Text(stringResource(R.string.chat_language)) } },
+        title = { Text(stringResource(R.string.chat_language)) },
         text = {
             LanguageWheelPicker(
                 options = LANGUAGE_OPTIONS,
@@ -66,17 +65,13 @@ fun LanguageDialog(
             )
         },
         confirmButton = {
-            ProvideLocale(current) {
-                TextButton(onClick = { onPick(staged) }) {
-                    Text(stringResource(R.string.common_done))
-                }
+            TextButton(onClick = { onPick(staged) }) {
+                Text(stringResource(R.string.common_done))
             }
         },
         dismissButton = {
-            ProvideLocale(current) {
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.common_cancel))
-                }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.common_cancel))
             }
         },
     )

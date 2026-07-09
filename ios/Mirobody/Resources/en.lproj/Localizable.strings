@@ -36,7 +36,7 @@
 "verify_resend_code" = "Resend code";
 
 /* Chat */
-"chat_message_hint" = "Message";
+"chat_message_hint" = "Ask anything";
 "chat_history_cd" = "History";
 "chat_select_model" = "Select model";
 "chat_no_providers" = "No providers loaded";
@@ -56,7 +56,7 @@
 "chat_sign_out_confirm_title" = "Sign out?";
 "chat_sign_out_confirm_message" = "You'll need to sign in again.";
 "chat_empty_title" = "Start a conversation";
-"chat_empty_subtitle" = "Pick a model above, then send your first message.";
+"chat_empty_subtitle" = "Pick a model below, then send your first message.";
 
 /* History */
 "history_title" = "History";

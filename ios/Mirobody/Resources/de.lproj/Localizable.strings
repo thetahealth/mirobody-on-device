@@ -31,7 +31,7 @@
 "verify_resending" = "Wird gesendet…";
 "verify_resend_code" = "Code erneut senden";
 
-"chat_message_hint" = "Nachricht";
+"chat_message_hint" = "Beliebige Frage stellen";
 "chat_history_cd" = "Verlauf";
 "chat_select_model" = "Modell wählen";
 "chat_no_providers" = "Keine Modelle verfügbar";
@@ -51,7 +51,7 @@
 "chat_sign_out_confirm_title" = "Abmelden?";
 "chat_sign_out_confirm_message" = "Sie müssen sich erneut anmelden.";
 "chat_empty_title" = "Konversation beginnen";
-"chat_empty_subtitle" = "Wählen Sie oben ein Modell und senden Sie Ihre erste Nachricht.";
+"chat_empty_subtitle" = "Wählen Sie unten ein Modell und senden Sie Ihre erste Nachricht.";
 
 "history_title" = "Verlauf";
 "history_empty" = "Noch kein Verlauf.";

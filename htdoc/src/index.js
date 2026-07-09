@@ -1,5 +1,36 @@
 require("./index.css");
 
+// On-device debug console (vConsole) for mobile browsers where there are no
+// devtools. Off by default; enable by opening the app with ?debug (or ?vconsole)
+// and disable with ?debug=0 (or ?vconsole=0). The bare flag counts as on. The
+// choice is persisted in localStorage so it survives reloads and the URL-cleaning
+// the OAuth/invite consumers do below. Loaded via dynamic import() so webpack
+// code-splits it into its own chunk -- the normal bundle is unaffected when
+// debugging is off. Safe under the page CSP: the chunk is same-origin (script-src
+// 'self') and vConsole's injected <style> is permitted by style-src
+// 'unsafe-inline'. Runs first so it captures startup logs.
+(function () {
+    try {
+        var q = new URLSearchParams(window.location.search);
+        // Tri-state per name: absent -> null; present but "0"/"false"/"off" ->
+        // false (turn off); present otherwise (bare flag or any other value) -> true.
+        var read = function (name) {
+            if (!q.has(name)) { return null; }
+            var v = q.get(name);
+            return !(v === "0" || v === "false" || v === "off");
+        };
+        var want = read("debug");
+        if (want === null) { want = read("vconsole"); }
+        if (want === true)  { localStorage.setItem("mb_debug", "1"); }
+        if (want === false) { localStorage.removeItem("mb_debug"); }
+        if (localStorage.getItem("mb_debug") === "1") {
+            import(/* webpackChunkName: "vconsole" */ "vconsole")
+                .then(function (m) { new (m.default || m)(); })
+                .catch(function () {});
+        }
+    } catch (e) { /* private-mode localStorage, etc. -- debugging is optional */ }
+})();
+
 const i18n = require("./i18n");
 const db   = require("./db");
 
@@ -43,10 +74,13 @@ require("./ehr").consumeEhrRedirect();
 require("./vendors").consumeVendorRedirect();
 
 // Restore any locally-persisted conversation before the first paint so the chat
-// panel comes up with prior messages (and scrolled to the latest). Best-effort:
-// if IndexedDB is unavailable we just render an empty conversation.
-db.loadMessages().then(function (msgs) {
+// panel comes up with prior messages (and scrolled to the latest), plus its server
+// thread id so the next turn continues that same thread rather than forking a new
+// one. Best-effort: if IndexedDB is unavailable we just render an empty conversation.
+Promise.all([db.loadMessages(), db.loadConversationId()]).then(function (r) {
+    var msgs = r[0], convId = r[1];
     if (msgs && msgs.length) { state.messages = msgs; }
+    if (convId) { state.currentConversationId = convId; }
 }).catch(function () {}).then(function () {
     // Skip the initial render while an OAuth code exchange is in flight: the
     // consumer re-renders once it resolves. This avoids briefly mounting the
