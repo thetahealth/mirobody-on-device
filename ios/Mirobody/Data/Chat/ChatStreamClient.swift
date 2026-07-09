@@ -145,6 +145,9 @@ final class ChatStreamClient {
             // The option is a nested JSON object; re-stringify it for echarts.setOption().
             let option = chunk.chart?.asString ?? ""
             return option.isEmpty ? .unknown(rawType: chunk.type, rawData: data) : .chart(optionJson: option)
+        case "conversation":
+            let id = chunk.content?.asString.nonBlank ?? chunk.conversationId ?? ""
+            return id.isEmpty ? .unknown(rawType: chunk.type, rawData: data) : .conversation(id: id)
         case "heartbeat":
             return .heartbeat
         case "error":

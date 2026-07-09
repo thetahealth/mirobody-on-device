@@ -15,7 +15,7 @@ Dialog {
     anchors.centerIn: parent
     modal: true
     width: Math.min(parent ? parent.width - 32 : 460, 460)
-    title: "Bluetooth health devices"
+    title: I18n.t("bleTitle")
     standardButtons: Dialog.Close
     onClosed: app.ble.disconnectDevice()
 
@@ -35,21 +35,19 @@ Dialog {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             color: Theme.onSurfaceVar
-            text: "Connect a standard Bluetooth LE sensor (heart-rate strap, blood-" +
-                  "pressure cuff, thermometer). Readings are saved to your health record. " +
-                  "Watches and rings use private protocols — connect those under vendors."
+            text: I18n.t("bleIntro")
         }
 
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
             Button {
-                text: app.ble.scanning ? "Scanning…" : "Scan"
+                text: app.ble.scanning ? I18n.t("bleScanning") : I18n.t("bleScan")
                 enabled: !app.ble.scanning
                 onClicked: app.ble.startScan()
             }
             Button {
-                text: "Stop"
+                text: I18n.t("bleStop")
                 enabled: app.ble.scanning
                 onClicked: app.ble.stopScan()
             }
@@ -90,7 +88,7 @@ Dialog {
                         }
                         Label {
                             visible: modelData.supported
-                            text: "health"
+                            text: I18n.t("bleSupportedTag")
                             color: Theme.primary
                             font.pointSize: Theme.baseSize - 2
                         }
@@ -99,7 +97,7 @@ Dialog {
                 Label {
                     anchors.centerIn: parent
                     visible: list.count === 0
-                    text: "No devices yet — tap Scan"
+                    text: I18n.t("bleNoDevices")
                     color: Theme.onSurfaceVar
                 }
             }
@@ -122,12 +120,12 @@ Dialog {
             Layout.fillWidth: true
             visible: app.ble.posted > 0 || app.ble.failed > 0
             color: Theme.onSurfaceVar
-            text: "Saved " + app.ble.posted + " reading(s)" +
-                  (app.ble.failed > 0 ? ", " + app.ble.failed + " failed" : "")
+            text: I18n.t("bleSaved", app.ble.posted) +
+                  (app.ble.failed > 0 ? I18n.t("bleFailedSuffix", app.ble.failed) : "")
         }
 
         Button {
-            text: "Disconnect"
+            text: I18n.t("bleDisconnect")
             visible: app.ble.connected
             onClicked: app.ble.disconnectDevice()
         }

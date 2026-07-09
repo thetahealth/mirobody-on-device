@@ -9,27 +9,29 @@
 // question, language, conversation_id, subject. SSE events: reply / thinking /
 // conversation (thread id) / upload / transcript / costStatistics / error.
 //
-// The hamburger opens a left nav drawer — a New chat / Incognito button row,
-// past sessions (resume/delete), WeChat-steps sync, care circle, and sign out.
-// Language moved to the top-bar settings gear (mirrors the web client, whose
-// gear carries the app settings on both the login and chat screens).
+// The top-left account avatar opens a left nav drawer — a New chat / Incognito
+// button row, past sessions (resume/delete), WeChat-steps sync, care circle, an
+// account switcher (switch / add account), and sign out. App settings (language
+// / font size / backend / about) live in the top-bar settings gear (the shared
+// <settings-menu> component), mirroring the web client whose gear carries them
+// on both the login and chat screens.
 var config = require('../../config.js');
 var api = require('../../utils/api.js');
 var auth = require('../../utils/auth.js');
 var werun = require('../../utils/werun.js');
 
-// Conversation languages offered by the menu — the value drives the `language`
-// field sent to /api/chat (the UI copy itself stays Chinese).
-var LANGS = [
-  { code: 'zh-CN', name: '简体中文' },
-  { code: 'en',    name: 'English' },
-  { code: 'ja',    name: '日本語' },
-  { code: 'ko',    name: '한국어' },
-  { code: 'fr',    name: 'Français' },
-  { code: 'de',    name: 'Deutsch' },
-  { code: 'es',    name: 'Español' },
-  { code: 'ru',    name: 'Русский' },
-];
+// Font-size offset -> the .page class that scales message text, matching the
+// five tiers in the settings gear (see components/settings-menu).
+function fontClassFor(offset) {
+  var map = { '-4': 'fs-smaller', '-2': 'fs-small', '0': '', '2': 'fs-large', '4': 'fs-larger' };
+  return map[String(offset)] || '';
+}
+
+// Label for an account row: its email, else a short "#sub" fallback.
+function acctLabel(a) {
+  if (!a) { return ''; }
+  return a.email ? a.email : ('#' + String(a.sub).slice(0, 6));
+}
 
 Page({
   data: {
@@ -51,16 +53,21 @@ Page({
     subjectIndex: 0,
     showSubject: false,
 
+    // top bar / settings
+    avatarInitial: '',   // first letter of the JWT email; '' -> person glyph
+    fontClass: '',       // font-size tier class chosen in the settings gear
+
     // drawer
     drawerOpen: false,
-    settingsOpen: false, // top-bar settings menu (language)
     history: [],
     historyLoading: false,
     historyError: false,
     syncing: false,
-    langNames: LANGS.map(function (l) { return l.name; }),
-    langIndex: 0,
-    langLabel: '',
+
+    // account switcher (drawer footer)
+    accountLabel: '',    // the current account's email (or #sub), muted
+    otherAccounts: [],   // [{ sub, label }] the other signed-in accounts
+    switcherOpen: false,
   },
 
   task: null,            // in-flight stream RequestTask
@@ -74,11 +81,11 @@ Page({
       wx.redirectTo({ url: '/pages/login/login' });
       return;
     }
-    var idx = 0;
-    for (var i = 0; i < LANGS.length; i++) {
-      if (LANGS[i].code === config.language) { idx = i; break; }
-    }
-    this.setData({ langIndex: idx, langLabel: LANGS[idx].name });
+    var email = auth.getUserEmail();
+    this.setData({
+      avatarInitial: email ? email.charAt(0).toUpperCase() : '',
+      fontClass: fontClassFor(config.fontOffset),
+    });
     this.loadProviders();
     this.loadSubjects();
   },
@@ -177,9 +184,22 @@ Page({
   // -- drawer -------------------------------------------------------------
   openDrawer: function () {
     this.setData({ drawerOpen: true });
+    this.refreshAccounts();
     if (!this._historyLoaded) { this.loadHistory(); }
   },
   closeDrawer: function () { this.setData({ drawerOpen: false }); },
+
+  // Populate the drawer's account switcher from the stored accounts: the
+  // current one's label (muted) plus the others (tap to switch).
+  refreshAccounts: function () {
+    var accounts = auth.listAccounts();
+    var current = null, others = [];
+    accounts.forEach(function (a) {
+      if (a.current) { current = a; }
+      else { others.push({ sub: a.sub, label: acctLabel(a) }); }
+    });
+    this.setData({ accountLabel: acctLabel(current), otherAccounts: others });
+  },
 
   onNewChat: function () {
     if (this.data.streaming) { this.closeDrawer(); return; }
@@ -212,20 +232,24 @@ Page({
     }
   },
 
-  // -- settings menu (top-bar gear) ---------------------------------------
-  toggleSettings: function () { this.setData({ settingsOpen: !this.data.settingsOpen }); },
-  closeSettings: function () { this.setData({ settingsOpen: false }); },
+  // -- settings gear events (from the shared <settings-menu> component) ----
+  // Language selection lives entirely in the component (config.language is read
+  // per request in onSend), so only font + backend need a host reaction.
+  onFontChange: function (e) {
+    this.setData({ fontClass: (e.detail && e.detail.fontClass) || '' });
+  },
+  // A backend switch takes effect on the next request; refetch the auth-gated
+  // lists so what's on screen matches the new backend right away.
+  onBackendChange: function () {
+    this._historyLoaded = false;
+    this.loadProviders();
+    this.loadSubjects();
+    if (this.data.drawerOpen) { this.loadHistory(); }
+  },
 
   onOpenCircle: function () {
     this.setData({ drawerOpen: false });
     wx.navigateTo({ url: '/pages/circle/circle' });
-  },
-
-  onLanguageChange: function (e) {
-    var idx = Number(e.detail.value) || 0;
-    var lang = LANGS[idx] || LANGS[0];
-    config.setLanguage(lang.code);
-    this.setData({ langIndex: idx, langLabel: lang.name, settingsOpen: false });
   },
 
   // -- history ------------------------------------------------------------
@@ -318,6 +342,26 @@ Page({
       });
   },
 
+  // -- account switcher ---------------------------------------------------
+  toggleSwitcher: function () { this.setData({ switcherOpen: !this.data.switcherOpen }); },
+
+  // Switch to another already-stored account, then relaunch so every view
+  // reloads fresh under the new token (no previous account's state leaks).
+  onSwitchAccount: function (e) {
+    var sub = e.currentTarget.dataset.sub;
+    if (sub && auth.switchAccount(sub)) {
+      wx.reLaunch({ url: '/pages/chat/chat' });
+    }
+  },
+
+  // Add another account: open the login page over the current session. The
+  // stored accounts aren't dropped (auth.setToken keys per JWT sub), so a
+  // successful login just adds a slot; the native back button cancels.
+  onAddAccount: function () {
+    this.setData({ drawerOpen: false });
+    wx.navigateTo({ url: '/pages/login/login' });
+  },
+
   // -- account ------------------------------------------------------------
   onConfirmSignOut: function () {
     var self = this;
@@ -329,9 +373,15 @@ Page({
     });
   },
 
+  // Sign out the CURRENT account. auth.signOut drops its slot and falls back to
+  // another stored account when one exists (relaunch chat as that account);
+  // otherwise it clears the pointer and we land on login.
   onSignOut: function () {
-    auth.clearAuth();
-    wx.reLaunch({ url: '/pages/login/login' });
+    if (auth.signOut()) {
+      wx.reLaunch({ url: '/pages/chat/chat' });
+    } else {
+      wx.reLaunch({ url: '/pages/login/login' });
+    }
   },
 
   // -- send / stream ------------------------------------------------------

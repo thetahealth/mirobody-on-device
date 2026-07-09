@@ -13,6 +13,17 @@
   background: #f2efe9;              /* warm cream page background */
 }
 
+/* Top bar holding just the settings gear, right-aligned (mirrors the chat
+   screen's gear placement). */
+.topbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 80rpx;
+  padding-top: env(safe-area-inset-top);
+}
+
 /* Mini Program buttons draw a hairline via ::after and carry default margins;
    reset both so our own borders/radii are the only ones visible. */
 button {

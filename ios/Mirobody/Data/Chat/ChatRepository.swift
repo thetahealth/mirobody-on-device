@@ -29,6 +29,13 @@ final class ChatRepository {
         try await api.postEnsureOk("/api/history/delete", HistoryDeleteRequest(sessionId: sessionId))
     }
 
+    /// GET /api/conversation?id= — the full thread for one saved conversation, to
+    /// resume it in the chat view. Mirrors `ChatRepository.conversation` on Android.
+    func conversation(sessionId: String) async throws -> ConversationDetail {
+        let enc = sessionId.addingPercentEncoding(withAllowedCharacters: .urlQueryValueAllowed) ?? sessionId
+        return try await api.get("/api/conversation?id=\(enc)")
+    }
+
     func chat(
         sessionId: String,
         question: String,
@@ -36,7 +43,8 @@ final class ChatRepository {
         provider: String,
         language: String,
         subject: Int64 = 0,
-        attachments: [ChatAttachment] = []
+        attachments: [ChatAttachment] = [],
+        incognito: Bool = false
     ) -> AsyncStream<ChatStreamEvent> {
         streamClient.stream(
             ChatStreamRequest(
@@ -45,7 +53,8 @@ final class ChatRepository {
                 agent: agent,
                 provider: provider,
                 language: language,
-                subject: subject > 0 ? String(subject) : nil
+                subject: subject > 0 ? String(subject) : nil,
+                incognito: incognito
             ),
             attachments: attachments
         )

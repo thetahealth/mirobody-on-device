@@ -1,4 +1,11 @@
 <view class="login">
+  <!-- Top bar: just the app-settings gear on the right (language / font size /
+       backend / about), the same shared <settings-menu> the chat screen shows,
+       so settings sit in one consistent place across both screens. -->
+  <view class="topbar">
+    <settings-menu></settings-menu>
+  </view>
+
   <!-- Brand block: the real mirobody mark, a serif title, and the subtitle,
        aligned to the web client's login (htdoc/src/login.js). -->
   <view class="brand">

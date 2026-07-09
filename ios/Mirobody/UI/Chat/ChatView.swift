@@ -1,8 +1,13 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Chat screen — mirrors `ui/chat/ChatScreen.kt`. History is presented as a sheet
-/// (the iOS-idiomatic stand-in for Android's modal navigation drawer).
+/// Chat screen — mirrors `ui/chat/ChatScreen.kt`.
+///
+/// Top bar (CenterAlignedTopAppBar): LEADING = account avatar that opens the nav
+/// drawer; PRINCIPAL = the "Mirobody" brand wordmark; TRAILING = the settings gear
+/// (app settings only). The provider/model picker lives in the composer, not the
+/// center, so the brand owns the center. Everything session-scoped (history, health
+/// connections, incognito, account, sign out) lives in the left nav drawer.
 struct ChatView: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var settings: SettingsStore
@@ -11,14 +16,11 @@ struct ChatView: View {
 
     @StateObject private var vm: ChatViewModel
 
-    @State private var showHistory = false
+    @State private var showDrawer = false
     @State private var showLanguage = false
     @State private var showFontSize = false
     @State private var showBackend = false
-    @State private var showHealth = false
-    @State private var showBle = false
     @State private var showAbout = false
-    @State private var showSignOut = false
     @State private var showFileImporter = false
     @State private var showOnDeviceModel = false
 
@@ -32,34 +34,30 @@ struct ChatView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                colors.background.ignoresSafeArea()
-                VStack(spacing: 0) {
-                    messageList
-                    inputBar
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button { showHistory = true } label: {
-                        Image(systemName: "clock.arrow.circlepath").foregroundColor(colors.onSurfaceVariant)
+        ZStack {
+            NavigationStack {
+                ZStack {
+                    colors.background.ignoresSafeArea()
+                    VStack(spacing: 0) {
+                        messageList
+                        if !vm.readOnly { inputBar }
                     }
-                    .accessibilityLabel(L("chat_history_cd", lang))
                 }
-                ToolbarItem(placement: .principal) { providerMenu }
-                ToolbarItem(placement: .navigationBarTrailing) { settingsMenu }
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) { accountAvatar }
+                    ToolbarItem(placement: .principal) { brand }
+                    ToolbarItem(placement: .navigationBarTrailing) { settingsMenu }
+                }
             }
+            drawerOverlay
         }
-        .sheet(isPresented: $showHistory) { sheetEnv { HistoryView(container: container) } }
+        .animation(.easeInOut(duration: 0.25), value: showDrawer)
         .sheet(isPresented: $showLanguage) {
             sheetEnv { LanguageDialog(current: settings.language) { settings.setLanguage($0) } }
         }
         .sheet(isPresented: $showFontSize) { sheetEnv { FontSizeDialog() } }
         .sheet(isPresented: $showBackend) { sheetEnv { BaseUrlDialog() } }
-        .sheet(isPresented: $showHealth) { sheetEnv { HealthSyncView(container: container) } }
-        .sheet(isPresented: $showBle) { sheetEnv { BleDeviceView(container: container) } }
         .sheet(isPresented: $showOnDeviceModel) {
             sheetEnv {
                 OnDeviceModelView(
@@ -75,12 +73,65 @@ struct ChatView: View {
         } message: {
             Text(L("app_name", lang) + "\n" + L("about_version", lang, appVersion))
         }
-        .alert(L("chat_sign_out_confirm_title", lang), isPresented: $showSignOut) {
-            Button(L("chat_sign_out", lang), role: .destructive) { container.authRepository.signOut() }
-            Button(L("common_cancel", lang), role: .cancel) {}
-        } message: {
-            Text(L("chat_sign_out_confirm_message", lang))
+    }
+
+    // MARK: Nav drawer overlay
+
+    @ViewBuilder
+    private var drawerOverlay: some View {
+        if showDrawer {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture { showDrawer = false }
+                .transition(.opacity)
+            HStack(spacing: 0) {
+                NavDrawer(
+                    container: container,
+                    vm: vm,
+                    onDismiss: { showDrawer = false },
+                    onAddAccount: { settings.addingAccount = true }
+                )
+                .frame(maxWidth: drawerMaxWidth)
+                .frame(width: drawerWidth)
+                .ignoresSafeArea(edges: .bottom)
+                Spacer(minLength: 0)
+            }
+            .transition(.move(edge: .leading))
         }
+    }
+
+    /// 85% of the screen, capped at `drawerMaxWidth` (mirrors the web/Android drawer).
+    private var drawerWidth: CGFloat {
+        min(UIScreen.main.bounds.width * 0.85, drawerMaxWidth)
+    }
+
+    // MARK: Top bar pieces
+
+    private var accountAvatar: some View {
+        Button { showDrawer = true } label: {
+            ZStack {
+                Circle().fill(colors.primary)
+                if let initial = avatarInitial {
+                    Text(initial).mbFont(.labelLarge).foregroundColor(colors.onPrimary)
+                } else {
+                    Image(systemName: "person").font(.system(size: 15)).foregroundColor(colors.onPrimary)
+                }
+            }
+            .frame(width: 30, height: 30)
+        }
+        .accessibilityLabel(L("chat_menu_title", lang))
+    }
+
+    private var avatarInitial: String? {
+        settings.currentEmail?.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() }
+    }
+
+    /// Centered brand wordmark — the true CenterAlignedTopAppBar title.
+    private var brand: some View {
+        Text(L("app_name", lang))
+            .font(.system(size: 20 * fontScale(forOffset: settings.fontSizeOffset),
+                          weight: .semibold, design: .serif))
+            .foregroundColor(colors.onSurface)
     }
 
     // MARK: Message list
@@ -88,16 +139,11 @@ struct ChatView: View {
     private var messageList: some View {
         Group {
             if vm.messages.isEmpty {
-                VStack(spacing: 6) {
-                    LText("chat_empty_title").mbFont(.titleMedium).foregroundColor(colors.onSurface)
-                    LText("chat_empty_subtitle").mbFont(.bodySmall).foregroundColor(colors.onSurfaceVariant)
-                }
-                .multilineTextAlignment(.center)
-                .padding(24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                emptyState
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
+                        if vm.incognito { incognitoBanner }
                         LazyVStack(spacing: 14) {
                             ForEach(vm.messages) { msg in
                                 MessageBubble(message: msg).id(msg.id)
@@ -115,40 +161,81 @@ struct ChatView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    @ViewBuilder
+    private var emptyState: some View {
+        if vm.incognito {
+            // Privacy hero: ghost glyph + "You're incognito" + the not-saved note.
+            VStack(spacing: 20) {
+                Image(systemName: "eye.slash")
+                    .font(.system(size: 52)).foregroundColor(colors.primary)
+                LText("chat_incognito_heading").mbFont(.headlineSmall).foregroundColor(colors.onSurface)
+                LText("chat_incognito_note").mbFont(.bodyMedium).foregroundColor(colors.onSurfaceVariant)
+            }
+            .multilineTextAlignment(.center)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(spacing: 6) {
+                LText("chat_empty_title").mbFont(.titleMedium).foregroundColor(colors.onSurface)
+                LText("chat_empty_subtitle").mbFont(.bodySmall).foregroundColor(colors.onSurfaceVariant)
+            }
+            .multilineTextAlignment(.center)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    /// Slim pill pinned above an incognito thread, reminding it won't be saved.
+    private var incognitoBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "eye.slash").font(.system(size: 14)).foregroundColor(colors.primary)
+            LText("chat_incognito_note").mbFont(.bodySmall).foregroundColor(colors.onSurfaceVariant)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .frame(maxWidth: contentMaxWidth)
+        .background(colors.surfaceContainerLow)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .padding(.horizontal, 16).padding(.top, 8)
+    }
+
     private func scrollToBottom(_ proxy: ScrollViewProxy) {
         guard let last = vm.messages.last else { return }
         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
     }
 
-    // MARK: Input bar
+    // MARK: Input bar (composer) — the provider picker lives here, not the top bar.
 
     private var inputBar: some View {
         VStack(spacing: 8) {
             if !vm.attachments.isEmpty { attachmentChips }
-            HStack(alignment: .bottom, spacing: 8) {
-                Button { showFileImporter = true } label: {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 20))
-                        .foregroundColor(colors.onSurfaceVariant)
-                }
-                .disabled(vm.sending)
-                .accessibilityLabel(L("chat_attach_file", lang))
+            VStack(spacing: 6) {
                 TextField(L("chat_message_hint", lang), text: $vm.input, axis: .vertical)
                     .mbFont(.bodyLarge)
                     .foregroundColor(colors.onSurface)
                     .lineLimit(1...5)
-                    .padding(.horizontal, 14).padding(.vertical, 10)
-                    .background(colors.surfaceContainerLow)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal, 8).padding(.vertical, 6)
                     .disabled(vm.sending)
                     .onSubmit(vm.send)
-                Button(action: vm.send) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(canSend ? colors.primary : colors.onSurfaceVariant.opacity(0.4))
+                HStack(spacing: 4) {
+                    Button { showFileImporter = true } label: {
+                        Image(systemName: "paperclip")
+                            .font(.system(size: 20)).foregroundColor(colors.onSurfaceVariant)
+                    }
+                    .disabled(vm.sending)
+                    .accessibilityLabel(L("chat_attach_file", lang))
+                    providerMenu.frame(maxWidth: .infinity)
+                    Button(action: vm.send) {
+                        Image(systemName: "arrow.up.circle.fill")
+                            .font(.system(size: 30))
+                            .foregroundColor(canSend ? colors.primary : colors.onSurfaceVariant.opacity(0.4))
+                    }
+                    .disabled(!canSend)
                 }
-                .disabled(!canSend)
             }
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(colors.surfaceContainerLow)
+            .overlay(RoundedRectangle(cornerRadius: 24).stroke(colors.outlineVariant, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 24))
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .frame(maxWidth: contentMaxWidth)
@@ -207,7 +294,7 @@ struct ChatView: View {
             && vm.selected != nil
     }
 
-    // MARK: Toolbar menus
+    // MARK: Composer provider picker
 
     private var providerMenu: some View {
         Menu {
@@ -234,23 +321,20 @@ struct ChatView: View {
         } label: {
             HStack(spacing: 2) {
                 Text(vm.selected?.label.nonBlank ?? L("chat_select_model", lang))
-                    .mbFont(.titleSmall).foregroundColor(colors.onSurface)
+                    .mbFont(.titleSmall).foregroundColor(colors.onSurface).lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: 12)).foregroundColor(colors.onSurfaceVariant)
             }
         }
     }
+
+    // MARK: Settings gear — app settings ONLY (identical to the login screen).
 
     private var settingsMenu: some View {
         Menu {
             Button(L("chat_language", lang)) { showLanguage = true }
             Button(L("chat_font_size", lang)) { showFontSize = true }
             Button(L("chat_backend", lang)) { showBackend = true }
-            // English literal for now; localize via the .lproj tables when wiring i18n.
-            Button("Sync health data") { showHealth = true }
-            Button("Bluetooth devices") { showBle = true }
             Button(L("chat_about", lang)) { showAbout = true }
-            Divider()
-            Button(role: .destructive) { showSignOut = true } label: { Text(L("chat_sign_out", lang)) }
         } label: {
             Image(systemName: "gearshape").foregroundColor(colors.onSurfaceVariant)
         }

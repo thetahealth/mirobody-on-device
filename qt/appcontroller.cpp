@@ -15,12 +15,23 @@
 #include <QDateTime>
 #include <QByteArray>
 #include <QRegularExpression>
+#include <QDesktopServices>
+#include <QUrl>
+
+#include <algorithm>
 
 namespace {
 
 // localStorage key names, kept identical to net.js / config.js so a future
 // shared store would line up; here they are QSettings keys.
-const char* kTokenKey    = "mirobody-x-token";
+//
+// Multi-account token store (net.js): each account's JWT lives under
+// kTokenPrefix + <sub>, and kCurrentKey names the active sub, so several accounts
+// coexist and the drawer can quick-switch. kLegacyTokenKey is the old
+// single-token slot, migrated once on load.
+const char* kTokenPrefix   = "mirobody-x-token-";
+const char* kCurrentKey     = "mirobody-x-current";
+const char* kLegacyTokenKey = "mirobody-x-token";
 const char* kBaseUrlKey  = "mirobody-base-url";
 const char* kProviderKey = "mirobody-provider";
 const char* kLanguageKey = "mirobody-language";
@@ -51,13 +62,28 @@ QString defaultLanguage() {
     return kSupportedLanguages.contains(sys) ? sys : QStringLiteral("en");
 }
 
-// The `email` claim of a JWT, or "" when absent/unparseable. Used to restore the
-// signed-in address into the settings menu on a returning session.
-QString emailClaim(const QString& token) {
+// Decode a JWT payload (middle segment) into an object, or an empty object when
+// missing/malformed. Mirrors net.js decodePayload().
+QJsonObject decodePayload(const QString& token) {
     const QStringList parts = token.split('.');
     if (parts.size() < 2) return {};
     const QJsonDocument doc = QJsonDocument::fromJson(base64UrlDecode(parts.at(1).toUtf8()));
-    return doc.isObject() ? doc.object().value("email").toString() : QString();
+    return doc.isObject() ? doc.object() : QJsonObject();
+}
+
+// The `email` claim of a JWT, or "" when absent/unparseable. Used to restore the
+// signed-in address into the settings menu on a returning session.
+QString emailClaim(const QString& token) {
+    return decodePayload(token).value("email").toString();
+}
+
+// The `sub` claim as a string (the server re-salts it per issuance). "" when
+// absent. Mirrors net.js setToken()'s sub derivation.
+QString subClaim(const QString& token) {
+    const QJsonValue sub = decodePayload(token).value("sub");
+    if (sub.isString()) return sub.toString();
+    if (sub.isDouble()) return QString::number(sub.toVariant().toLongLong());
+    return {};
 }
 
 } // namespace
@@ -71,7 +97,8 @@ AppController::AppController(QObject* parent)
       settings_(new QSettings(QStringLiteral("thetahealth"),
                               QStringLiteral("mirobody-qt"))) {
     // Restore persisted settings (the QSettings stand-in for localStorage).
-    const QString token = settings_->value(kTokenKey).toString();
+    migrateLegacyToken();
+    const QString token = currentToken();
     baseUrl_    = settings_->value(kBaseUrlKey, baseUrlPresets().value(0)).toString();
     language_   = settings_->value(kLanguageKey, defaultLanguage()).toString();
     fontOffset_ = settings_->value(kFontKey, 0).toInt();
@@ -136,10 +163,9 @@ void AppController::verifyCode(const QString& email, const QString& code) {
     const QString e = email.trimmed();
     QJsonObject body{{"email", e}, {"code", code.trimmed()}};
     api_->postEnvelope("/email/verify", body,
-        [this, e](const QJsonValue& data) {
+        [this](const QJsonValue& data) {
             const QString token = data.toObject().value("access_token").toString();
             if (token.isEmpty()) { emit verifyError(QString()); return; }
-            setEmail(e);
             completeLogin(token);
         },
         [this](const QString& msg, int) { emit verifyError(msg); },
@@ -147,32 +173,167 @@ void AppController::verifyCode(const QString& email, const QString& code) {
 }
 
 void AppController::completeLogin(const QString& accessToken) {
-    api_->setToken(accessToken);
-    settings_->setValue(kTokenKey, accessToken);
+    // Store under this account's own slot and make it current (dedupes by email).
+    storeToken(accessToken);
+    api_->setToken(currentToken());
 
-    chat_->clear();
-    loadConversation();      // restore THIS user's persisted conversation
-    loadProviders();
+    // Whether this was a fresh sign-in or a second account being added, reset the
+    // per-session state and load THIS account's data.
+    if (addingAccount_) { addingAccount_ = false; emit addingAccountChanged(); }
+    activateSession();
+    emit accountsChanged();
 
     if (!loggedIn_) { loggedIn_ = true; emit loggedInChanged(); }
-    // The email the user just signed in with is shown in the settings menu.
 }
 
 void AppController::signOut() {
     stopStreaming();
     // Drop this user's local history while we still know who they are (the key
-    // is derived from the token), then clear the token -- mirrors app.signOut().
+    // is derived from the token), then drop the account slot -- mirrors
+    // app.signOut() + net.clearToken().
     const QString path = conversationPath();
     if (!path.isEmpty()) QFile::remove(path);
 
+    const bool haveAnother = dropCurrentAccount();
+    emit accountsChanged();
+
+    if (haveAnother) {
+        // Fall back to another stored account, reloading its data in place.
+        api_->setToken(currentToken());
+        activateSession();
+        if (!loggedIn_) { loggedIn_ = true; emit loggedInChanged(); }
+        return;
+    }
+
+    // No account left: land on the login screen.
     api_->setToken(QString());
-    settings_->remove(kTokenKey);
     chat_->clear();
+    conversationId_.clear();
+    incoSavedValid_ = false;
+    setReadOnly(false);
+    if (incognito_) { incognito_ = false; emit incognitoChanged(); }
     providers_.clear();
     emit providersChanged();
     setEmail(QString());
-
     if (loggedIn_) { loggedIn_ = false; emit loggedInChanged(); }
+}
+
+//------------------------------------------------------------------------------
+// Multi-account (net.js token store)
+//------------------------------------------------------------------------------
+
+QString AppController::currentSub() const {
+    return settings_->value(kCurrentKey).toString();
+}
+
+QString AppController::tokenFor(const QString& sub) const {
+    if (sub.isEmpty()) return {};
+    return settings_->value(QString::fromLatin1(kTokenPrefix) + sub).toString();
+}
+
+QString AppController::currentToken() const {
+    return tokenFor(currentSub());
+}
+
+void AppController::storeToken(const QString& token) {
+    if (token.isEmpty()) return;
+    const QString sub = subClaim(token);
+    if (sub.isEmpty()) return;
+    const QString email = emailClaim(token);
+    // Dedupe by email: the server re-salts `sub` per issuance, so drop any other
+    // slot with the same email so there is one entry per account, not per login.
+    if (!email.isEmpty()) {
+        const QVariantList accts = listAccounts();
+        for (const QVariant& v : accts) {
+            const QVariantMap a = v.toMap();
+            if (a.value("sub").toString() != sub && a.value("email").toString() == email)
+                settings_->remove(QString::fromLatin1(kTokenPrefix) + a.value("sub").toString());
+        }
+    }
+    settings_->setValue(QString::fromLatin1(kTokenPrefix) + sub, token);
+    settings_->setValue(kCurrentKey, sub);
+}
+
+bool AppController::dropCurrentAccount() {
+    const QString sub = currentSub();
+    if (!sub.isEmpty()) settings_->remove(QString::fromLatin1(kTokenPrefix) + sub);
+    const QVariantList rest = listAccounts();
+    if (!rest.isEmpty()) {
+        settings_->setValue(kCurrentKey, rest.first().toMap().value("sub").toString());
+        return true;
+    }
+    settings_->remove(kCurrentKey);
+    return false;
+}
+
+void AppController::migrateLegacyToken() {
+    const QString legacy = settings_->value(kLegacyTokenKey).toString();
+    if (legacy.isEmpty()) return;
+    storeToken(legacy);
+    settings_->remove(kLegacyTokenKey);
+}
+
+QVariantList AppController::listAccounts() const {
+    QVariantList out;
+    const QString cur = currentSub();
+    const QString prefix = QString::fromLatin1(kTokenPrefix);
+    const QStringList keys = settings_->allKeys();
+    for (const QString& k : keys) {
+        if (!k.startsWith(prefix)) continue;
+        const QString sub = k.mid(prefix.size());
+        if (sub.isEmpty()) continue;
+        const QString tok = settings_->value(k).toString();
+        QVariantMap m;
+        m.insert("sub", sub);
+        m.insert("email", emailClaim(tok));
+        m.insert("current", sub == cur);
+        out.push_back(m);
+    }
+    // Current account first (mirrors net.listAccounts()).
+    std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value("current").toBool() && !b.toMap().value("current").toBool();
+    });
+    return out;
+}
+
+void AppController::switchAccount(const QString& sub) {
+    if (sub.isEmpty() || tokenFor(sub).isEmpty()) return;
+    if (sub == currentSub() && !addingAccount_) return;
+    stopStreaming();
+    settings_->setValue(kCurrentKey, sub);
+    api_->setToken(currentToken());
+    if (addingAccount_) { addingAccount_ = false; emit addingAccountChanged(); }
+    activateSession();
+    emit accountsChanged();
+    if (!loggedIn_) { loggedIn_ = true; emit loggedInChanged(); }
+}
+
+void AppController::addAccount() {
+    if (addingAccount_) return;
+    addingAccount_ = true;
+    emit addingAccountChanged();
+}
+
+void AppController::cancelAddAccount() {
+    if (!addingAccount_) return;
+    addingAccount_ = false;
+    emit addingAccountChanged();
+}
+
+void AppController::activateSession() {
+    // Reset per-session state, then load the current account's data. The single
+    // entry point after any session change so no previous account leaks through.
+    stopStreaming();
+    if (incognito_) { incognito_ = false; emit incognitoChanged(); }
+    incoSavedValid_ = false;
+    conversationId_.clear();
+    setReadOnly(false);
+    setEmail(emailClaim(currentToken()));
+    chat_->clear();
+    loadConversation();      // restore THIS account's persisted conversation
+    providers_.clear();
+    emit providersChanged();
+    loadProviders();
 }
 
 //------------------------------------------------------------------------------
@@ -225,6 +386,12 @@ void AppController::setStreaming(bool s) {
     if (s == streaming_) return;
     streaming_ = s;
     emit streamingChanged();
+}
+
+void AppController::setReadOnly(bool ro) {
+    if (ro == readOnly_) return;
+    readOnly_ = ro;
+    emit readOnlyChanged();
 }
 
 //------------------------------------------------------------------------------
@@ -321,6 +488,8 @@ void AppController::sendMessage(const QString& text) {
             {"provider", providerName},
             {"question", q},
             {"language", language_},
+            {"conversation_id", conversationId_},
+            {"incognito", incognito_},
         };
         SseStream* s = api_->openStream("/api/chat", body);
         stream_ = s;
@@ -332,7 +501,19 @@ void AppController::sendMessage(const QString& text) {
             if (err.error != QJsonParseError::NoError || !doc.isObject()) return;
             const QJsonObject o = doc.object();
             const QString type = o.value("type").toString();
-            if (type == "reply") {
+            if (type == "conversation") {
+                // The durable thread id for this turn; remember it so the next
+                // turn continues the same thread, and persist it (never when
+                // incognito -- those ids are ephemeral). content carries it as a
+                // precise decimal string.
+                const QString id = o.value("content").isString()
+                    ? o.value("content").toString()
+                    : QString::number(o.value("conversation_id").toVariant().toLongLong());
+                if (!id.isEmpty()) {
+                    conversationId_ = id;
+                    if (!incognito_) saveConversation();
+                }
+            } else if (type == "reply") {
                 *acc += o.value("content").toString();
                 chat_->setContent(assistantRow, *acc);
             } else if (type == "thinking") {
@@ -540,17 +721,29 @@ void AppController::loadConversation() {
     if (!f.open(QIODevice::ReadOnly)) return;
     const QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
     f.close();
-    if (!doc.isArray()) return;
-    // Also surface the signed-in email (decoded above) into the settings menu.
-    chat_->loadSnapshot(doc.array().toVariantList());
+    // Tolerate both the bare array (legacy) and the {conversation_id, messages}
+    // wrapper written below, so a returning session resumes the same thread.
+    if (doc.isArray()) {
+        chat_->loadSnapshot(doc.array().toVariantList());
+    } else if (doc.isObject()) {
+        const QJsonObject o = doc.object();
+        conversationId_ = o.value("conversation_id").toString();
+        chat_->loadSnapshot(o.value("messages").toArray().toVariantList());
+    }
 }
 
 void AppController::saveConversation() {
+    // Incognito turns are never persisted (mirrors db skip in chat.js submit).
+    if (incognito_) return;
     const QString path = conversationPath();
     if (path.isEmpty()) return;
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
-    f.write(QJsonDocument(QJsonArray::fromVariantList(chat_->snapshot())).toJson(QJsonDocument::Compact));
+    QJsonObject wrapper{
+        {"conversation_id", conversationId_},
+        {"messages", QJsonArray::fromVariantList(chat_->snapshot())},
+    };
+    f.write(QJsonDocument(wrapper).toJson(QJsonDocument::Compact));
     f.close();
 }
 
@@ -576,4 +769,183 @@ void AppController::deleteHistory(const QString& sessionId) {
     QJsonObject body{{"session_id", sessionId}};
     api_->postEnvelope("/api/history/delete", body, nullptr,
         [](const QString&, int) {});
+}
+
+void AppController::openConversation(const QString& sessionId) {
+    if (sessionId.isEmpty()) return;
+    const QString path = QStringLiteral("/api/conversation?id=%1")
+        .arg(QString::fromUtf8(QUrl::toPercentEncoding(sessionId)));
+    api_->getEnvelope(path,
+        [this, sessionId](const QJsonValue& data) {
+            const QJsonObject o = data.toObject();
+            const QJsonArray msgs = o.value("messages").toArray();
+            QVariantList out;
+            for (const QJsonValue& mv : msgs) {
+                const QJsonObject m = mv.toObject();
+                QVariantMap row;
+                row.insert("role", m.value("role").toString());
+                row.insert("content", m.value("content").toString());
+                // created_at is epoch ms (matches ChatModel's TimestampRole).
+                row.insert("ts", m.value("created_at").toVariant().toLongLong());
+                if (m.value("role").toString() == "assistant" && m.contains("provider"))
+                    row.insert("provider", m.value("provider").toString());
+                out.push_back(row);
+            }
+            chat_->loadSnapshot(out);
+            const QJsonValue idv = o.value("id");
+            if (idv.isString())      conversationId_ = idv.toString();
+            else if (idv.isDouble()) conversationId_ = QString::number(idv.toVariant().toLongLong());
+            else                     conversationId_ = sessionId;
+            // Opening a saved conversation leaves incognito (it's a real thread).
+            if (incognito_) { incognito_ = false; emit incognitoChanged(); }
+            incoSavedValid_ = false;
+            // Owned threads stay editable; one shared *to* the user is read-only.
+            setReadOnly(!o.value("owned").toBool(true));
+            // Mirror an owned/editable thread locally so a reload continues it.
+            if (!readOnly_) saveConversation();
+        },
+        [this](const QString&, int code) {
+            if (code == 401) { signOut(); return; }
+            // Best-effort: a load failure leaves the drawer open (mirrors web).
+        });
+}
+
+//------------------------------------------------------------------------------
+// New chat + incognito
+//------------------------------------------------------------------------------
+
+void AppController::newChat() {
+    if (streaming_) return;
+    chat_->clear();
+    conversationId_.clear();
+    setReadOnly(false);
+    // Leaves incognito state as-is (that's toggleIncognito's job); clears the
+    // local mirror so a reload doesn't resurrect the old thread.
+    if (!incognito_) saveConversation();
+}
+
+void AppController::toggleIncognito() {
+    if (streaming_) return;
+    if (!incognito_) {
+        // Stash the real conversation and start a blank ephemeral one.
+        incoSavedMessages_ = chat_->snapshot();
+        incoSavedConvId_   = conversationId_;
+        incoSavedReadOnly_ = readOnly_;
+        incoSavedValid_    = true;
+        incognito_ = true;
+        emit incognitoChanged();
+        chat_->clear();
+        conversationId_.clear();
+        setReadOnly(false);
+    } else {
+        // Restore the stash, discarding the ephemeral turns (never persisted).
+        incognito_ = false;
+        emit incognitoChanged();
+        conversationId_ = incoSavedValid_ ? incoSavedConvId_ : QString();
+        setReadOnly(incoSavedValid_ ? incoSavedReadOnly_ : false);
+        chat_->loadSnapshot(incoSavedValid_ ? incoSavedMessages_ : QVariantList());
+        incoSavedValid_ = false;
+        incoSavedMessages_.clear();
+        incoSavedConvId_.clear();
+    }
+}
+
+//------------------------------------------------------------------------------
+// Connect EHR (health.ehr.*)
+//------------------------------------------------------------------------------
+
+void AppController::ehrSearchProviders(const QString& query) {
+    const QString path = QStringLiteral("/health/ehr/providers?q=%1")
+        .arg(QString::fromUtf8(QUrl::toPercentEncoding(query.trimmed())));
+    api_->getEnvelope(path,
+        [this](const QJsonValue& data) {
+            emit ehrProvidersLoaded(data.toObject().value("providers").toArray().toVariantList());
+        },
+        [this](const QString& msg, int code) {
+            if (code == 401) { signOut(); return; }
+            emit ehrError(msg);
+        });
+}
+
+void AppController::ehrConnect(const QString& fhirBaseUrl) {
+    QString url = fhirBaseUrl.trimmed();
+    while (url.endsWith('/')) url.chop(1);
+    if (url.isEmpty()) return;
+    QJsonObject body{{"fhir_base_url", url}};
+    api_->postEnvelope("/health/ehr/authorize", body,
+        [this](const QJsonValue& data) {
+            const QString authUrl = data.toObject().value("authorize_url").toString();
+            if (!authUrl.isEmpty()) {
+                // OAuth happens server-side; open the system browser (Android's
+                // Intent.ACTION_VIEW equivalent). The user returns and taps Sync.
+                QDesktopServices::openUrl(QUrl(authUrl));
+                emit ehrConnecting();
+            } else {
+                emit ehrError(QString());
+            }
+        },
+        [this](const QString& msg, int code) {
+            if (code == 401) { signOut(); return; }
+            emit ehrError(msg);
+        });
+}
+
+void AppController::ehrSync() {
+    api_->postEnvelope("/health/ehr/sync", QJsonObject(),
+        [this](const QJsonValue& data) {
+            emit ehrSynced(data.toObject().value("posted").toInt());
+        },
+        [this](const QString& msg, int code) {
+            if (code == 401) { signOut(); return; }
+            emit ehrError(msg);
+        });
+}
+
+//------------------------------------------------------------------------------
+// Connected devices / vendors
+//------------------------------------------------------------------------------
+
+void AppController::loadVendors() {
+    api_->getEnvelope("/vendors",
+        [this](const QJsonValue& data) {
+            emit vendorsLoaded(data.toArray().toVariantList());
+        },
+        [this](const QString& msg, int code) {
+            if (code == 401) { signOut(); return; }
+            emit vendorsError(msg);
+        });
+    // Icons ship separately as a { id: dataURI } map; fetched in parallel.
+    api_->getEnvelope("/vendors/icons",
+        [this](const QJsonValue& data) {
+            emit vendorIconsLoaded(data.toObject().toVariantMap());
+        },
+        [](const QString&, int) {});   // icons are best-effort (monogram fallback)
+}
+
+void AppController::vendorConnect(const QString& id) {
+    if (id.isEmpty()) return;
+    const QString path = QStringLiteral("/vendors/%1/authorize")
+        .arg(QString::fromUtf8(QUrl::toPercentEncoding(id)));
+    api_->getEnvelope(path,
+        [this](const QJsonValue& data) {
+            const QString authUrl = data.toObject().value("authorize_url").toString();
+            if (!authUrl.isEmpty()) QDesktopServices::openUrl(QUrl(authUrl));
+            emit vendorActionDone();
+        },
+        [this](const QString& msg, int code) {
+            if (code == 401) { signOut(); return; }
+            emit vendorsError(msg);
+        });
+}
+
+void AppController::vendorUnlink(const QString& id) {
+    if (id.isEmpty()) return;
+    const QString path = QStringLiteral("/vendors/%1/unlink")
+        .arg(QString::fromUtf8(QUrl::toPercentEncoding(id)));
+    api_->postEnvelope(path, QJsonObject(),
+        [this](const QJsonValue&) { emit vendorActionDone(); },
+        [this](const QString& msg, int code) {
+            if (code == 401) { signOut(); return; }
+            emit vendorsError(msg);
+        });
 }

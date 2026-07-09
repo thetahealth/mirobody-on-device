@@ -1,36 +1,28 @@
-<view class="page">
-  <!-- Toolbar, mirroring the web client's CenterAlignedTopAppBar: the hamburger
-       (left) opens the nav drawer, the "Mirobody" brand is centered, and the
-       settings gear (right) opens the app-settings menu (language). -->
+<view class="page {{fontClass}}">
+  <!-- Toolbar, mirroring the web client's CenterAlignedTopAppBar: the account
+       avatar (left) opens the nav drawer, the "Mirobody" brand is centered, and
+       the settings gear (right) opens the app-settings menu. The avatar is a
+       filled navy circle showing the first letter of the JWT email, or a person
+       glyph when the token carries no email (e.g. a WeChat login). -->
   <view class="toolbar">
     <view class="tb-side">
-      <view class="hamburger" bindtap="openDrawer">
-        <view class="bar"></view>
-        <view class="bar"></view>
-        <view class="bar"></view>
+      <view class="avatar" bindtap="openDrawer">
+        <text wx:if="{{avatarInitial}}">{{avatarInitial}}</text>
+        <image
+          wx:else
+          class="avatar-glyph"
+          mode="aspectFit"
+          src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZmZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSI4IiByPSI0LjIiLz48cGF0aCBkPSJNMy41IDIwLjVjMC00LjMgNC4yLTYuNSA4LjUtNi41czguNSAyLjIgOC41IDYuNXoiLz48L3N2Zz4="
+        />
       </view>
     </view>
     <text class="brand serif">Mirobody</text>
     <view class="tb-side tb-right">
-      <view class="settings-wrap">
-        <view class="gear" bindtap="toggleSettings">⚙</view>
-        <view class="settings-menu {{settingsOpen ? 'show' : ''}}">
-          <picker
-            mode="selector"
-            range="{{langNames}}"
-            value="{{langIndex}}"
-            bindchange="onLanguageChange">
-            <view class="menu-row">
-              <text>语言</text>
-              <text class="menu-hint">{{langLabel}}</text>
-            </view>
-          </picker>
-        </view>
-      </view>
+      <settings-menu
+        bind:fontchange="onFontChange"
+        bind:backendchange="onBackendChange"></settings-menu>
     </view>
   </view>
-  <!-- Tap-catcher: closes the settings menu on an outside tap. -->
-  <view wx:if="{{settingsOpen}}" class="settings-mask" bindtap="closeSettings"></view>
 
   <!-- Message list -->
   <scroll-view
@@ -161,8 +153,24 @@
 
       <view class="foot-divider"></view>
 
-      <!-- Language moved to the top-bar settings gear; the email isn't shown
-           (matches the web client). The drawer is navigation only. -->
+      <!-- Account switcher: the current account's email (muted) with a caret
+           that expands the other signed-in accounts (tap to switch) plus an
+           "添加账号" row. Mirrors the web client's history.js account block.
+           App settings live in the top-bar gear, not here. -->
+      <view class="acct-row" bindtap="toggleSwitcher">
+        <text class="acct-email">{{accountLabel}}</text>
+        <text class="acct-caret {{switcherOpen ? 'up' : ''}}">⌄</text>
+      </view>
+      <view wx:if="{{switcherOpen}}" class="acct-switcher">
+        <view
+          wx:for="{{otherAccounts}}"
+          wx:key="sub"
+          class="acct-item"
+          data-sub="{{item.sub}}"
+          bindtap="onSwitchAccount">{{item.label}}</view>
+        <view class="acct-item" bindtap="onAddAccount">＋  添加账号</view>
+      </view>
+
       <view class="nav-row danger" bindtap="onConfirmSignOut">
         <text>退出登录</text>
       </view>

@@ -26,66 +26,93 @@ ApplicationWindow {
     Binding { target: Theme; property: "fontOffset"; value: app.fontOffset }
     Binding { target: I18n;  property: "language";   value: app.language }
 
-    // --- top bar -----------------------------------------------------------
+    // --- top bar (topbar.js buildTopBar: CenterAlignedTopAppBar) -----------
+    // LEFT = account avatar that opens the nav drawer (a back arrow while adding
+    // an account); CENTER = the optically-centered Mirobody brand; RIGHT = the
+    // settings gear (app settings only). The provider/model picker now lives above
+    // the composer in ChatPage, so the center stays the brand.
     header: ToolBar {
-        background: Rectangle { color: Theme.background }
-        RowLayout {
+        height: 56
+        background: Rectangle {
+            color: Theme.background
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.outlineVar }
+        }
+
+        Item {
             anchors.fill: parent
             anchors.leftMargin: 8
             anchors.rightMargin: 8
-            spacing: 8
 
-            // Brand: opens the history drawer when signed in (as the web logo does).
-            ToolButton {
-                text: "Mirobody"
-                font.pointSize: Theme.baseSize + 2
-                font.bold: true
-                flat: true
-                enabled: app.loggedIn
-                onClicked: { historyDrawer.reload(); historyDrawer.open(); }
-                contentItem: Label {
+            // Left: account avatar (chat) / back arrow (adding account) / nothing.
+            Item {
+                id: leftZone
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: 40; height: 40
+
+                // Account avatar: a filled circle with the first letter of the JWT
+                // email, else a person glyph. Reads as "you / account" vs the gear.
+                Rectangle {
+                    id: avatar
+                    anchors.centerIn: parent
+                    visible: app.loggedIn && !app.addingAccount
+                    width: 30; height: 30; radius: 15
+                    color: Theme.primary
+                    Label {
+                        anchors.centerIn: parent
+                        text: app.email.length > 0 ? app.email.charAt(0).toUpperCase() : "👤"
+                        color: Theme.onPrimary
+                        font.pointSize: Theme.baseSize - 1
+                        font.bold: true
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: { historyDrawer.reload(); historyDrawer.open(); }
+                    }
+                }
+
+                // Back arrow: cancel Add-account and return to the current account.
+                ToolButton {
+                    anchors.fill: parent
+                    visible: app.addingAccount
+                    text: "←"
+                    font.pointSize: Theme.baseSize + 4
+                    onClicked: app.cancelAddAccount()
+                }
+            }
+
+            // Center: the Mirobody brand (logo mark + serif-style wordmark), truly
+            // centered. A drawn navy mark avoids depending on an external asset.
+            Row {
+                anchors.centerIn: parent
+                spacing: 8
+                visible: app.loggedIn && !app.addingAccount
+                Rectangle {
+                    width: 26; height: 26; radius: 6
+                    color: Theme.brand
+                    anchors.verticalCenter: parent.verticalCenter
+                    Label {
+                        anchors.centerIn: parent
+                        text: "M"
+                        color: Theme.onPrimary
+                        font.bold: true
+                        font.pointSize: Theme.baseSize
+                    }
+                }
+                Label {
+                    anchors.verticalCenter: parent.verticalCenter
                     text: "Mirobody"
-                    font: parent.font
                     color: Theme.onSurface
-                    verticalAlignment: Text.AlignVCenter
+                    font.pointSize: Theme.baseSize + 4
+                    font.bold: true
                 }
             }
 
-            Item { Layout.fillWidth: true }
-
-            // Provider picker (chat only). Restores the cached selection and
-            // persists changes through app.setProvider.
-            ComboBox {
-                id: providerCombo
-                visible: app.loggedIn
-                Layout.maximumWidth: 220
-                model: app.providers
-                textRole: "name"
-                valueRole: "name"
-                displayText: currentIndex >= 0 ? currentText : I18n.t("selectModel")
-                onActivated: {
-                    app.setProvider(currentValue);
-                    // On-device provider chosen but model not downloaded → prompt.
-                    var p = app.providers[currentIndex];
-                    if (p && p.code === "__ondevice_gemma4__" && app.onDeviceModel.status !== "ready")
-                        onDeviceDialog.open();
-                }
-                Component.onCompleted: currentIndex = indexOfValue(app.provider)
-                Connections {
-                    target: app
-                    function onProvidersChanged() {
-                        providerCombo.currentIndex = providerCombo.indexOfValue(app.provider);
-                    }
-                    function onProviderChanged() {
-                        providerCombo.currentIndex = providerCombo.indexOfValue(app.provider);
-                    }
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-
-            // Settings gear.
+            // Right: settings gear (app settings only; identical on login + chat).
             ToolButton {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
                 text: "⚙"
                 font.pointSize: Theme.baseSize + 4
                 onClicked: settingsMenu.popup()
@@ -98,79 +125,18 @@ ApplicationWindow {
         onOpenLanguage: languageDialog.open()
         onOpenFont: fontDialog.open()
         onOpenBackend: backendDialog.open()
-        onOpenBle: bleDialog.open()
         onOpenAbout: aboutDialog.open()
     }
 
     // --- body --------------------------------------------------------------
+    // The login view is shown when signed out, or over an existing session while
+    // adding a second account (mirrors app.js showLogin = addingAccount || !token).
     Loader {
         anchors.fill: parent
-        sourceComponent: app.loggedIn ? chatComponent : loginComponent
+        sourceComponent: (app.loggedIn && !app.addingAccount) ? chatComponent : loginComponent
     }
     Component { id: loginComponent; LoginPage {} }
     Component { id: chatComponent;  ChatPage {} }
-
-    // On-device model manager: explains the privacy trade-off and drives the
-    // ~2.5 GB Gemma 4 download. Bound to app.onDeviceModel (ModelDownloader).
-    Dialog {
-        id: onDeviceDialog
-        title: "On-device private AI"
-        anchors.centerIn: parent
-        modal: true
-        width: Math.min(parent ? parent.width - 64 : 420, 420)
-        standardButtons: Dialog.Close
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 12
-
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                color: Theme.onSurface
-                text: "Gemma 4 runs entirely on your device. Your messages never leave " +
-                      "the computer and work offline. This needs a one-time download of " +
-                      "about 2.5 GB and enough free memory."
-            }
-
-            ProgressBar {
-                Layout.fillWidth: true
-                visible: app.onDeviceModel.status === "downloading"
-                value: app.onDeviceModel.progress
-            }
-
-            Text {
-                Layout.fillWidth: true
-                color: app.onDeviceModel.status === "failed" ? "#c0392b" : Theme.onSurfaceVar
-                text: {
-                    switch (app.onDeviceModel.status) {
-                    case "ready": return "Ready — runs offline.";
-                    case "downloading": return Math.round(app.onDeviceModel.progress * 100) + "%";
-                    case "failed": return "Download failed.";
-                    default: return "Download required (~2.5 GB).";
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                Button {
-                    text: app.onDeviceModel.status === "downloading" ? "Cancel download"
-                        : (app.onDeviceModel.status === "failed" ? "Retry" : "Download model")
-                    visible: app.onDeviceModel.status !== "ready"
-                    onClicked: app.onDeviceModel.status === "downloading"
-                        ? app.onDeviceModel.cancel() : app.onDeviceModel.start()
-                }
-                Button {
-                    text: "Delete model"
-                    visible: app.onDeviceModel.status === "ready"
-                    onClicked: app.onDeviceModel.remove()
-                }
-                Item { Layout.fillWidth: true }
-            }
-        }
-    }
 
     // --- shared dialogs / drawer ------------------------------------------
     LanguageDialog { id: languageDialog }
@@ -178,5 +144,13 @@ ApplicationWindow {
     BackendDialog  { id: backendDialog }
     BleDialog      { id: bleDialog }
     AboutDialog    { id: aboutDialog }
-    HistoryDrawer  { id: historyDrawer }
+    EhrDialog      { id: ehrDialog }
+    VendorsDialog  { id: vendorsDialog }
+    HistoryDrawer  {
+        id: historyDrawer
+        // The Health & data group opens these from the drawer (moved off the gear).
+        onOpenBle: bleDialog.open()
+        onOpenEhr: ehrDialog.open()
+        onOpenVendors: vendorsDialog.open()
+    }
 }

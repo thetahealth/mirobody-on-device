@@ -82,7 +82,7 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         CFBundleDevelopmentRegion: en
-        CFBundleLocalizations: [en, zh, ja, ko, fr, de, ru, es]
+        CFBundleLocalizations: [en, zh, ja, ko, fr, de, ru, es, ar, he]
         # The app talks to user-configured HTTP backends (e.g. http://localhost:8080).
         # ATS would block cleartext otherwise. Loopback is always allowed; arbitrary
         # loads are enabled so self-hosted http:// backends work — tighten for the App

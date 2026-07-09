@@ -9,10 +9,12 @@ final class HealthSyncViewModel: ObservableObject {
 
     private let repo: HealthKitRepository
     private let errorBus: ErrorBus
+    private let language: String
 
-    init(repo: HealthKitRepository, errorBus: ErrorBus) {
+    init(repo: HealthKitRepository, errorBus: ErrorBus, language: String) {
         self.repo = repo
         self.errorBus = errorBus
+        self.language = language
     }
 
     var isAvailable: Bool { repo.isAvailable }
@@ -26,10 +28,14 @@ final class HealthSyncViewModel: ObservableObject {
                 let end = Date()
                 let start = Calendar.current.date(byAdding: .day, value: -days, to: end) ?? end
                 let result = try await repo.sync(start: start, end: end)
-                status = result.error ?? "Posted \(result.posted), failed \(result.failed)."
+                if let error = result.error {
+                    status = L("health_error", language, error)
+                } else {
+                    status = L("health_result", language, result.posted, result.failed)
+                }
             } catch {
                 errorBus.emit(error)
-                status = error.localizedDescription
+                status = L("health_error", language, error.localizedDescription)
             }
             syncing = false
         }
@@ -38,10 +44,10 @@ final class HealthSyncViewModel: ObservableObject {
 
 /// Settings sheet: read on-device Apple Health data and POST it as FHIR. Apple
 /// HealthKit is on-device only (no cloud API), so this is the whole Apple path.
-/// Labels are English literals for now — localize via the `.lproj` tables when
-/// wiring translations (the iOS `L()` helper has no en fallback for missing keys).
 struct HealthSyncView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.mbColors) private var colors
+    @Environment(\.mbLanguage) private var lang
     @Environment(\.dismiss) private var dismiss
     @StateObject private var vm: HealthSyncViewModel
 
@@ -49,33 +55,33 @@ struct HealthSyncView: View {
         _vm = StateObject(wrappedValue: HealthSyncViewModel(
             repo: container.healthRepository,
             errorBus: container.errorBus,
+            language: container.settings.language
         ))
     }
 
     var body: some View {
         VStack(spacing: 16) {
-            Text("Sync health data").font(.headline)
-            Text(vm.isAvailable
-                 ? "Reads your activity, heart rate, sleep, and weight from Apple Health and adds them to your health record."
-                 : "HealthKit is not available on this device.")
-                .font(.subheadline)
+            LText("chat_sync_health").mbFont(.titleMedium).foregroundColor(colors.onSurface)
+            Text(vm.isAvailable ? L("health_source", lang, "Apple Health") : L("health_no_source", lang))
+                .mbFont(.bodyMedium)
                 .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
+                .foregroundColor(colors.onSurfaceVariant)
 
             if !vm.status.isEmpty {
-                Text(vm.status).font(.footnote)
+                Text(vm.status).mbFont(.bodySmall).foregroundColor(colors.onSurface)
             }
 
             Button {
                 vm.sync()
             } label: {
-                Text(vm.syncing ? "Syncing…" : "Sync last 7 days")
+                Text(vm.syncing ? L("health_syncing", lang) : L("health_sync_button", lang))
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
+            .tint(colors.primary)
             .disabled(vm.syncing || !vm.isAvailable)
 
-            Button("Close") { dismiss() }
+            Button(L("common_close", lang)) { dismiss() }.foregroundColor(colors.primary)
         }
         .padding(24)
         .presentationDetents([.medium])

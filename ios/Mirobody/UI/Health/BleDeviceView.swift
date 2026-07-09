@@ -5,11 +5,9 @@ import SwiftUI
 /// ``BleHealthController``. The iOS sibling of the desktop Qt BleDialog and Android
 /// BleDeviceDialog. Core Bluetooth prompts for permission on the first scan (the
 /// `NSBluetoothAlwaysUsageDescription` string in Info.plist).
-///
-/// Labels are English literals for now — localize via the `.lproj` tables when wiring
-/// translations, like the sibling HealthSyncView.
 struct BleDeviceView: View {
     @EnvironmentObject private var container: AppContainer
+    @Environment(\.mbLanguage) private var lang
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var controller: BleHealthController
 
@@ -19,10 +17,8 @@ struct BleDeviceView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("Bluetooth health devices").font(.headline)
-            Text("Connect a standard Bluetooth LE sensor (heart-rate strap, blood-pressure cuff, "
-                + "thermometer). Readings are saved to your health record. Watches and rings use "
-                + "private protocols — connect those under vendors.")
+            LText("ble_title").font(.headline)
+            LText("ble_intro")
                 .font(.footnote)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -38,7 +34,7 @@ struct BleDeviceView: View {
                         }
                         Spacer()
                         if device.supported {
-                            Text("health").font(.caption2).foregroundColor(.accentColor)
+                            LText("ble_supported_tag").font(.caption2).foregroundColor(.accentColor)
                         }
                     }
                 }
@@ -48,7 +44,7 @@ struct BleDeviceView: View {
             .frame(maxHeight: 200)
             .overlay {
                 if controller.devices.isEmpty {
-                    Text("No devices yet — tap Scan")
+                    LText("ble_no_devices")
                         .font(.footnote).foregroundColor(.secondary)
                 }
             }
@@ -60,23 +56,23 @@ struct BleDeviceView: View {
                 Text(reading).font(.subheadline).bold()
             }
             if controller.posted > 0 || controller.failed > 0 {
-                Text("Saved \(controller.posted), failed \(controller.failed)")
+                Text(L("ble_saved", lang, controller.posted, controller.failed))
                     .font(.caption).foregroundColor(.secondary)
             }
 
             HStack(spacing: 12) {
-                Button(controller.scanning ? "Stop" : "Scan") {
+                Button(controller.scanning ? L("ble_stop", lang) : L("ble_scan", lang)) {
                     if controller.scanning { controller.stopScan() } else { controller.startScan() }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(controller.connected)
 
                 if controller.connected {
-                    Button("Disconnect") { controller.disconnect() }
+                    Button(L("ble_disconnect", lang)) { controller.disconnect() }
                 }
             }
 
-            Button("Close") { controller.disconnect(); dismiss() }
+            Button(L("common_close", lang)) { controller.disconnect(); dismiss() }
         }
         .padding(24)
         .presentationDetents([.medium, .large])

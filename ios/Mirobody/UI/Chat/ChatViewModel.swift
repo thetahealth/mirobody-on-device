@@ -16,6 +16,14 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var attachments: [ChatAttachment] = []
     /// State of the on-device model file, driving the on-device provider's UI.
     @Published private(set) var onDeviceStatus: OnDeviceModelStatus = .absent
+    /// Privacy mode: entering swaps the session for a fresh ephemeral one; while on,
+    /// turns aren't persisted and each request carries `incognito:true`. Mirrors web.
+    @Published private(set) var incognito = false
+    /// The server-side thread id for the current conversation, learned from the
+    /// `conversation` SSE event or on resume. Empty until the first turn lands.
+    @Published private(set) var conversationId = ""
+    /// A conversation shared TO the user opens read-only: the composer is hidden.
+    @Published private(set) var readOnly = false
 
     private let repo: ChatRepository
     private let settings: SettingsStore
@@ -23,6 +31,8 @@ final class ChatViewModel: ObservableObject {
     private let modelManager: ModelManager
     private var streamTask: Task<Void, Never>?
     private var cancellables: Set<AnyCancellable> = []
+    /// Session stashed when entering incognito, restored on exit (messages + thread id).
+    private var incognitoSaved: (messages: [ChatMessage], conversationId: String)?
 
     init(repo: ChatRepository, settings: SettingsStore, errorBus: ErrorBus, modelManager: ModelManager) {
         self.repo = repo
@@ -69,6 +79,70 @@ final class ChatViewModel: ObservableObject {
         settings.setSelectedProviderName(provider.key)
     }
 
+    /// Toggle privacy mode, swapping the whole session (mirrors the web client).
+    /// Entering stashes the current thread and starts a fresh ephemeral one; leaving
+    /// restores it. Inert while a reply is streaming.
+    func toggleIncognito() {
+        guard !sending else { return }
+        streamTask?.cancel()
+        if !incognito {
+            incognitoSaved = (messages, conversationId)
+            messages = []
+            conversationId = ""
+            readOnly = false
+            incognito = true
+        } else {
+            let saved = incognitoSaved ?? ([], "")
+            incognitoSaved = nil
+            messages = saved.messages
+            conversationId = saved.conversationId
+            incognito = false
+        }
+    }
+
+    /// Clear the current thread and start a new one (the drawer's "New chat").
+    /// Leaves incognito state as-is (that's the toggle's job).
+    func newChat() {
+        guard !sending else { return }
+        streamTask?.cancel()
+        messages = []
+        conversationId = ""
+        readOnly = false
+        sessionId = UUID().uuidString
+        input = ""
+    }
+
+    /// Open a saved conversation from history and continue it: adopt its session id
+    /// as the thread key so the next turn appends to it. A thread shared TO the user
+    /// (not owned) opens read-only. Leaves incognito. Mirrors Android's
+    /// `openConversation`.
+    func openConversation(sessionId: String) {
+        guard !sending else { return }
+        streamTask?.cancel()
+        incognitoSaved = nil
+        Task {
+            do {
+                let detail = try await repo.conversation(sessionId: sessionId)
+                var msgs: [ChatMessage] = []
+                for m in detail.messages where m.role == "user" || m.role == "assistant" {
+                    msgs.append(ChatMessage(
+                        id: "h-\(sessionId)-\(msgs.count)",
+                        role: m.role == "assistant" ? .assistant : .user,
+                        text: m.content
+                    ))
+                }
+                messages = msgs
+                self.sessionId = sessionId
+                conversationId = detail.id.nonBlank ?? sessionId
+                readOnly = !detail.owned
+                incognito = false
+                input = ""
+            } catch {
+                errorBus.emit(error)
+            }
+        }
+    }
+
     func addAttachment(_ attachment: ChatAttachment) {
         attachments.append(attachment)
     }
@@ -113,7 +187,8 @@ final class ChatViewModel: ObservableObject {
                     agent: selected.agent,
                     provider: selected.provider,
                     language: language,
-                    attachments: turnAttachments
+                    attachments: turnAttachments,
+                    incognito: incognito
                 )
             }
             for await event in stream {
@@ -147,6 +222,8 @@ final class ChatViewModel: ObservableObject {
             updateMessage(targetId) { $0.streaming = false }
         case .stats(let stats):
             updateMessage(targetId) { $0.costStats = stats }
+        case .conversation(let id):
+            if conversationId != id { conversationId = id }
         case .heartbeat, .id, .unknown:
             break
         }

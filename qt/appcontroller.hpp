@@ -30,6 +30,14 @@ class LocalLmEngine;
 class AppController : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool loggedIn READ loggedIn NOTIFY loggedInChanged)
+    // True while the login view is shown over an existing session to add a second
+    // account (mirrors app.js `addingAccount`). The chat view is hidden meanwhile.
+    Q_PROPERTY(bool addingAccount READ addingAccount NOTIFY addingAccountChanged)
+    // Incognito ("privacy mode"): nothing is persisted and each turn carries
+    // incognito:true so the server keeps no memory (mirrors chat.toggleIncognito).
+    Q_PROPERTY(bool incognito READ incognito NOTIFY incognitoChanged)
+    // A conversation shared *to* the user opens read-only: the composer is hidden.
+    Q_PROPERTY(bool readOnly READ readOnly NOTIFY readOnlyChanged)
     Q_PROPERTY(QString email READ email NOTIFY emailChanged)
     Q_PROPERTY(QString baseUrl READ baseUrl NOTIFY baseUrlChanged)
     Q_PROPERTY(QString language READ language NOTIFY languageChanged)
@@ -51,6 +59,9 @@ public:
     ~AppController() override;
 
     bool          loggedIn() const { return loggedIn_; }
+    bool          addingAccount() const { return addingAccount_; }
+    bool          incognito() const { return incognito_; }
+    bool          readOnly() const { return readOnly_; }
     QString       email() const { return email_; }
     QString       baseUrl() const { return baseUrl_; }
     QString       language() const { return language_; }
@@ -69,6 +80,16 @@ public:
     Q_INVOKABLE void verifyCode(const QString& email, const QString& code);
     Q_INVOKABLE void signOut();
 
+    // --- multi-account (net.js account store) ----------------------------
+    // Every stored account as [{sub, email, current}], the current one first.
+    Q_INVOKABLE QVariantList listAccounts() const;
+    // Make an already-stored account current (reloads its conversation/providers).
+    Q_INVOKABLE void switchAccount(const QString& sub);
+    // Show the login view over the current session to sign in another account
+    // without dropping the stored ones; cancelAddAccount() backs out.
+    Q_INVOKABLE void addAccount();
+    Q_INVOKABLE void cancelAddAccount();
+
     // --- settings --------------------------------------------------------
     Q_INVOKABLE void setBaseUrl(const QString& url);
     Q_INVOKABLE void setLanguage(const QString& code);
@@ -79,13 +100,34 @@ public:
     Q_INVOKABLE void loadProviders();
     Q_INVOKABLE void sendMessage(const QString& text);
     Q_INVOKABLE void stopStreaming();
+    // Drop the current thread for a fresh one (drawer "New chat").
+    Q_INVOKABLE void newChat();
+    // Enter/leave incognito, swapping the whole session (chat.toggleIncognito).
+    Q_INVOKABLE void toggleIncognito();
 
     // --- server-side history (the drawer) --------------------------------
     Q_INVOKABLE void loadHistory(int page, int pageSize);
     Q_INVOKABLE void deleteHistory(const QString& sessionId);
+    // Resume a saved conversation into the chat view (owned => editable, a thread
+    // shared to the user => read-only). GET /api/conversation?id=<sessionId>.
+    Q_INVOKABLE void openConversation(const QString& sessionId);
+
+    // --- Connect EHR (health.ehr.*) --------------------------------------
+    Q_INVOKABLE void ehrSearchProviders(const QString& query);
+    Q_INVOKABLE void ehrConnect(const QString& fhirBaseUrl);   // authorize + open browser
+    Q_INVOKABLE void ehrSync();
+
+    // --- Connected devices / vendors -------------------------------------
+    Q_INVOKABLE void loadVendors();       // GET /vendors + GET /vendors/icons
+    Q_INVOKABLE void vendorConnect(const QString& id);   // authorize + open browser
+    Q_INVOKABLE void vendorUnlink(const QString& id);
 
 signals:
     void loggedInChanged();
+    void addingAccountChanged();
+    void incognitoChanged();
+    void readOnlyChanged();
+    void accountsChanged();
     void emailChanged();
     void baseUrlChanged();
     void languageChanged();
@@ -100,10 +142,35 @@ signals:
     void historyLoaded(const QVariantList& summaries);
     void historyError(const QString& message);
 
+    // Connect EHR.
+    void ehrProvidersLoaded(const QVariantList& providers);
+    void ehrError(const QString& message);
+    void ehrConnecting();                // authorize accepted; browser opened
+    void ehrSynced(int posted);
+
+    // Vendors.
+    void vendorsLoaded(const QVariantList& vendors);
+    void vendorIconsLoaded(const QVariantMap& icons);
+    void vendorsError(const QString& message);
+    void vendorActionDone();             // connect opened / unlink finished
+
 private:
     void completeLogin(const QString& accessToken);
     void setStreaming(bool s);
     void setEmail(const QString& email);
+    void setReadOnly(bool ro);
+
+    // --- multi-account token store (net.js) ------------------------------
+    QString currentSub() const;                    // the active account's `sub`
+    QString tokenFor(const QString& sub) const;    // stored JWT for `sub`
+    QString currentToken() const;                  // token of the current account
+    void    storeToken(const QString& token);      // store + make current (dedupe by email)
+    // Drop the current account's slot; return true and switch to another stored
+    // account if one remains, else clear the pointer and return false.
+    bool    dropCurrentAccount();
+    void    migrateLegacyToken();                  // old single-token slot -> per-account
+    // Reload the current account's identity (email) + conversation + providers.
+    void    activateSession();
 
     // Local per-user conversation persistence (mirrors db.js).
     QString userId() const;                 // decoded from the JWT `sub`/`email`
@@ -127,6 +194,9 @@ private:
     BleHealth*       ble_ = nullptr;
 
     bool         loggedIn_   = false;
+    bool         addingAccount_ = false;
+    bool         incognito_  = false;
+    bool         readOnly_   = false;
     QString      email_;
     QString      baseUrl_;
     QString      language_;
@@ -134,4 +204,15 @@ private:
     QString      provider_;
     QVariantList providers_;
     bool         streaming_  = false;
+
+    // The server thread id for the running conversation, so the next turn
+    // continues it and a reload resumes it (mirrors state.currentConversationId).
+    QString      conversationId_;
+
+    // Incognito stash: the real conversation set aside while incognito is on,
+    // restored on leaving (mirrors state.incognitoSaved).
+    bool         incoSavedValid_ = false;
+    QVariantList incoSavedMessages_;
+    QString      incoSavedConvId_;
+    bool         incoSavedReadOnly_ = false;
 };

@@ -37,8 +37,15 @@ struct RootView: View {
 
     @ViewBuilder
     private var content: some View {
-        if settings.accessToken != nil {
+        // Token-driven routing. "Add account" (addingAccount) forces the login view
+        // over a still-signed-in session so a second account can sign in; the
+        // existing account's token stays stored (see SettingsStore.setAccessToken).
+        if settings.accessToken != nil && !settings.addingAccount {
+            // `.id` gives the chat a stable identity per account, so switching or
+            // signing out to another account recreates it with fresh state — the
+            // iOS analogue of Android's `onRelaunch`.
             ChatView(container: container)
+                .id(settings.currentAccountId)
         } else {
             NavigationStack(path: $authPath) {
                 EmailView(
@@ -50,6 +57,18 @@ struct RootView: View {
                     switch route {
                     case .verify(let email):
                         VerifyView(container: container, email: email)
+                    }
+                }
+                // While adding a second account there's still a current account to
+                // return to: a Cancel backs out without signing in.
+                .toolbar {
+                    if settings.addingAccount && settings.accessToken != nil {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(L("common_cancel", settings.language)) {
+                                authPath = []
+                                settings.addingAccount = false
+                            }
+                        }
                     }
                 }
             }

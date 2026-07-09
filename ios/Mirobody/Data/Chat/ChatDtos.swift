@@ -16,6 +16,9 @@ struct ChatStreamRequest: Encodable {
     // Opaque care-circle member handle for the "currently for" subject (whose health
     // the AI's family_health tool should default to). Nil/omitted = self.
     var subject: String? = nil
+    // Privacy mode: when true the server persists nothing for this turn and disables
+    // memory (src/chat/params.cpp). false is equivalent to the server default.
+    var incognito: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case question
@@ -29,6 +32,7 @@ struct ChatStreamRequest: Encodable {
         case timezone
         case scene
         case subject
+        case incognito
     }
 }
 
@@ -84,6 +88,8 @@ struct SessionSummary: Decodable, Identifiable {
     let queryUserId: String
     let owned: Bool
     let sharedWithCount: Int
+    /// Owner email on a thread shared TO me (drives the "Shared by" badge); "" otherwise.
+    let sharedBy: String
 
     var id: String { sessionId }
 
@@ -94,6 +100,7 @@ struct SessionSummary: Decodable, Identifiable {
         case queryUserId = "query_user_id"
         case owned
         case sharedWithCount = "shared_with_count"
+        case sharedBy = "shared_by"
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -103,6 +110,59 @@ struct SessionSummary: Decodable, Identifiable {
         queryUserId = try c.decodeIfPresent(String.self, forKey: .queryUserId) ?? ""
         owned = try c.decodeIfPresent(Bool.self, forKey: .owned) ?? true
         sharedWithCount = try c.decodeIfPresent(Int.self, forKey: .sharedWithCount) ?? 0
+        sharedBy = try c.decodeIfPresent(String.self, forKey: .sharedBy) ?? ""
+    }
+}
+
+// MARK: - Conversation detail (mirror data/chat/dto/ConversationDetail)
+
+/// `GET /api/conversation?id=` — the full thread for one saved conversation.
+struct ConversationDetail: Decodable {
+    let id: String
+    let summary: String
+    let owned: Bool
+    let sharedBy: String
+    let messages: [ConversationMessage]
+
+    enum CodingKeys: String, CodingKey {
+        case id, summary, owned, messages
+        case sharedBy = "shared_by"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // `id` may arrive as a (large) number or a string; accept either.
+        if let s = try? c.decode(String.self, forKey: .id) {
+            id = s
+        } else if let n = try? c.decode(Int64.self, forKey: .id) {
+            id = String(n)
+        } else {
+            id = ""
+        }
+        summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
+        owned = try c.decodeIfPresent(Bool.self, forKey: .owned) ?? true
+        sharedBy = try c.decodeIfPresent(String.self, forKey: .sharedBy) ?? ""
+        messages = try c.decodeIfPresent([ConversationMessage].self, forKey: .messages) ?? []
+    }
+}
+
+struct ConversationMessage: Decodable {
+    let role: String
+    let content: String
+    let agent: String
+    let provider: String
+    let createdAt: Int64
+
+    enum CodingKeys: String, CodingKey {
+        case role, content, agent, provider
+        case createdAt = "created_at"
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        role = try c.decodeIfPresent(String.self, forKey: .role) ?? ""
+        content = try c.decodeIfPresent(String.self, forKey: .content) ?? ""
+        agent = try c.decodeIfPresent(String.self, forKey: .agent) ?? ""
+        provider = try c.decodeIfPresent(String.self, forKey: .provider) ?? ""
+        createdAt = try c.decodeIfPresent(Int64.self, forKey: .createdAt) ?? 0
     }
 }
 
@@ -164,6 +224,9 @@ struct RawSseChunk: Decodable {
     let toolId: String?
     /// Set only on `chart` events: the Apache ECharts `option`, a nested JSON object.
     let chart: JSONValue?
+    /// Set on `conversation` events as a decimal-string fallback when `content` is
+    /// absent (large thread ids are carried as strings to avoid precision loss).
+    let conversationId: String?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -171,6 +234,7 @@ struct RawSseChunk: Decodable {
         case replyId = "reply_id"
         case toolId = "tool_id"
         case chart
+        case conversationId = "conversation_id"
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -179,6 +243,7 @@ struct RawSseChunk: Decodable {
         replyId = try c.decodeIfPresent(String.self, forKey: .replyId)
         toolId = try c.decodeIfPresent(String.self, forKey: .toolId)
         chart = try c.decodeIfPresent(JSONValue.self, forKey: .chart)
+        conversationId = try c.decodeIfPresent(String.self, forKey: .conversationId)
     }
 }
 
@@ -226,6 +291,8 @@ enum ChatStreamEvent {
     case queryDetail(toolId: String, detailJson: String)
     case image(url: String)
     case chart(optionJson: String)
+    /// The durable server-side conversation (thread) id for this turn, as a string.
+    case conversation(id: String)
     case heartbeat
     case error(message: String)
     case end

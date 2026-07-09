@@ -21,6 +21,10 @@ final class AppContainer: ObservableObject {
     let chatRepository: ChatRepository
     let serverConfigStore: ServerConfigStore
     let healthRepository: HealthKitRepository
+    /// EHR (SMART on FHIR) connect + sync — the /health/ehr endpoints.
+    let ehrRepository: EhrRepository
+    /// Vendor account management — the /vendors endpoints (connect / disconnect).
+    let vendorRepository: VendorRepository
     /// Direct BLE GATT sensor ingestion (HR strap / BP cuff / thermometer → FHIR),
     /// the fallback for standard medical sensors with no companion app. A singleton so
     /// a live connection survives sheet dismissal; posts through the same /fhir path.
@@ -56,6 +60,8 @@ final class AppContainer: ObservableObject {
         // On-device Apple Health ingestion: reads HealthKit and POSTs FHIR
         // Observations to the embedded server's /fhir endpoint.
         self.healthRepository = HealthKitRepository(api: apiClient, settings: settings)
+        self.ehrRepository = EhrRepository(api: apiClient)
+        self.vendorRepository = VendorRepository(api: apiClient)
         // Direct BLE GATT sensor ingestion; the CBCentralManager is created lazily on
         // first scan, so no Bluetooth prompt fires at launch.
         self.bleHealthController = BleHealthController(api: apiClient)

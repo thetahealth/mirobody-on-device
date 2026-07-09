@@ -89,6 +89,8 @@ qt_add_qml_module(mirobody_qt
         qml/CostDialog.qml
         qml/BackendDialog.qml
         qml/BleDialog.qml
+        qml/EhrDialog.qml
+        qml/VendorsDialog.qml
         qml/LanguageDialog.qml
         qml/FontDialog.qml
         qml/AboutDialog.qml
