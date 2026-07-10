@@ -54,6 +54,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libcurl4-openssl-dev \
         libssl-dev \
         zlib1g-dev \
+        libbrotli-dev \
         rapidjson-dev \
         libyaml-cpp-dev \
         libhiredis-dev \

@@ -1,6 +1,7 @@
 package ai.thetahealth.mirobody.ui.chat
 
 import android.text.util.Linkify
+import android.util.TypedValue
 import android.widget.TextView
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -60,18 +61,22 @@ fun MarkdownText(
             .build()
     }
     val argb = color.toArgb()
-    val textSizeSp = style.fontSize.value
+    // Size the TextView in *px* off the Compose LocalDensity (textSizePx already
+    // folds in the in-app font-size offset via density.fontScale). TextView.textSize
+    // takes sp resolved against the *system* font scale, which the in-app slider
+    // never touches -- so setting sp here would leave the bubbles fixed while the
+    // rest of the UI rescales.
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
             TextView(ctx).apply {
                 setTextColor(argb)
-                textSize = textSizeSp
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
             }
         },
         update = { tv ->
             tv.setTextColor(argb)
-            tv.textSize = textSizeSp
+            tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
             markwon.setMarkdown(tv, text)
         },
     )

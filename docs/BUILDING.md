@@ -228,6 +228,15 @@ brew install cmake ninja pkg-config libwebsockets curl openssl@3 \
              jpeg-turbo libpng libtiff webp
 ```
 
+> **libwebsockets and response compression.** The packaged `libwebsockets` above
+> (apt / dnf / Homebrew) is built with `LWS_WITH_HTTP_STREAM_COMPRESSION` **off**,
+> so the server serves every response uncompressed — fine for local dev. The
+> [Docker image](../Dockerfile) builds libwebsockets from source with
+> `-DLWS_WITH_HTTP_STREAM_COMPRESSION=ON -DLWS_WITH_ZLIB=ON` (needs libwebsockets
+> >= 4.3.4 for CVE-2025-1866) so responses are gzip/deflated. Build it the same
+> way for any bandwidth-sensitive deployment; `find_package(libwebsockets CONFIG)`
+> resolves the source build over the system package when it's installed first.
+
 The image codecs above also cover the document transcoder's only always-on
 external dep path (CSV is built-in, no library). The document transcoder's other
 formats need extra libraries, none of which break the build when absent - the

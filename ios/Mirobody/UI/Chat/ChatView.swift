@@ -24,6 +24,14 @@ struct ChatView: View {
     @State private var showFileImporter = false
     @State private var showOnDeviceModel = false
 
+    // Auto-scroll follows the streaming reply only while the user is parked at the
+    // bottom; a manual scroll up detaches it so they can re-read mid-reply without
+    // being yanked back down. Re-arms when they return to the bottom or a new turn
+    // starts. `viewportHeight` is the scroll area's height, compared against the
+    // content's bottom to decide "near bottom".
+    @State private var followTail = true
+    @State private var viewportHeight: CGFloat = 0
+
     init(container: AppContainer) {
         _vm = StateObject(wrappedValue: ChatViewModel(
             repo: container.chatRepository,
@@ -152,9 +160,37 @@ struct ChatView: View {
                         .padding(.horizontal, 16).padding(.vertical, 16)
                         .frame(maxWidth: contentMaxWidth)
                         .frame(maxWidth: .infinity)
+                        // Report the content's bottom edge in the scroll viewport's
+                        // coordinate space, so we can tell if the user is at the bottom.
+                        .background(GeometryReader { geo in
+                            Color.clear.preference(
+                                key: BottomOffsetKey.self,
+                                value: geo.frame(in: .named("chatScroll")).maxY)
+                        })
                     }
-                    .onChange(of: vm.messages.last?.text) { _ in scrollToBottom(proxy) }
-                    .onChange(of: vm.messages.count) { _ in scrollToBottom(proxy) }
+                    .coordinateSpace(name: "chatScroll")
+                    .background(GeometryReader { geo in
+                        Color.clear
+                            .onAppear { viewportHeight = geo.size.height }
+                            .onChange(of: geo.size.height) { viewportHeight = $0 }
+                    })
+                    .onPreferenceChange(BottomOffsetKey.self) { maxY in
+                        // Near the bottom when the content's bottom sits within ~150pt
+                        // of the visible area's bottom edge (generous enough that a
+                        // single streamed token's growth doesn't detach the follow).
+                        followTail = maxY <= viewportHeight + 150
+                    }
+                    // Follow on ANY change to the last message, not just `text`: the
+                    // turn also grows through the `thinking` trace, tool-call cards,
+                    // images and charts. Keying on `text` alone missed the thinking
+                    // phase, so a long thinking trace scrolled off-screen unfollowed.
+                    .onChange(of: vm.messages.last) { _ in
+                        if followTail { scrollToBottom(proxy) }
+                    }
+                    .onChange(of: vm.messages.count) { _ in
+                        followTail = true
+                        scrollToBottom(proxy)
+                    }
                 }
             }
         }
@@ -420,4 +456,14 @@ struct FontSizeDialog: View {
     }
 
     private var currentLanguage: String { settings.language }
+}
+
+/// Tracks the chat content's bottom edge (in the scroll viewport's coordinate
+/// space) so `ChatView` can follow a streaming reply only while the user is
+/// parked at the bottom. Takes the last (deepest) reported value.
+private struct BottomOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }

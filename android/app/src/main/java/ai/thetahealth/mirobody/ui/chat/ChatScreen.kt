@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -81,6 +82,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -197,10 +199,62 @@ fun ChatScreen(
         }
     }
 
-    LaunchedEffect(state.messages.size, state.messages.lastOrNull()?.text?.length) {
-        if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.lastIndex)
+    // Keep the current output line (the bottom of the streaming message) in view as it
+    // grows, but never fight the user: a manual scroll up detaches the follow so they
+    // can re-read earlier content mid-reply. Scrolling back down to the output line
+    // (i.e. the very bottom), or starting a new turn, re-arms the follow.
+    //
+    // We must reveal the *bottom* of the last message, not its top: when a reply is
+    // taller than the screen, aligning the item's top would leave the streaming tail
+    // off-screen below. So scroll the item into view, then scroll the overshoot so its
+    // bottom edge sits at the viewport bottom.
+    var followTail by remember { mutableStateOf(true) }
+    suspend fun scrollToOutput() {
+        val lastIndex = state.messages.lastIndex
+        if (lastIndex < 0) return
+        val info = listState.layoutInfo
+        val visible = info.visibleItemsInfo.lastOrNull { it.index == lastIndex }
+        if (visible == null) {
+            // Last message is off-screen (e.g. resuming after scrolling far up): bring
+            // it into view first, then fall through to reveal its bottom edge.
+            listState.scrollToItem(lastIndex)
         }
+        val laid = listState.layoutInfo
+        val item = laid.visibleItemsInfo.lastOrNull { it.index == lastIndex } ?: return
+        val overshoot = item.offset + item.size - laid.viewportEndOffset
+        if (overshoot > 0) listState.scrollBy(overshoot.toFloat())
+    }
+
+    // A manual upward scroll detaches the follow; reaching the bottom (the output line)
+    // re-arms it. Content growth pushes the bottom farther away, never toward it, so
+    // it can only detach — reaching the bottom is always a deliberate user scroll.
+    LaunchedEffect(listState) {
+        var prevIndex = listState.firstVisibleItemIndex
+        var prevOffset = listState.firstVisibleItemScrollOffset
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                val scrolledUp = index < prevIndex || (index == prevIndex && offset < prevOffset)
+                if (scrolledUp) followTail = false
+                else if (!listState.canScrollForward) followTail = true
+                prevIndex = index
+                prevOffset = offset
+            }
+    }
+    // A new turn (user just sent, or the assistant bubble just appeared) always snaps
+    // to the output line and re-arms tail-follow.
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
+            followTail = true
+            scrollToOutput()
+        }
+    }
+    // The streaming assistant turn grows through several fields — the reply `text`, the
+    // `thinking` trace, tool-call cards, images, charts — so follow the output on ANY
+    // change to the last message, not just `text`. (Keying on `text.length` alone
+    // missed the thinking phase: a long thinking trace grew past the screen bottom
+    // without the list following it.)
+    LaunchedEffect(state.messages.lastOrNull()) {
+        if (state.messages.isNotEmpty() && followTail) scrollToOutput()
     }
 
     // On-device model management dialog. Opens when the user picks the on-device

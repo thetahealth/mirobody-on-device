@@ -56,13 +56,21 @@ Item {
             cacheBuffer: 4000
             boundsBehavior: Flickable.StopAtBounds
 
+            // Follow the streaming reply's tail only while the user is parked at the
+            // bottom. A manual drag/flick detaches the follow so they can scroll up
+            // mid-reply without being yanked back; it re-arms when they leave the view
+            // at the end, or when a new turn starts.
+            property bool followTail: true
+            onMovementStarted: followTail = false
+            onMovementEnded: followTail = atYEnd
+
             delegate: MessageDelegate {
                 width: ListView.view.width - 32
                 onStatsClicked: function (cost) { chatPage.showCost(cost); }
-                onContentGrew: if (index >= log.count - 1) log.positionViewAtEnd();
+                onContentGrew: if (index >= log.count - 1 && log.followTail) log.positionViewAtEnd();
             }
 
-            onCountChanged: positionViewAtEnd()
+            onCountChanged: { followTail = true; positionViewAtEnd(); }
 
             // Empty state (chat.js showEmpty): the incognito privacy screen when
             // incognito, otherwise the plain "start a conversation" hero.

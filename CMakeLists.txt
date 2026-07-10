@@ -71,6 +71,27 @@ find_package(LibLZMA QUIET)
 # include <zlib.h> and link ZLIB::ZLIB directly.
 find_package(ZLIB REQUIRED)
 
+# brotli — OPTIONAL HTTP response encoder (src/server/router.cpp). When present,
+# buffered dynamic responses are brotli-compressed for clients that accept it
+# (better ratio than gzip); when absent they fall back to gzip. Static assets are
+# pre-compressed at build time regardless (htdoc/scripts/precompress.cjs), so this
+# only affects dynamic responses. Never fatal — key all logic off MIROBODY_HAS_BROTLI.
+#   vcpkg `brotli` port -> unofficial-brotli CONFIG (unofficial::brotli::brotlienc)
+#   apt  libbrotli-dev  -> pkg-config libbrotlienc
+find_package(unofficial-brotli CONFIG QUIET)
+set(MIROBODY_HAS_BROTLI FALSE)
+if(TARGET unofficial::brotli::brotlienc)
+    set(MIROBODY_HAS_BROTLI TRUE)
+else()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(BROTLIENC QUIET IMPORTED_TARGET libbrotlienc)
+        if(BROTLIENC_FOUND)
+            set(MIROBODY_HAS_BROTLI TRUE)
+        endif()
+    endif()
+endif()
+
 # Document transcoder (src/transcode/document). xlnt reads .xlsx; the
 # xlnt-community fork (the one vcpkg ships) consumes cleanly at C++11, so
 # document.cpp builds as part of the C++11 core like the rest of the tree. CSV
@@ -424,6 +445,22 @@ target_link_libraries(mirobody_core PUBLIC
 # See the LibLZMA find above: libtiff's LZMA codec needs liblzma at link time.
 if(TARGET LibLZMA::LibLZMA)
     target_link_libraries(mirobody_core PUBLIC LibLZMA::LibLZMA)
+endif()
+
+# Optional brotli encoder (see the find near ZLIB): link it and define the gate so
+# src/server/router.cpp compiles the brotli path. Without it, HTTP compression is
+# gzip-only and the brotli code is #ifdef'd out.
+if(MIROBODY_HAS_BROTLI)
+    if(TARGET unofficial::brotli::brotlienc)
+        target_link_libraries(mirobody_core PUBLIC
+            unofficial::brotli::brotlienc unofficial::brotli::brotlicommon)
+    else()
+        target_link_libraries(mirobody_core PUBLIC PkgConfig::BROTLIENC)
+    endif()
+    target_compile_definitions(mirobody_core PRIVATE MIROBODY_ENABLE_BROTLI=1)
+    message(STATUS "http compression: brotli ON")
+else()
+    message(STATUS "http compression: brotli OFF (dynamic responses gzip-only)")
 endif()
 
 # --- Document transcoder dependencies (src/transcode/document.cpp) ------------

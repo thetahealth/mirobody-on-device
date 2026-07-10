@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="stylesheet" href="katex.min.css">
+<script src="katex.min.js"></script>
+<script src="marked.umd.js"></script>
+<script src="purify.min.js"></script>
+<style>
+  :root { --fg:#111111; --link:#2563eb; --size:16px; }
+  html, body { margin:0; padding:0; background:transparent; }
+  body {
+    color: var(--fg);
+    font-size: var(--size);
+    font-family: -apple-system, system-ui, "Helvetica Neue", sans-serif;
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+  }
+  #content > :first-child { margin-top: 0; }
+  #content > :last-child  { margin-bottom: 0; }
+  a { color: var(--link); }
+  pre { overflow-x: auto; background: rgba(127,127,127,0.12); padding: 8px; border-radius: 6px; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
+  pre code { font-size: 0.85em; }
+  table { border-collapse: collapse; display: block; overflow-x: auto; }
+  th, td { border: 1px solid rgba(127,127,127,0.4); padding: 4px 8px; }
+  blockquote { margin: 0.4em 0; padding-left: 10px; border-left: 3px solid rgba(127,127,127,0.4); }
+  .katex-display { margin: 0.4em 0; overflow-x: auto; overflow-y: hidden; }
+  img { max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<div id="content"></div>
+<script>
+(function () {
+  var katex     = window.katex;
+  var marked    = window.marked.marked || window.marked;   // v18 UMD namespace
+  var DOMPurify = window.DOMPurify;
+
+  // --- math + svg extensions: mirror htdoc/src/markdown.js exactly -----------
+  function renderMath(expr, display) {
+    try {
+      return katex.renderToString(expr, { throwOnError: false, displayMode: !!display, output: "html" });
+    } catch (e) { return null; }
+  }
+  var blockMath = {
+    name: "blockMath", level: "block",
+    start: function (s) { var i = s.indexOf("$$"); return i < 0 ? undefined : i; },
+    tokenizer: function (s) { var m = /^\$\$([\s\S]+?)\$\$/.exec(s); if (m) return { type: "blockMath", raw: m[0], text: m[1].trim() }; },
+    renderer: function (t) { var h = renderMath(t.text, true); return h != null ? h : t.raw; }
+  };
+  var inlineMath = {
+    name: "inlineMath", level: "inline",
+    start: function (s) { var i = s.indexOf("$"); return i < 0 ? undefined : i; },
+    tokenizer: function (s) { var m = /^\$(?![\s$])([^\n$]*?[^\s$])\$(?!\d)/.exec(s); if (m) return { type: "inlineMath", raw: m[0], text: m[1] }; },
+    renderer: function (t) { var h = renderMath(t.text, false); return h != null ? h : t.raw; }
+  };
+  var svgFence = {
+    name: "svgFence", level: "block",
+    start: function (s) { var m = /(^|\n)```[ \t]*svg\b/.exec(s); return m ? m.index : undefined; },
+    tokenizer: function (s) { var m = /^```[ \t]*svg[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*(?:\r?\n|$)/.exec(s); if (m) return { type: "svgFence", raw: m[0], text: m[1] }; },
+    renderer: function (t) { return t.text; }
+  };
+  marked.use({ gfm: true, breaks: true, extensions: [blockMath, inlineMath, svgFence] });
+
+  // Model output is untrusted; sanitize before it reaches innerHTML.
+  DOMPurify.addHook("afterSanitizeAttributes", function (node) {
+    if (node.tagName === "A") { node.setAttribute("target", "_blank"); node.setAttribute("rel", "noopener noreferrer"); }
+  });
+
+  var content = document.getElementById("content");
+
+  function postHeight() {
+    var h = content.scrollHeight;
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.resize) {
+      window.webkit.messageHandlers.resize.postMessage(h);
+    }
+  }
+
+  // Called from Swift.
+  window.mbApplyTheme = function (size, fg, link) {
+    var r = document.documentElement.style;
+    if (size) r.setProperty("--size", size + "px");
+    if (fg)   r.setProperty("--fg", fg);
+    if (link) r.setProperty("--link", link);
+  };
+  window.mbRender = function (md) {
+    try { content.innerHTML = DOMPurify.sanitize(marked.parse(md || ""), { ADD_ATTR: ["target"] }); }
+    catch (e) { content.textContent = md || ""; }
+    postHeight();
+    // KaTeX fonts load async and change layout height; re-measure when ready.
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(postHeight); }
+    setTimeout(postHeight, 80);
+  };
+})();
+</script>
+</body>
+</html>

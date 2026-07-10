@@ -344,6 +344,19 @@ function buildChat() {
     });
     log.appendChild(thread);
 
+    // Auto-follow the streaming reply only while the user is parked at the bottom.
+    // A manual scroll up detaches the follow (so earlier text can be read mid-reply
+    // without being yanked back down); returning to the bottom re-arms it. Every
+    // streaming/progress update calls followBottom() instead of forcing scrollTop,
+    // so it never fights the user's scroll. A new turn (appendMessage) re-arms it.
+    var stickBottom = true;
+    log.addEventListener("scroll", function () {
+        stickBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    });
+    function followBottom() {
+        if (stickBottom) { log.scrollTop = log.scrollHeight; }
+    }
+
     //----------------------------------------------------
 
     // Matches the app's MessageRow: the user turn is a dark bubble with an
@@ -419,6 +432,8 @@ function buildChat() {
             thread.appendChild(stamp);
         }
 
+        // A new turn snaps to the bottom and re-arms tail-follow.
+        stickBottom = true;
         log.scrollTop = log.scrollHeight;
         return bubble;
     };
@@ -485,7 +500,7 @@ function buildChat() {
         row.appendChild(actions);
 
         thread.appendChild(row);
-        log.scrollTop = log.scrollHeight;
+        followBottom();
         return row;
     };
 
@@ -1142,7 +1157,7 @@ function buildChat() {
                     thread.insertBefore(trow, bubble.parentNode); // above the reply row
                 }
                 ui.setText(thinkBubble, thinkAcc);
-                log.scrollTop = log.scrollHeight;
+                followBottom();
             };
 
             // Upload/extraction progress streams before the answer: the server
@@ -1191,7 +1206,7 @@ function buildChat() {
                 line.appendChild(label);
                 uploadingLines[name] = line;
                 statusBlock().appendChild(line);
-                log.scrollTop = log.scrollHeight;
+                followBottom();
             };
             // The stream ended without upload confirmations (error, early
             // close): drop any still-spinning lines rather than leave them
@@ -1219,7 +1234,7 @@ function buildChat() {
                     ui.setText(line, t("fileUploaded", name));
                     statusBlock().appendChild(line);
                 }
-                log.scrollTop = log.scrollHeight;
+                followBottom();
             };
             function appendTranscript(info) {
                 var name = info.filename || "";
@@ -1229,12 +1244,52 @@ function buildChat() {
                     ui.setText(line, t("readingFile", name));
                     readingLines[name] = line;
                     statusBlock().appendChild(line);
-                    log.scrollTop = log.scrollHeight;
+                    followBottom();
                 } else { // done: drop the spinner line, extracted or not
                     var prev = readingLines[name];
                     if (prev && prev.parentNode) { prev.parentNode.removeChild(prev); }
                     delete readingLines[name];
                 }
+            };
+
+            // Answer visuals (ECharts charts, generated images) can arrive among or
+            // after the reply tokens, and the reply bubble is re-rendered (innerHTML)
+            // on every token -- so they can't live inside it. They go in their own
+            // block appended just below the reply row, created lazily on the first one.
+            var visualsBox = null;
+            function visualsBlock() {
+                if (!visualsBox) {
+                    visualsBox = ui.dom("div", {
+                        display: "flex", flexDirection: "column", gap: "8px",
+                        width: "100%", marginTop: "8px"
+                    });
+                    var row = bubble.parentNode;
+                    row.parentNode.insertBefore(visualsBox, row.nextSibling); // below the reply
+                }
+                return visualsBox;
+            };
+            function appendChart(option) {
+                if (!option || typeof option !== "object" || !Object.keys(option).length) { return; }
+                var holder = ui.dom("div", { width: "100%", height: isMobile() ? "240px" : "320px" });
+                visualsBlock().appendChild(holder);
+                followBottom();
+                ensureECharts().then(function (echarts) {
+                    if (!echarts) { return; }
+                    try {
+                        var chart = echarts.init(holder, null, { renderer: "canvas" });
+                        chart.setOption(option);
+                        window.addEventListener("resize", function () { chart.resize(); });
+                    } catch (e) { /* bad option: leave an empty holder rather than crash */ }
+                    followBottom();
+                }, function () { /* echarts failed to load: leave the holder empty */ });
+            };
+            function appendImage(url) {
+                if (!url) { return; }
+                var img = ui.dom("img",
+                    { maxWidth: "100%", height: "auto", borderRadius: "8px" }, { src: url });
+                img.onload = followBottom;
+                visualsBlock().appendChild(img);
+                followBottom();
             };
 
             // Tool invocations, one expandable <details> card per tool_id in
@@ -1339,7 +1394,7 @@ function buildChat() {
                     ui.setText(card.label, t("calledTool", card.name));
                     renderToolBody(card);
                 }
-                log.scrollTop = log.scrollHeight;
+                followBottom();
             };
             // The stream ended with a call still pending (error, early close):
             // stop its spinner and freeze the label at the tool name.
@@ -1409,7 +1464,7 @@ function buildChat() {
                     acc += ev.reply;
                     streamRender(bubble, acc);
                     bubble.style.animation = ""; // stop the cursor blink once text streams
-                    log.scrollTop = log.scrollHeight;
+                    followBottom();
                 } else if (ui.isString(ev.thinking)) {
                     appendThinking(ev.thinking);
                 } else if (ev.upload) {
@@ -1418,6 +1473,10 @@ function buildChat() {
                     appendTranscript(ev.transcript);
                 } else if (ev.tool) {
                     appendToolCall(ev.tool);
+                } else if (ev.chart) {
+                    appendChart(ev.chart);
+                } else if (ev.image) {
+                    appendImage(ev.image);
                 } else if (ev.cost) {
                     assistantCost = ev.cost;
                     addFooter();   // cost is the last event; don't wait for stream close
@@ -1514,6 +1573,23 @@ function buildChat() {
 // for streamed answer text, {error} for an error event, {upload} /
 // {transcript} for the upload-preprocess progress the server streams before the
 // answer, {} for everything else (tool steps, cost, the terminal "end").
+// ECharts is a doc-root static asset (static/echarts.min.js ~1 MB), loaded lazily
+// the first time a chart event arrives so users who never see a chart don't pay
+// for it up front. Mirrors the qrcode/tanka-signer lazy loads (see tanka.js).
+var echartsPromise = null;
+function ensureECharts() {
+    if (echartsPromise) { return echartsPromise; }
+    echartsPromise = new Promise(function (resolve, reject) {
+        if (window.echarts) { return resolve(window.echarts); }
+        var s = document.createElement("script");
+        s.src = net.appBase() + "/echarts.min.js";
+        s.onload = function () { resolve(window.echarts); };
+        s.onerror = reject;
+        document.head.appendChild(s);
+    });
+    return echartsPromise;
+};
+
 function parseAgentChunk(chunk) {
     var json = null;
     try {
@@ -1543,6 +1619,15 @@ function parseAgentChunk(chunk) {
             phase     : json.phase || "",
             extracted : !!json.extracted
         } };
+    }
+    // An ECharts option, embedded as a real nested object (server parsed it), ready
+    // for echarts.setOption(). A parse failure on the server degrades to {}.
+    if (json.type === "chart") {
+        return { chart: json.chart || {} };
+    }
+    // A generated/served image; content is its URL.
+    if (json.type === "image") {
+        return { image: json.content || "" };
     }
     if (json.type === "error") {
         return { error: json.content || "error" };

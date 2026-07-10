@@ -7,6 +7,9 @@
 #include <libwebsockets.h>
 
 #include <zlib.h>              // gzip-compress large fixed-length response bodies
+#ifdef MIROBODY_ENABLE_BROTLI
+#include <brotli/encode.h>     // optional: brotli-compress bodies when the client accepts it
+#endif
 
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
@@ -41,10 +44,12 @@ struct PerHttpSession {
     Response response;
     bool response_ready = false;
 
-    // Whether the client advertised gzip in Accept-Encoding. Latched at dispatch
-    // (the Request is gone by the time the writeable callback runs) and consulted
-    // when framing a fixed-length body: a large text response is gzip-ed then.
+    // Whether the client advertised gzip / brotli in Accept-Encoding. Latched at
+    // dispatch (the Request is gone by the time the writeable callback runs) and
+    // consulted when framing a fixed-length body: a large text response is then
+    // brotli-ed (preferred, when built with it) or gzip-ed.
     bool accept_gzip = false;
+    bool accept_br = false;
 
     // Chunked-streaming state, used only when response.is_streaming(). Headers
     // go out on the first writeable callback; each later callback drains
@@ -548,6 +553,25 @@ bool is_regular_file(const std::string& path) {
     return (st.st_mode & S_IFREG) != 0;
 }
 
+// Whether the client's Accept-Encoding advertises `token` (e.g. "gzip" / "br")
+// as acceptable. A plain substring match, except we reject an explicit ";q=0"
+// ("not acceptable"); finer q-value ranking isn't worth it for our two encodings.
+// (No standard Accept-Encoding token contains "br"/"gzip" as a substring of
+// another, so the substring match is unambiguous.)
+bool accept_encoding_has(const std::string& accept_encoding, const char* token) {
+    const std::size_t g = accept_encoding.find(token);
+    if (g == std::string::npos) return false;
+    const std::size_t comma = accept_encoding.find(',', g);
+    const std::string tok = accept_encoding.substr(
+        g, comma == std::string::npos ? std::string::npos : comma - g);
+    const std::size_t q = tok.find("q=");
+    if (q != std::string::npos) {
+        const std::string qv = tok.substr(q + 2);
+        if (qv.compare(0, 1, "0") == 0 && qv.find_first_of("123456789") == std::string::npos) return false;
+    }
+    return true;
+}
+
 // Map a URL path under `root` to a safe filesystem path, or empty on rejection.
 // A trailing "/" (or the bare "/") resolves to index.html. Any segment that is
 // empty, ".", "..", or contains a backslash or NUL is rejected, which blocks
@@ -815,22 +839,9 @@ bool serve_storage_file(lws* wsi, Router::Impl* impl, const Request& req, int* r
 // CPU to produce it don't pay off, and tiny payloads can even grow.
 constexpr size_t GZIP_MIN_BODY = 10 * 1024;
 
-// Whether the client's Accept-Encoding advertises gzip as acceptable. A plain
-// substring match, except we reject an explicit "gzip;q=0" ("not acceptable");
-// finer q-value ranking isn't worth it for a single supported encoding.
+// Whether the client's Accept-Encoding advertises gzip as acceptable.
 bool client_accepts_gzip(const std::string& accept_encoding) {
-    const std::size_t g = accept_encoding.find("gzip");
-    if (g == std::string::npos) return false;
-    // Look for a ";q=0" qualifier attached to this token (up to the next comma),
-    // treating "q=0", "q=0.0" as a refusal but "q=0.5" as acceptance.
-    const std::size_t comma = accept_encoding.find(',', g);
-    const std::string tok = accept_encoding.substr(g, comma == std::string::npos ? std::string::npos : comma - g);
-    const std::size_t q = tok.find("q=");
-    if (q != std::string::npos) {
-        const std::string qv = tok.substr(q + 2);
-        if (qv.compare(0, 1, "0") == 0 && qv.find_first_of("123456789") == std::string::npos) return false;
-    }
-    return true;
+    return accept_encoding_has(accept_encoding, "gzip");
 }
 
 // Whether a response of this content-type compresses well enough to bother:
@@ -873,6 +884,25 @@ bool gzip_compress(const std::string& in, std::string& out) {
     out.resize(static_cast<std::size_t>(produced));
     return true;
 }
+
+#ifdef MIROBODY_ENABLE_BROTLI
+// brotli-compress `in` for a Content-Encoding: br response. Quality 5 is a good
+// server-side default -- close to gzip's CPU cost but a better ratio; the max
+// (11) is reserved for the build-time static pre-compression. Returns true and
+// fills `out` on success; false on any error, so the caller falls back to gzip.
+bool brotli_compress(const std::string& in, std::string& out) {
+    size_t out_size = BrotliEncoderMaxCompressedSize(in.size());
+    if (out_size == 0) return false;
+    out.resize(out_size);
+    const int ok = BrotliEncoderCompress(
+        5, BROTLI_DEFAULT_WINDOW, BROTLI_MODE_TEXT,
+        in.size(), reinterpret_cast<const uint8_t*>(in.data()),
+        &out_size, reinterpret_cast<uint8_t*>(&out[0]));
+    if (!ok) return false;
+    out.resize(out_size);
+    return true;
+}
+#endif
 
 // Append the response's per-request headers and the router's configured default
 // headers (the CORS Access-Control-* set) to an in-progress lws header block.
@@ -1181,6 +1211,7 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
                 (lws_return_http_status(wsi, HTTP_STATUS_NOT_FOUND, "not found"), -1);
         }
         session->accept_gzip = client_accepts_gzip(req.accept_encoding);
+        session->accept_br   = accept_encoding_has(req.accept_encoding, "br");
         session->response.set_request(&req);
         (*h)(req, session->response);
         session->response_ready = true;
@@ -1210,6 +1241,7 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             return -1;
         }
         session->accept_gzip = client_accepts_gzip(req.accept_encoding);
+        session->accept_br   = accept_encoding_has(req.accept_encoding, "br");
         session->response.set_request(&req);
         (*h)(req, session->response);
         session->response_ready = true;
@@ -1232,15 +1264,27 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
         if (session->out_buf.empty() && session->out_sent == 0) {
             const std::string& body = session->response.body();
 
-            // gzip a large text body when the client advertised it; on any zlib
-            // failure fall back to the raw body. Content-Length is then the
-            // *compressed* size, and Content-Encoding/Vary go out alongside.
-            std::string gz;
-            const bool gzipped =
-                session->accept_gzip &&
+            // Compress a large text body when the client advertised an encoding we
+            // support; on any failure fall back to the raw body. Content-Length is
+            // then the *compressed* size, and Content-Encoding/Vary go out alongside.
+            // Brotli is preferred over gzip when built in (MIROBODY_ENABLE_BROTLI)
+            // and the client accepts it.
+            std::string compressed;
+            const char* content_encoding = nullptr;
+            const bool worth =
                 body.size() >= GZIP_MIN_BODY &&
-                gzip_worthwhile_type(session->response.content_type()) &&
-                gzip_compress(body, gz);
+                gzip_worthwhile_type(session->response.content_type());
+            if (worth) {
+#ifdef MIROBODY_ENABLE_BROTLI
+                if (session->accept_br && brotli_compress(body, compressed)) {
+                    content_encoding = "br";
+                } else
+#endif
+                if (session->accept_gzip && gzip_compress(body, compressed)) {
+                    content_encoding = "gzip";
+                }
+            }
+            const bool encoded = content_encoding != nullptr;
 
             uint8_t headers[LWS_TX_BUFFER];
             uint8_t* p = headers + LWS_PRE;
@@ -1249,7 +1293,7 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             if (lws_add_http_common_headers(wsi,
                     static_cast<unsigned>(session->response.status()),
                     session->response.content_type().c_str(),
-                    gzipped ? gz.size() : body.size(),
+                    encoded ? compressed.size() : body.size(),
                     &p, end)) return -1;
 
             // Per-request headers plus the configured default headers (the CORS
@@ -1257,12 +1301,13 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             if (add_extra_headers(wsi, session->response, impl, &p, end)) return -1;
 
             // Advertise the encoding, and that the body varies by Accept-Encoding
-            // so a shared cache won't hand a gzip body to a client that can't read
-            // it.
-            if (gzipped) {
+            // so a shared cache won't hand an encoded body to a client that can't
+            // read it.
+            if (encoded) {
                 if (lws_add_http_header_by_name(wsi,
                         reinterpret_cast<const unsigned char*>("content-encoding:"),
-                        reinterpret_cast<const unsigned char*>("gzip"), 4, &p, end)) return -1;
+                        reinterpret_cast<const unsigned char*>(content_encoding),
+                        static_cast<int>(std::strlen(content_encoding)), &p, end)) return -1;
                 if (lws_add_http_header_by_name(wsi,
                         reinterpret_cast<const unsigned char*>("vary:"),
                         reinterpret_cast<const unsigned char*>("Accept-Encoding"),
@@ -1270,7 +1315,7 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             }
 
             if (lws_finalize_write_http_header(wsi, headers + LWS_PRE, &p, end)) return -1;
-            if (gzipped) session->out_buf = std::move(gz);
+            if (encoded) session->out_buf = std::move(compressed);
             else         session->out_buf = body;
         }
 

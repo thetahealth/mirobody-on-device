@@ -43,14 +43,22 @@ if not exist "prebuilt\%ABI%" (
     if errorlevel 1 exit /b 1
 )
 
-rem --- 2. Resolve a Gradle launcher --------------------------------------------
+rem --- 2. JAVA_HOME: Android Studio's JBR (JetBrains JDK 21) --------------------
+rem The daemon-jvm criteria require a JetBrains-vendor JDK 21; foojay cannot
+rem download one, so point Gradle at the JBR bundled with Android Studio.
+if exist "%ProgramFiles%\Android\Android Studio\jbr\bin\java.exe" (
+    set "JAVA_HOME=%ProgramFiles%\Android\Android Studio\jbr"
+)
+
+rem --- 3. Resolve a Gradle launcher --------------------------------------------
+rem Prefer the wrapper, then the pinned distribution. We deliberately do NOT fall
+rem back to `gradle` on PATH: an older launcher (e.g. 8.2.1) injects a -javaagent
+rem into the build JVM that this build cannot load, so we pin the version from
+rem gradle\wrapper\gradle-wrapper.properties instead.
 set "GRADLE="
 if exist "gradlew.bat" (
     set "GRADLE=gradlew.bat"
 ) else (
-    where gradle >nul 2>&1 && set "GRADLE=gradle"
-)
-if not defined GRADLE (
     rem Download the distribution pinned in gradle\wrapper\gradle-wrapper.properties.
     for /f "tokens=2 delims==" %%U in ('findstr /b distributionUrl gradle\wrapper\gradle-wrapper.properties') do set "URL=%%U"
     set "URL=!URL:\:=:!"
@@ -60,7 +68,7 @@ if not defined GRADLE (
     set "CACHE=%LOCALAPPDATA%\mirobody-gradle"
     set "BIN=!CACHE!\gradle-!VER!\bin\gradle.bat"
     if not exist "!BIN!" (
-        echo ==^> No gradlew/gradle found; downloading Gradle !VER!
+        echo ==^> No gradlew found; downloading pinned Gradle !VER!
         if not exist "!CACHE!" mkdir "!CACHE!"
         powershell -NoProfile -Command "Invoke-WebRequest -Uri '!URL!' -OutFile '!CACHE!\gradle.zip'; Expand-Archive -Path '!CACHE!\gradle.zip' -DestinationPath '!CACHE!' -Force"
         if errorlevel 1 exit /b 1
@@ -68,12 +76,12 @@ if not defined GRADLE (
     set "GRADLE=!BIN!"
 )
 
-rem --- 3. Build ----------------------------------------------------------------
+rem --- 4. Build ----------------------------------------------------------------
 echo ==^> !GRADLE! :app:%TASK% (ABI=%ABI%)
 call "!GRADLE!" ":app:%TASK%" --no-daemon
 if errorlevel 1 exit /b 1
 
-rem --- 4. Report ---------------------------------------------------------------
+rem --- 5. Report ---------------------------------------------------------------
 rem Product flavours nest the output under apk\<flavor>\<type>\.
 set "OUTDIR=app\build\outputs\apk\%FLAVOR%\%BUILD_TYPE%"
 set "APK="

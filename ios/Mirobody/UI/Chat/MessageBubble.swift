@@ -77,7 +77,8 @@ struct MessageBubble: View {
                 ToolCallCard(tool: tool).padding(.top, index > 0 ? 6 : 0)
             }
             if !message.text.isEmpty {
-                MarkdownText(text: message.text, color: isUser ? .white : nil)
+                MarkdownText(text: message.text, color: isUser ? .white : nil,
+                             streaming: message.streaming)
                     .padding(.top, message.toolCalls.isEmpty ? 0 : 8)
             } else if message.streaming && message.error == nil
                         && message.toolCalls.isEmpty && message.imageUrls.isEmpty

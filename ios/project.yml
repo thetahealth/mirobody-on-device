@@ -68,8 +68,14 @@ targets:
       - path: Mirobody
         excludes:
           - "Bridging/Mirobody-Bridging-Header.h"  # referenced via build setting, not compiled
+          - "Resources/math/**"                    # bundled as a folder reference below
       - path: Mirobody/Bridging/Mirobody-Bridging-Header.h
         buildPhase: none
+      # KaTeX + marked + DOMPurify page for offline math rendering (MathMarkdownText).
+      # A folder reference keeps the tree intact (katex.min.css resolves fonts/*.woff2
+      # by relative path); it lands in the bundle as `math/`.
+      - path: Mirobody/Resources/math
+        type: folder
     info:
       path: Mirobody/App/Info.plist
       properties:

@@ -156,6 +156,14 @@ brew install cmake ninja pkg-config libwebsockets curl openssl@3 \
 ./mirobody          # reads ./config.yml
 ```
 
+> **Note — response compression.** The distro/Homebrew `libwebsockets` packages
+> are built with `LWS_WITH_HTTP_STREAM_COMPRESSION` **off**, so a server linked
+> against them serves every response *uncompressed* (e.g. `assets/index.js` at
+> ~520 KB). That's fine for local development. The production
+> [Docker image](Dockerfile) instead builds libwebsockets from source with
+> `-DLWS_WITH_HTTP_STREAM_COMPRESSION=ON -DLWS_WITH_ZLIB=ON` so it gzip/deflates
+> responses — do the same for any bandwidth-sensitive deployment.
+
 ### Windows
 
 Install Visual Studio with the **Desktop development with C++** workload and the
@@ -297,6 +305,66 @@ openid and mints the same tokens as `/email/verify`.
 
 See [miniapp/README.md](miniapp/README.md) for the full setup, the backend
 contract, and the streaming-over-`wx.request` details.
+
+## Feature parity
+
+Where each client stands today. **✅ done · 🚧 partial · — not yet.** Electron
+embeds the [`htdoc`](htdoc/) web UI, so it inherits every web feature and adds an
+on-device LLM.
+
+| Feature | Web | Android | iOS | Electron | Qt | Miniapp |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Chat & content** | | | | | | |
+| Streaming replies | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Thinking / reasoning trace | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tool-call cards (MCP) | ✅ | ✅ | ✅ | ✅ | — | — |
+| Markdown | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Math (LaTeX / KaTeX) | ✅ | ✅ | ✅ | ✅ | — | — |
+| Charts (ECharts) | ✅ | ✅ | ✅ | ✅ | — | — |
+| Inline images | ✅ | ✅ | ✅ | ✅ | — | — |
+| Attachment upload | ✅ | ✅ | ✅ | ✅ | — | ✅ |
+| **Model** | | | | | | |
+| Provider / model picker | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| On-device LLM | — | ✅ | ✅ | ✅ | ✅ | — |
+| **Accounts & privacy** | | | | | | |
+| Sign in | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Multi-account switch | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Account avatar + nav drawer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Incognito mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Chat history + resume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Health & sharing** | | | | | | |
+| Phone health read | — | ✅ | ✅ | — | — | 🚧 |
+| EHR (SMART on FHIR) | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Device / vendor connect | 🚧 | ✅ | ✅ | 🚧 | ✅ | — |
+| Care circles / sharing | ✅ | ✅ | 🚧 | ✅ | 🚧 | ✅ |
+| **Settings** | | | | | | |
+| Language switch (i18n) | ✅ | ✅ | ✅ | ✅ | ✅ | 🚧 |
+| Font size | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Backend URL | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Dark theme | — | ✅ | ✅ | — | — | — |
+
+**Notes**
+
+- **On-device LLM** — LiteRT-LM (Gemma 4) on Android / iOS / Qt, llama.cpp (Gemma
+  GGUF) on Electron. A plain browser has no on-device model; the web app exposes it
+  only when running inside Electron.
+- **Phone health read** — Health Connect + HMS Health Kit (Android), HealthKit
+  (iOS); the miniapp reads WeChat WeRun step data only. Qt and iOS additionally
+  ingest BLE sensors directly.
+- **Device / vendor connect** — connect / list / disconnect for cloud vendors
+  (Fitbit, Withings, Garmin, Terra, …) is fully wired on Android / iOS / Qt; on
+  Web / Electron the list and disconnect work but the connect OAuth flow is still a
+  placeholder.
+- **Care circles / sharing** — create / manage circles and share threads on
+  Android, Web / Electron and Miniapp; iOS and Qt can open a conversation shared
+  *to* you (read-only) but can't create shares yet.
+- **Miniapp language** — the picker sets the model's reply language; the UI copy
+  itself is Chinese only.
+- **Dark theme** — Android and iOS follow the system light / dark scheme; the other
+  clients ship a single light palette.
+- **iOS math** — MarkdownUI has no KaTeX equivalent, so math-bearing replies render
+  through an offline KaTeX WebView (`MathMarkdownText`); plain replies stay on native
+  MarkdownUI. Math resolves when the turn settles — mid-stream it shows as source.
 
 ## Database
 

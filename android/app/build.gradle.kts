@@ -11,6 +11,11 @@ android {
     // compileSdk only governs which APIs compile; targetSdk/minSdk stay as-is.
     compileSdk = 36
     ndkVersion = "27.0.12077973"
+    // A space in the resolved NDK path (e.g. a Windows profile like "C:\Users\Feng Xie") makes the
+    // NDK toolchain invoke the compiler through an 8.3 short name -- clang++.exe becomes CLANG_~1.EXE,
+    // which no longer ends in "++", so clang links in C-driver mode and libc++/libc++abi go
+    // unresolved. Let a space-free NDK (e.g. the mirror build-prebuilt.cmd creates) override via env.
+    System.getenv("MIROBODY_NDK_PATH")?.takeIf { it.isNotBlank() }?.let { ndkPath = it }
 
     defaultConfig {
         applicationId = "ai.thetahealth.mirobody"

@@ -69,7 +69,35 @@ if not defined NDK_HOME (
 )
 if not defined NDK_HOME goto :ndk_missing
 if not exist "%NDK_HOME%\build\cmake\android.toolchain.cmake" goto :ndk_missing
-set "ANDROID_NDK_HOME=%NDK_HOME%"
+rem Work around spaces in the NDK path. openssl's autoconf/make build invokes $(CC)
+rem unquoted, so a profile like "C:\Users\Feng Xie" fails with
+rem "/bin/sh: C:/Users/Feng: No such file or directory". The NDK's android.toolchain
+rem .cmake resolves 8.3 short names and junctions back to the real spaced location,
+rem so only a *physical* copy at a space-free path works: mirror the NDK once under
+rem the (space-free) vcpkg root and build against the mirror.
+rem Detect a space via string substitution (robust inside nested blocks, unlike a
+rem piped `find`): !VAR: =! strips spaces; if the result differs, VAR had one.
+set "NDK_NOSP=!NDK_HOME: =!"
+if not "!NDK_NOSP!"=="!NDK_HOME!" (
+    set "VR_NOSP=!VCPKG_ROOT: =!"
+    if not "!VR_NOSP!"=="!VCPKG_ROOT!" (
+        echo NDK path contains a space ^["!NDK_HOME!"^] and so does VCPKG_ROOT;>&2
+        echo point ANDROID_NDK_HOME at an NDK under a space-free path.>&2
+        exit /b 1
+    )
+    for %%I in ("!NDK_HOME!") do set "NDK_LEAF=%%~nxI"
+    set "NDK_MIRROR=!VCPKG_ROOT!\android-ndk\!NDK_LEAF!"
+    if not exist "!NDK_MIRROR!\build\cmake\android.toolchain.cmake" (
+        echo NDK path has a space; mirroring to a space-free path: !NDK_MIRROR!
+        robocopy "!NDK_HOME!" "!NDK_MIRROR!" /E /NFL /NDL /NJH /NJS /R:1 /W:1 >nul
+        if errorlevel 8 (
+            echo NDK mirror copy failed>&2
+            exit /b 1
+        )
+    )
+    set "NDK_HOME=!NDK_MIRROR!"
+)
+set "ANDROID_NDK_HOME=!NDK_HOME!"
 echo ABI=%ABI%  triplet=%TRIPLET%
 echo NDK=%NDK_HOME%
 echo vcpkg=%VCPKG_ROOT%
