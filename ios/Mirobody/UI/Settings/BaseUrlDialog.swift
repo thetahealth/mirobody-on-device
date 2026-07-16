@@ -4,8 +4,6 @@ import SwiftUI
 let baseURLPresets: [String] = [
     SettingsStore.defaultBaseURL,
     "https://test.mirobody.ai",
-    "https://gray.mirobody.ai",
-    "https://mirobody.ai",
 ]
 
 /// "Backend" dialog — mirrors `ui/settings/BaseUrlDialog.kt`. Presented as a sheet.

@@ -35,7 +35,7 @@ Item {
                 Label { text: "🕵"; color: Theme.primary }
                 Label {
                     text: I18n.t("incognitoNote")
-                    color: Theme.onSurfaceVar
+                    color: Theme.surfaceVarFg
                     font.pointSize: Theme.baseSize - 1
                 }
             }
@@ -91,13 +91,13 @@ Item {
                     text: app.incognito ? I18n.t("incognitoHeading") : I18n.t("emptyTitle")
                     font.pointSize: Theme.baseSize + 1
                     font.bold: true
-                    color: Theme.onSurface
+                    color: Theme.surfaceFg
                     horizontalAlignment: Text.AlignHCenter
                     width: parent.width
                 }
                 Label {
                     text: app.incognito ? I18n.t("incognitoNote") : I18n.t("emptySubtitle")
-                    color: Theme.onSurfaceVar
+                    color: Theme.surfaceVarFg
                     wrapMode: Text.WordWrap
                     horizontalAlignment: Text.AlignHCenter
                     width: parent.width
@@ -124,12 +124,52 @@ Item {
                 ComboBox {
                     id: providerCombo
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: 260
+                    Layout.maximumWidth: 380
+                    // Grow to fit the widest model name (capped) instead of eliding
+                    // it to "gemini-2.5-fla"; +60 leaves room for padding + the arrow.
+                    Layout.preferredWidth: providerMetrics.width + 60
                     model: app.providers
                     textRole: "name"
                     valueRole: "name"
                     flat: true
                     displayText: currentIndex >= 0 ? currentText : I18n.t("selectModel")
+                    // Center the collapsed text; symmetric padding balances the
+                    // right-side dropdown arrow so the text sits truly centered.
+                    contentItem: Text {
+                        text: providerCombo.displayText
+                        font: providerCombo.font
+                        color: Theme.surfaceFg
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        elide: Text.ElideRight
+                        leftPadding: 28
+                        rightPadding: 28
+                    }
+                    // Center each dropdown item too.
+                    delegate: ItemDelegate {
+                        width: providerCombo.width
+                        highlighted: providerCombo.highlightedIndex === index
+                        contentItem: Text {
+                            text: modelData[providerCombo.textRole]
+                            font: providerCombo.font
+                            color: Theme.surfaceFg
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                        }
+                    }
+                    TextMetrics {
+                        id: providerMetrics
+                        font: providerCombo.font
+                        text: {
+                            var longest = I18n.t("selectModel");
+                            for (var i = 0; i < app.providers.length; ++i) {
+                                var n = app.providers[i].name || "";
+                                if (n.length > longest.length) longest = n;
+                            }
+                            return longest;
+                        }
+                    }
                     onActivated: {
                         app.setProvider(currentValue);
                         // On-device provider chosen but model not downloaded → prompt.
@@ -218,7 +258,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                color: Theme.onSurface
+                color: Theme.surfaceFg
                 text: "Gemma 4 runs entirely on your device. Your messages never leave " +
                       "the computer and work offline. This needs a one-time download of " +
                       "about 2.5 GB and enough free memory."
@@ -232,7 +272,7 @@ Item {
 
             Text {
                 Layout.fillWidth: true
-                color: app.onDeviceModel.status === "failed" ? "#c0392b" : Theme.onSurfaceVar
+                color: app.onDeviceModel.status === "failed" ? "#c0392b" : Theme.surfaceVarFg
                 text: {
                     switch (app.onDeviceModel.status) {
                     case "ready": return "Ready — runs offline.";

@@ -39,7 +39,7 @@ the two PostgreSQL variants guards on
 
 It's **two steps**: choose the backend at **build** time, then set its connection
 keys at **run** time (`config.yml`). Each backend builds into its own directory
-(`build`, `build_legacy`, …), so switching backends is just a different build token —
+(`build`, `build-legacy`, …), so switching backends is just a different build token —
 the previously built directory stays configured and reusable.
 
 ### Step 1 — build (pick the backend)
@@ -53,8 +53,8 @@ and `clean`:
 ```sh
 # Linux / macOS
 ./build.sh             # POSTGRESQL (default) -> build
-./build.sh legacy      # POSTGRESQL_LEGACY    -> build_legacy
-./build.sh sqlite      # SQLITE              -> build_sqlite
+./build.sh legacy      # POSTGRESQL_LEGACY    -> build-legacy
+./build.sh sqlite      # SQLITE              -> build-sqlite
 ```
 ```cmd
 :: Windows
@@ -65,8 +65,8 @@ build.cmd
 
 Tokens: `pg` / `postgresql`, `legacy` / `pg_legacy`, `mysql`, `sqlite`, `duckdb`,
 `ck` / `clickhouse`. Each backend (and arch) builds into its own directory —
-`build[_<arch>][_<backend>]`: the plain host + `POSTGRESQL` build is just
-`build`, `legacy` → `build_legacy`, and so on. Because they don't share a directory you
+`build[-<arch>][-<backend>]`: the plain host + `POSTGRESQL` build is just
+`build`, `legacy` → `build-legacy`, and so on. Because they don't share a directory you
 can keep several configured at once and switch by re-running with a different
 token — no reconfigure. Pass `clean` (e.g. `build.cmd pg clean`) only to force
 that one directory to reconfigure from scratch.
@@ -93,7 +93,7 @@ set that backend's keys (`DUCKDB_PATH`, `MYSQL_*`, `CLICKHOUSE_*`); see the
 inline docs in [config.yml](../../config.yml).
 
 Confirm what a binary was built with (use the directory for the backend you
-built, e.g. `build`, `build_legacy`):
+built, e.g. `build`, `build-legacy`):
 
 ```sh
 grep MIROBODY_DATABASE_BACKEND build*/CMakeCache.txt      # findstr on Windows

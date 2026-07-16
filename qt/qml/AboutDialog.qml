@@ -19,11 +19,11 @@ Dialog {
             text: "Mirobody"
             font.bold: true
             font.pointSize: Theme.baseSize + 1
-            color: Theme.onSurface
+            color: Theme.surfaceFg
         }
         Label {
             text: I18n.t("version", app.appVersion)
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
         }
     }
 }

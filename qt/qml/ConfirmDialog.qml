@@ -39,7 +39,7 @@ Dialog {
 
     contentItem: Label {
         text: dialog.message
-        color: Theme.onSurfaceVar
+        color: Theme.surfaceVarFg
         wrapMode: Text.WordWrap
     }
 }

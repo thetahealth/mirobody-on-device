@@ -41,7 +41,7 @@ Dialog {
                     horizontalAlignment: Text.AlignHCenter
                     text: I18n.t(modelData[1])
                     font.pointSize: Theme.baseSize - 3
-                    color: Math.round(slider.value) === index ? Theme.primary : Theme.onSurfaceVar
+                    color: Math.round(slider.value) === index ? Theme.primary : Theme.surfaceVarFg
                     font.bold: Math.round(slider.value) === index
                 }
             }

@@ -136,12 +136,10 @@ QString AppController::appVersion() const {
 
 QStringList AppController::baseUrlPresets() const {
     // Local dev server first (config.yml's HTTP_PORT), then the hosted
-    // environments (config.js BASE_URL_PRESETS).
+    // environment (config.js BASE_URL_PRESETS).
     return {
         QStringLiteral("http://127.0.0.1:8080"),
         QStringLiteral("https://test.mirobody.ai"),
-        QStringLiteral("https://gray.mirobody.ai"),
-        QStringLiteral("https://mirobody.ai"),
     };
 }
 

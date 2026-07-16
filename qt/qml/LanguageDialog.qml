@@ -24,7 +24,7 @@ Dialog {
             highlighted: modelData[0] === app.language
             contentItem: Label {
                 text: modelData[1]
-                color: highlighted ? Theme.primary : Theme.onSurface
+                color: highlighted ? Theme.primary : Theme.surfaceFg
                 font.bold: highlighted
                 verticalAlignment: Text.AlignVCenter
             }

@@ -30,7 +30,7 @@ Dialog {
         Label {
             Layout.fillWidth: true
             text: I18n.t("backendSubtitle")
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             wrapMode: Text.WordWrap
         }
         ComboBox {
@@ -49,7 +49,7 @@ Dialog {
         Label {
             Layout.fillWidth: true
             text: I18n.t("backendHint")
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             font.pointSize: Theme.baseSize - 1
             wrapMode: Text.WordWrap
         }

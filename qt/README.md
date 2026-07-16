@@ -86,27 +86,61 @@ so the two surfaces read identically; regenerate it if `i18n.js` changes.
 
 It is **off by default** and built only when `MIROBODY_BUILD_QT=ON` (and never
 on mobile). It needs **Qt 6.5+** (Core, Gui, Qml, Quick, QuickControls2,
-Network, **Bluetooth**). From the repo root:
+Network, **Bluetooth**).
+
+**Toolchain:** on **Windows use MSVC** — the `msvc2022_64` Qt kit built with
+Visual Studio's `cl.exe` (run inside `vcvarsall.bat amd64`), matching the rest
+of the Windows build (`build.cmd`) and, importantly, LiteRT-LM's own MSVC
+Windows build so the on-device engine can link. On **Linux/macOS use the system
+GCC/Clang** (Qt's GCC/Clang kit). Do **not** mix compilers (a MinGW Qt build
+cannot link MSVC libraries and vice-versa).
+
+**Easiest — the wrapper scripts** (repo root). Because this target pulls in no
+`mirobody_core` dependencies, `build-qt.cmd` / `build-qt.sh` build it standalone
+(they generate the tiny `add_subdirectory(qt)` wrapper for you, since `qt/` has
+no `project()` of its own):
+
+```cmd
+:: Windows (MSVC via vcvars; needs the msvc2022_64 kit)
+build-qt.cmd            :: -> build-qt\app\mirobody_qt.exe
+build-qt.cmd deploy     :: also runs windeployqt so the exe is double-clickable
+```
+```sh
+# Linux / macOS (system GCC/Clang)
+./build-qt.sh           # -> build-qt/app/mirobody_qt
+```
+
+Override the kit / toolchain paths with `QT_PREFIX`, `VS_DIR`, `NINJA` (Windows)
+or `QT_PREFIX` (Linux/macOS). The generated `Mirobody` QML module lives on disk
+next to the exe (in `build-qt/app/`), so keep the exe there — don't relocate it
+away from its module directory.
+
+**Or from the top-level build:**
 
 ```sh
 cmake -B build-qt -S . -DMIROBODY_BUILD_QT=ON \
-      -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/<compiler>
+      -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/<compiler>   # msvc2022_64 on Windows
 cmake --build build-qt --target mirobody_qt
 ```
-
-Because this target pulls in no `mirobody_core` dependencies, you can also build
-it on its own by pointing CMake at a tiny wrapper project that just
-`add_subdirectory(.../qt)` — handy when the server's native deps aren't
-installed.
 
 The `MIROBODY_QT_VERSION` cache variable sets the version shown in the About
 dialog (defaults to `dev`).
 
-**On-device LLM (optional).** Add `-DMIROBODY_ONDEVICE_LLM=ON
--DLITERT_LM_SDK_DIR=<dir with include/ and lib/>` to compile the real Gemma 4
-engine. LiteRT-LM ships no CMake/prebuilt package, so build its C++ library from
-source (Bazel) first. Without the flag the client still builds and links — the
-on-device provider is present but inert.
+**On-device LLM (optional, experimental).** Without the flag below the client
+still builds and links — the on-device provider is present but inert.
+
+- **Simplest — just try Gemma locally first:** LiteRT-LM ships a prebuilt CLI,
+  so no build is required — `uv tool install litert-lm` then
+  `litert-lm run --from-huggingface-repo=litert-community/gemma-4-E2B-it-litert-lm gemma-4-E2B-it.litertlm --backend=cpu --prompt="hi"`.
+  It also runs an OpenAI-compatible local server (`litert-lm serve`).
+- **Embed it in this client:** add `-DMIROBODY_ONDEVICE_LLM=ON
+  -DLITERT_LM_SDK_DIR=<dir with include/ and lib/>`. LiteRT-LM now has an
+  official **CMake** build (`docs/getting-started/cmake.md`, verified on
+  Ubuntu + GCC) and ships prebuilt per-platform runtime libraries — it is no
+  longer Bazel-only. Build/obtain the SDK **with the same toolchain as this
+  client** (MSVC on Windows, GCC/Clang on Linux/macOS) so it links. The C++
+  glue in `locallmengine.cpp` tracks a specific LiteRT-LM API and may need
+  updating against the SDK you build.
 
 ## Run
 

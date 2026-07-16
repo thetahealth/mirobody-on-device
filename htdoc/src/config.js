@@ -96,12 +96,10 @@ function fontTierLabel(offset) {
 
 // Backend base-URL suggestions for the Backend dialog: this server's own base
 // (origin plus any URI prefix the app is mounted under) plus the hosted Mirobody
-// environments, mirroring the app's BASE_URL_PRESETS.
+// test environment, mirroring the app's BASE_URL_PRESETS.
 var BASE_URL_PRESETS = [
     net.appBase() || window.location.origin,
-    "https://test.mirobody.ai",
-    "https://gray.mirobody.ai",
-    "https://mirobody.ai"
+    "https://test.mirobody.ai"
 ];
 
 // "Theta Health" light scheme: navy primary on warm cream surfaces, black serif

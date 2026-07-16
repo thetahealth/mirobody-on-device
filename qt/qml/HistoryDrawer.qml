@@ -109,7 +109,7 @@ Drawer {
             Label {
                 text: I18n.t("menuTitle")
                 font.pointSize: Theme.baseSize + 1
-                color: Theme.onSurface
+                color: Theme.surfaceFg
             }
         }
 
@@ -130,7 +130,7 @@ Drawer {
                 flat: true
                 checkable: true
                 checked: app.incognito
-                palette.buttonText: app.incognito ? Theme.primary : Theme.onSurface
+                palette.buttonText: app.incognito ? Theme.primary : Theme.surfaceFg
                 ToolTip.visible: hovered
                 ToolTip.text: app.incognito ? I18n.t("incognitoStop") : I18n.t("incognitoStart")
                 onClicked: { app.toggleIncognito(); drawer.close(); }
@@ -160,7 +160,7 @@ Drawer {
                 anchors.centerIn: parent
                 visible: drawer.status === "list" && items.count === 0
                 text: I18n.t("historyEmpty")
-                color: Theme.onSurfaceVar
+                color: Theme.surfaceVarFg
             }
 
             ListView {
@@ -192,7 +192,7 @@ Drawer {
                             Label {
                                 Layout.fillWidth: true
                                 text: summary
-                                color: Theme.onSurface
+                                color: Theme.surfaceFg
                                 wrapMode: Text.Wrap
                                 maximumLineCount: 2
                                 elide: Text.ElideRight
@@ -208,13 +208,13 @@ Drawer {
                             Label {
                                 visible: owned && sharedWith > 0
                                 text: I18n.t("sharedWithBadge", sharedWith)
-                                color: Theme.onSurfaceVar
+                                color: Theme.surfaceVarFg
                                 font.pointSize: Theme.baseSize - 3
                             }
                             Label {
                                 visible: timestamp.length > 0
                                 text: drawer.formatTimestamp(timestamp)
-                                color: Theme.onSurfaceVar
+                                color: Theme.surfaceVarFg
                                 opacity: 0.7
                                 font.pointSize: Theme.baseSize - 3
                             }
@@ -248,7 +248,7 @@ Drawer {
                 Layout.topMargin: 8
                 Layout.leftMargin: 20
                 text: I18n.t("healthData")
-                color: Theme.onSurfaceVar
+                color: Theme.surfaceVarFg
                 font.pointSize: Theme.baseSize - 2
                 font.bold: true
             }
@@ -282,13 +282,13 @@ Drawer {
                     Label {
                         Layout.fillWidth: true
                         text: drawer.acctLabel(drawer.currentAccount())
-                        color: Theme.onSurfaceVar
+                        color: Theme.surfaceVarFg
                         font.pointSize: Theme.baseSize - 1
                         elide: Text.ElideRight
                     }
                     Label {
                         text: drawer.switcherOpen ? "▴" : "▾"
-                        color: Theme.onSurfaceVar
+                        color: Theme.surfaceVarFg
                     }
                 }
             }

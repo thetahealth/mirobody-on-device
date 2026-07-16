@@ -34,7 +34,7 @@ Dialog {
         Text {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             text: I18n.t("bleIntro")
         }
 
@@ -77,10 +77,10 @@ Dialog {
                         ColumnLayout {
                             Layout.fillWidth: true
                             spacing: 0
-                            Label { text: modelData.name; color: Theme.onSurface }
+                            Label { text: modelData.name; color: Theme.surfaceFg }
                             Label {
                                 text: modelData.id
-                                color: Theme.onSurfaceVar
+                                color: Theme.surfaceVarFg
                                 font.pointSize: Theme.baseSize - 2
                                 elide: Text.ElideMiddle
                                 Layout.fillWidth: true
@@ -98,7 +98,7 @@ Dialog {
                     anchors.centerIn: parent
                     visible: list.count === 0
                     text: I18n.t("bleNoDevices")
-                    color: Theme.onSurfaceVar
+                    color: Theme.surfaceVarFg
                 }
             }
         }
@@ -106,20 +106,20 @@ Dialog {
         // Status + live reading + running FHIR post tally.
         Label {
             Layout.fillWidth: true
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             text: app.ble.status
         }
         Label {
             Layout.fillWidth: true
             visible: dialog.lastReading.length > 0
-            color: Theme.onSurface
+            color: Theme.surfaceFg
             font.bold: true
             text: dialog.lastReading
         }
         Label {
             Layout.fillWidth: true
             visible: app.ble.posted > 0 || app.ble.failed > 0
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             text: I18n.t("bleSaved", app.ble.posted) +
                   (app.ble.failed > 0 ? I18n.t("bleFailedSuffix", app.ble.failed) : "")
         }

@@ -60,11 +60,11 @@ Item {
                 text: I18n.t("loginTitle")
                 font.pointSize: Theme.baseSize + 6
                 font.bold: true
-                color: Theme.onSurface
+                color: Theme.surfaceFg
             }
             Label {
                 text: I18n.t("loginSubtitle")
-                color: Theme.onSurfaceVar
+                color: Theme.surfaceVarFg
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
             }
@@ -90,7 +90,7 @@ Item {
                 maximumLength: 6
                 inputMethodHints: Qt.ImhDigitsOnly
                 validator: RegularExpressionValidator { regularExpression: /[0-9]{0,6}/ }
-                color: error ? Theme.error : Theme.onSurface
+                color: error ? Theme.error : Theme.surfaceFg
                 onTextChanged: {
                     error = false;
                     if (text.length === 6 && !page.verifying) verifyBtn.clicked();
@@ -131,7 +131,7 @@ Item {
             Label {
                 id: status
                 Layout.fillWidth: true
-                color: Theme.onSurfaceVar
+                color: Theme.surfaceVarFg
                 wrapMode: Text.WordWrap
                 font.pointSize: Theme.baseSize - 1
             }

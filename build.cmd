@@ -56,13 +56,13 @@ if /I "%_DB_BACKEND%"=="SQLITE"     set "_DB_TAG=sqlite"
 if /I "%_DB_BACKEND%"=="DUCKDB"     set "_DB_TAG=duckdb"
 if /I "%_DB_BACKEND%"=="CLICKHOUSE" set "_DB_TAG=ck"
 
-:: Build dir: build[_<arch>][_<tag>]. The arch suffix is dropped when targeting
+:: Build dir: build[-<arch>][-<tag>]. The arch suffix is dropped when targeting
 :: the host arch (the common case); the backend suffix is dropped for the
 :: POSTGRESQL default. So the plain host+postgresql build is just "build".
 set "_ARCH_SUFFIX="
-if /I not "%VS_ARCH%"=="%HOST_ARCH%" set "_ARCH_SUFFIX=_%VS_ARCH%"
+if /I not "%VS_ARCH%"=="%HOST_ARCH%" set "_ARCH_SUFFIX=-%VS_ARCH%"
 set "_TAG_SUFFIX="
-if defined _DB_TAG set "_TAG_SUFFIX=_%_DB_TAG%"
+if defined _DB_TAG set "_TAG_SUFFIX=-%_DB_TAG%"
 set "BUILD_DIR=%PROJECT_DIR%build%_ARCH_SUFFIX%%_TAG_SUFFIX%"
 set "_DB_BACKEND_ARG=-DMIROBODY_DATABASE_BACKEND=%_DB_BACKEND%"
 
@@ -108,14 +108,14 @@ echo   clean     clear CMake's cache (keep the dir's vcpkg_installed) and
 echo             reconfigure -- use after changing options or moving the repo
 echo   help / -h / --help / /?   show this help
 echo.
-echo The build dir is build[_^<arch^>][_^<backend^>]: the arch suffix is omitted for
+echo The build dir is build[-^<arch^>][-^<backend^>]: the arch suffix is omitted for
 echo the host arch, the backend suffix for the POSTGRESQL default. Examples
 echo below assume an amd64 host, so each combo gets its own coexisting dir:
 echo   build.cmd                 -^> build               (host arch, POSTGRESQL)
-echo   build.cmd legacy          -^> build_legacy        (host arch, POSTGRESQL_LEGACY)
-echo   build.cmd sqlite          -^> build_sqlite        (host arch, SQLITE)
-echo   build.cmd arm64           -^> build_arm64         (cross-arch, POSTGRESQL)
-echo   build.cmd arm64 legacy    -^> build_arm64_legacy  (cross-arch, POSTGRESQL_LEGACY)
+echo   build.cmd legacy          -^> build-legacy        (host arch, POSTGRESQL_LEGACY)
+echo   build.cmd sqlite          -^> build-sqlite        (host arch, SQLITE)
+echo   build.cmd arm64           -^> build-arm64         (cross-arch, POSTGRESQL)
+echo   build.cmd arm64 legacy    -^> build-arm64-legacy  (cross-arch, POSTGRESQL_LEGACY)
 echo.
 echo Environment variables (see README "Building - Windows"):
 echo   VS_DIR       Visual Studio install root.

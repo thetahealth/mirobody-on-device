@@ -31,11 +31,11 @@ Dialog {
             delegate: RowLayout {
                 Layout.fillWidth: true
                 spacing: 16
-                Label { text: modelData.label; color: Theme.onSurfaceVar }
+                Label { text: modelData.label; color: Theme.surfaceVarFg }
                 Item { Layout.fillWidth: true }
                 Label {
                     text: modelData.value
-                    color: Theme.onSurface
+                    color: Theme.surfaceFg
                     horizontalAlignment: Text.AlignRight
                     wrapMode: Text.WrapAnywhere
                 }

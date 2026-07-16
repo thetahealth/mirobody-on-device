@@ -59,7 +59,7 @@ Dialog {
         Label {
             Layout.fillWidth: true
             text: I18n.t("ehrConnectSubtitle")
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             wrapMode: Text.WordWrap
         }
 
@@ -67,7 +67,7 @@ Dialog {
         Label {
             Layout.fillWidth: true
             text: I18n.t("ehrManualLabel")
-            color: Theme.onSurface
+            color: Theme.surfaceFg
             font.pointSize: Theme.baseSize - 1
         }
         RowLayout {
@@ -122,7 +122,7 @@ Dialog {
                 visible: dialog.phase !== "searching" && results.count === 0
                          && searchField.text.trim().length > 0
                 text: I18n.t("ehrNoResults")
-                color: Theme.onSurfaceVar
+                color: Theme.surfaceVarFg
             }
             ListView {
                 anchors.fill: parent
@@ -141,13 +141,13 @@ Dialog {
                         Label {
                             Layout.fillWidth: true
                             text: name.length ? name : fhirBaseUrl
-                            color: Theme.onSurface
+                            color: Theme.surfaceFg
                             elide: Text.ElideRight
                         }
                         Label {
                             Layout.fillWidth: true
                             text: fhirBaseUrl
-                            color: Theme.onSurfaceVar
+                            color: Theme.surfaceVarFg
                             font.pointSize: Theme.baseSize - 2
                             elide: Text.ElideMiddle
                         }
@@ -161,7 +161,7 @@ Dialog {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             visible: text.length > 0
-            color: dialog.phase === "error" ? Theme.error : Theme.onSurfaceVar
+            color: dialog.phase === "error" ? Theme.error : Theme.surfaceVarFg
             text: {
                 switch (dialog.phase) {
                 case "searching":  return I18n.t("ehrSearching");

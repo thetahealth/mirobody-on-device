@@ -190,8 +190,8 @@ Override these via the environment rather than editing the script. To switch
 
 ```cmd
 build.cmd              :: host arch + POSTGRESQL        -> build\
-build.cmd legacy       :: POSTGRESQL_LEGACY             -> build_legacy\
-build.cmd sqlite       :: SQLITE                        -> build_sqlite\
+build.cmd legacy       :: POSTGRESQL_LEGACY             -> build-legacy\
+build.cmd sqlite       :: SQLITE                        -> build-sqlite\
 build.cmd legacy clean :: reconfigure that dir from scratch
 build.cmd -h           :: full token list (arch / backend / clean)
 ```
@@ -199,10 +199,10 @@ build.cmd -h           :: full token list (arch / backend / clean)
 Backend token: `pg` / `postgresql`, `legacy` / `pg_legacy`, `mysql`, `sqlite`,
 `duckdb`, `ck` / `clickhouse` (omit for the `POSTGRESQL` default). Arch
 token: `amd64` (default, the host) or `arm64` / `x86` to cross-compile. Each
-arch+backend combo lives in its own `build[_<arch>][_<backend>]` directory and
+arch+backend combo lives in its own `build[-<arch>][-<backend>]` directory and
 they all share one `vcpkg_installed`, so you can keep several configured at once.
 
-Output: `build\mirobody.exe` (or `build_legacy\mirobody.exe`, … per backend).
+Output: `build\mirobody.exe` (or `build-legacy\mirobody.exe`, … per backend).
 
 ### Linux / WSL / macOS
 
@@ -283,15 +283,15 @@ passed in any order with `clean`:
 
 ```sh
 ./build.sh             # host arch + POSTGRESQL        -> build/
-./build.sh legacy      # POSTGRESQL_LEGACY             -> build_legacy/
-./build.sh sqlite      # SQLITE                        -> build_sqlite/
+./build.sh legacy      # POSTGRESQL_LEGACY             -> build-legacy/
+./build.sh sqlite      # SQLITE                        -> build-sqlite/
 ./build.sh legacy clean # reconfigure that dir from scratch
 ./build.sh -h          # full token list
 ```
 
 Tokens: `pg` / `postgresql`, `legacy` / `pg_legacy`, `mysql`, `sqlite`, `duckdb`,
 `ck` / `clickhouse` (omit for the `POSTGRESQL` default). Each backend
-builds into its own `build[_<backend>]` directory, so several can coexist;
+builds into its own `build[-<backend>]` directory, so several can coexist;
 `build.sh` builds natively for the host arch.
 
 Or invoke CMake directly if you prefer:
@@ -301,7 +301,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMIROBODY_DATABASE_BACK
 cmake --build build
 ```
 
-Output: `build/mirobody` (or `build_legacy/mirobody`, … per backend).
+Output: `build/mirobody` (or `build-legacy/mirobody`, … per backend).
 
 ### Runtime
 

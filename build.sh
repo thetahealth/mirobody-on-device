@@ -20,9 +20,9 @@ Usage: build.sh [arch] [backend] [clean]      (tokens in any order)
   clean     remove the build dir and reconfigure from scratch
   help / -h / --help   show this help
 
-The build dir is build[_<arch>][_<backend>]: the arch suffix is omitted for the
+The build dir is build[-<arch>][-<backend>]: the arch suffix is omitted for the
 host arch, the backend suffix for the POSTGRESQL default. So the plain
-host+postgresql build is just "build"; "build.sh legacy" -> build_legacy, and each
+host+postgresql build is just "build"; "build.sh legacy" -> build-legacy, and each
 combo gets its own dir so they can coexist.
 
 Arch and backend come only from the command line (no environment variables).
@@ -82,10 +82,10 @@ case "$DB_BACKEND" in
     *)          DB_TAG="" ;;
 esac
 
-# Build dir: build[_<tag>]. The arch suffix is dropped for the host arch (the
+# Build dir: build[-<tag>]. The arch suffix is dropped for the host arch (the
 # only arch build.sh targets), the backend suffix for the POSTGRESQL default.
 DIR="build"
-[ -n "$DB_TAG" ] && DIR="${DIR}_${DB_TAG}"
+[ -n "$DB_TAG" ] && DIR="${DIR}-${DB_TAG}"
 BUILD_DIR="$PROJECT_DIR/$DIR"
 
 # clean: wipe the build dir so the next run reconfigures from scratch.

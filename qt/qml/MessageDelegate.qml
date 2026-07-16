@@ -42,7 +42,7 @@ Item {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             text: formatLocalTime(model.ts)
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             opacity: 0.7
             font.pointSize: Theme.baseSize - 3
         }
@@ -55,7 +55,7 @@ Item {
             wrapMode: Text.Wrap
             font.italic: true
             font.pointSize: Theme.baseSize - 1
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
         }
 
         // User bubble (right-aligned, content-sized, capped width).
@@ -76,7 +76,7 @@ Item {
                     width: del.width * 0.85 - 28
                     text: model.content
                     wrapMode: Text.Wrap
-                    color: Theme.onUserBubble
+                    color: Theme.userBubbleText
                     font.pointSize: Theme.baseSize
                 }
             }
@@ -89,7 +89,7 @@ Item {
             text: model.content
             textFormat: Text.MarkdownText
             wrapMode: Text.Wrap
-            color: Theme.onSurface
+            color: Theme.surfaceFg
             font.pointSize: Theme.baseSize
             onLinkActivated: function (link) { Qt.openUrlExternally(link); }
         }

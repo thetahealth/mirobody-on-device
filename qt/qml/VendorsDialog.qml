@@ -90,7 +90,7 @@ Dialog {
         Label {
             Layout.fillWidth: true
             text: I18n.t("vendorManageSubtitle")
-            color: Theme.onSurfaceVar
+            color: Theme.surfaceVarFg
             wrapMode: Text.WordWrap
         }
 
@@ -147,7 +147,7 @@ Dialog {
                     Label {
                         Layout.fillWidth: true
                         text: dialog.nameOf(modelData)
-                        color: Theme.onSurface
+                        color: Theme.surfaceFg
                         elide: Text.ElideRight
                     }
 
@@ -156,7 +156,7 @@ Dialog {
                         visible: dialog.connected[modelData] !== undefined
                                  && !dialog.connected[modelData].verified
                         text: I18n.t("vendorPending")
-                        color: Theme.onSurfaceVar
+                        color: Theme.surfaceVarFg
                         font.pointSize: Theme.baseSize - 2
                     }
 

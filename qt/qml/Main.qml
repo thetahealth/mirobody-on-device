@@ -61,7 +61,7 @@ ApplicationWindow {
                     Label {
                         anchors.centerIn: parent
                         text: app.email.length > 0 ? app.email.charAt(0).toUpperCase() : "👤"
-                        color: Theme.onPrimary
+                        color: Theme.primaryFg
                         font.pointSize: Theme.baseSize - 1
                         font.bold: true
                     }
@@ -95,7 +95,7 @@ ApplicationWindow {
                     Label {
                         anchors.centerIn: parent
                         text: "M"
-                        color: Theme.onPrimary
+                        color: Theme.primaryFg
                         font.bold: true
                         font.pointSize: Theme.baseSize
                     }
@@ -103,7 +103,7 @@ ApplicationWindow {
                 Label {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "Mirobody"
-                    color: Theme.onSurface
+                    color: Theme.surfaceFg
                     font.pointSize: Theme.baseSize + 4
                     font.bold: true
                 }

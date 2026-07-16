@@ -265,9 +265,18 @@ of the web client in `htdoc/`. Unlike Electron, it does **not** embed
 so it talks to any running `mirobody` backend over the network. It mirrors the
 web client's main flow (email-code login, streamed agent/proxy chat, provider
 picker, history, settings, ten languages). It is off by default and needs
-**Qt 6.5+**:
+**Qt 6.5+**. On **Windows build with MSVC** (the `msvc2022_64` kit; matches
+`build.cmd` and LiteRT-LM's Windows toolchain); on **Linux/macOS use GCC/Clang**.
 
+```cmd
+:: Windows (MSVC) — standalone wrapper script, no mirobody_core deps needed
+build-qt.cmd deploy      :: -> build-qt\app\mirobody_qt.exe (windeployqt'd)
+```
 ```sh
+# Linux / macOS
+./build-qt.sh            # -> build-qt/app/mirobody_qt
+
+# ...or from the top-level build on any OS:
 cmake -B build-qt -S . -DMIROBODY_BUILD_QT=ON \
       -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/<compiler>
 cmake --build build-qt --target mirobody_qt
