@@ -41,6 +41,18 @@ electron/
 
 ## Run (dev)
 
+One command (builds the web bundle, installs deps, then runs or packages):
+
+```cmd
+build-electron.cmd            :: Windows  (dist to package; clean to reinstall deps)
+```
+```sh
+./build-electron.sh           # Linux/macOS
+```
+
+It does **not** build the shared library (step 1 above) — do that once first. Or run
+the steps by hand:
+
 ```sh
 npm install
 npm start

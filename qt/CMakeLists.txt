@@ -109,23 +109,44 @@ target_link_libraries(mirobody_qt PRIVATE
     Qt6::Bluetooth
 )
 
-# On-device private LLM (Gemma 4 via LiteRT-LM C++). OFF by default: LiteRT-LM has no
-# supported CMake/prebuilt-library path (it is Bazel-only), so locallmengine.cpp builds
-# as a stub and the app still compiles/links. To enable, build a LiteRT-LM C++ library
-# from source (Bazel) and configure with:
-#   -DMIROBODY_ONDEVICE_LLM=ON -DLITERT_LM_SDK_DIR=<dir with include/ and lib/>
-# Confirm the exact library name(s) below against what your LiteRT-LM build produces
-# (and any abseil/flatbuffers transitive libs it needs).
-option(MIROBODY_ONDEVICE_LLM "Build on-device LLM (Gemma 4 via LiteRT-LM C++)" OFF)
+# On-device private LLM (Gemma GGUF via llama.cpp). OFF by default so the app builds
+# without the SDK (locallmengine.cpp compiles as a stub). This is the same runtime the
+# Electron desktop client uses, so both desktops run the same Gemma GGUF. To enable,
+# build llama.cpp as shared libs (pure CMake; see qt/README.md), assemble an SDK dir
+# (include/llama.h + ggml.h, lib/llama.{lib,so,dylib}, bin/*.dll), then:
+#   -DMIROBODY_ONDEVICE_LLM=ON -DLLAMA_CPP_DIR=<that dir>
+# The runtime DLLs/.so must sit next to the exe (build-qt.cmd deploy copies them).
+option(MIROBODY_ONDEVICE_LLM "Build on-device LLM (Gemma GGUF via llama.cpp)" OFF)
 if(MIROBODY_ONDEVICE_LLM)
-    if(NOT DEFINED LITERT_LM_SDK_DIR)
+    if(NOT DEFINED LLAMA_CPP_DIR)
         message(FATAL_ERROR
-            "MIROBODY_ONDEVICE_LLM=ON requires -DLITERT_LM_SDK_DIR=<LiteRT-LM SDK dir (include/, lib/)>")
+            "MIROBODY_ONDEVICE_LLM=ON requires -DLLAMA_CPP_DIR=<llama.cpp SDK dir (include/, lib/, bin/)>")
+    endif()
+    # Re-resolve every configure: find_library caches its result, so without this a
+    # changed LLAMA_CPP_DIR (e.g. switching backend cpu<->avx2<->vulkan) would keep
+    # linking the previously found lib.
+    unset(LLAMA_LIB CACHE)
+    find_library(LLAMA_LIB
+        NAMES llama
+        PATHS "${LLAMA_CPP_DIR}/lib"
+        NO_DEFAULT_PATH)
+    if(NOT LLAMA_LIB)
+        message(FATAL_ERROR
+            "llama library not found under ${LLAMA_CPP_DIR}/lib. Check LLAMA_CPP_DIR.")
     endif()
     target_compile_definitions(mirobody_qt PRIVATE MIROBODY_ONDEVICE_LLM)
-    target_include_directories(mirobody_qt PRIVATE "${LITERT_LM_SDK_DIR}/include")
-    target_link_directories(mirobody_qt PRIVATE "${LITERT_LM_SDK_DIR}/lib")
-    target_link_libraries(mirobody_qt PRIVATE litert_lm)
+    target_include_directories(mirobody_qt PRIVATE "${LLAMA_CPP_DIR}/include")
+    target_link_libraries(mirobody_qt PRIVATE "${LLAMA_LIB}")
+    # The seeded default model is hard-coded in modeldownloader.cpp (models are managed
+    # at runtime). Packagers can override that default here without editing source:
+    #   -DMIROBODY_GGUF_REPO=<hf-org/repo> -DMIROBODY_GGUF_FILE=<file.gguf>
+    if(DEFINED MIROBODY_GGUF_REPO)
+        target_compile_definitions(mirobody_qt PRIVATE MIROBODY_GGUF_REPO="${MIROBODY_GGUF_REPO}")
+    endif()
+    if(DEFINED MIROBODY_GGUF_FILE)
+        target_compile_definitions(mirobody_qt PRIVATE MIROBODY_GGUF_FILE="${MIROBODY_GGUF_FILE}")
+    endif()
+    message(STATUS "mirobody_qt: on-device LLM ON -> ${LLAMA_LIB}")
 endif()
 
 # On Windows, make this a GUI app (no console window) for release builds.

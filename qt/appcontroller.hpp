@@ -182,8 +182,8 @@ private:
     void failTurn(int userRow, int assistantRow, const QString& errorText);
 
     // On-device turn (Gemma 4 via LiteRT-LM), mirroring the SSE handler in sendMessage.
-    void sendOnDeviceMessage(const QString& question, int assistantRow);
-    void appendOnDeviceProvider();   // push the synthetic on-device entry into providers_
+    void sendOnDeviceMessage(const QString& model, const QString& label, int assistantRow);
+    void rebuildProviders();   // providers_ = server providers + one synthetic entry per on-device model
 
     ApiClient* api_  = nullptr;
     ChatModel* chat_ = nullptr;
@@ -203,6 +203,7 @@ private:
     int          fontOffset_ = 0;
     QString      provider_;
     QVariantList providers_;
+    QVariantList serverProviders_;   // cached server list; providers_ = this + on-device models
     bool         streaming_  = false;
 
     // The server thread id for the running conversation, so the next turn

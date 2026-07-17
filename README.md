@@ -269,12 +269,12 @@ picker, history, settings, ten languages). It is off by default and needs
 `build.cmd` and LiteRT-LM's Windows toolchain); on **Linux/macOS use GCC/Clang**.
 
 ```cmd
-:: Windows (MSVC) — standalone wrapper script, no mirobody_core deps needed
-build-qt.cmd deploy      :: -> build-qt\app\mirobody_qt.exe (windeployqt'd)
+:: Windows (MSVC) — standalone wrapper script in qt/, no mirobody_core deps needed
+qt\build-qt.cmd deploy   :: -> build-qt\app\mirobody_qt.exe (windeployqt'd)
 ```
 ```sh
 # Linux / macOS
-./build-qt.sh            # -> build-qt/app/mirobody_qt
+qt/build-qt.sh           # -> build-qt/app/mirobody_qt
 
 # ...or from the top-level build on any OS:
 cmake -B build-qt -S . -DMIROBODY_BUILD_QT=ON \

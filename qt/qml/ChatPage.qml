@@ -11,6 +11,10 @@ import Mirobody
 Item {
     id: chatPage
 
+    // Ask Main to open the shared on-device model dialog (it lives there so the
+    // ⚙ settings menu can reach it too).
+    signal manageOnDevice()
+
     function showCost(cost) { costDialog.cost = cost; costDialog.open(); }
 
     ColumnLayout {
@@ -128,7 +132,17 @@ Item {
                     // Grow to fit the widest model name (capped) instead of eliding
                     // it to "gemini-2.5-fla"; +60 leaves room for padding + the arrow.
                     Layout.preferredWidth: providerMetrics.width + 60
-                    model: app.providers
+                    // Server + downloaded on-device providers (from C++), plus a
+                    // trailing "Manage on-device AI" entry that opens the manager —
+                    // mirrors the Electron/web picker. The label is translated here so
+                    // it follows a language switch (I18n.language is a binding dep).
+                    property var comboModel: {
+                        var arr = [];
+                        for (var i = 0; i < app.providers.length; ++i) arr.push(app.providers[i]);
+                        arr.push({ name: I18n.t("manageModels"), code: "__ondevice_manage__" });
+                        return arr;
+                    }
+                    model: comboModel
                     textRole: "name"
                     valueRole: "name"
                     flat: true
@@ -163,19 +177,24 @@ Item {
                         font: providerCombo.font
                         text: {
                             var longest = I18n.t("selectModel");
-                            for (var i = 0; i < app.providers.length; ++i) {
-                                var n = app.providers[i].name || "";
+                            var m = providerCombo.comboModel;
+                            for (var i = 0; i < m.length; ++i) {
+                                var n = m[i].name || "";
                                 if (n.length > longest.length) longest = n;
                             }
                             return longest;
                         }
                     }
                     onActivated: {
+                        var p = providerCombo.comboModel[currentIndex];
+                        // "Manage on-device AI" isn't a real selection: revert to the
+                        // current provider and open the manager.
+                        if (p && p.code === "__ondevice_manage__") {
+                            currentIndex = indexOfValue(app.provider);
+                            chatPage.manageOnDevice();
+                            return;
+                        }
                         app.setProvider(currentValue);
-                        // On-device provider chosen but model not downloaded → prompt.
-                        var p = app.providers[currentIndex];
-                        if (p && p.code === "__ondevice_gemma4__" && app.onDeviceModel.status !== "ready")
-                            onDeviceDialog.open();
                     }
                     Component.onCompleted: currentIndex = indexOfValue(app.provider)
                     Connections {
@@ -239,67 +258,4 @@ Item {
     }
 
     CostDialog { id: costDialog }
-
-    // On-device model manager: explains the privacy trade-off and drives the
-    // ~2.5 GB Gemma 4 download. Bound to app.onDeviceModel (ModelDownloader).
-    Dialog {
-        id: onDeviceDialog
-        title: "On-device private AI"
-        parent: Overlay.overlay
-        anchors.centerIn: parent
-        modal: true
-        width: Math.min(parent ? parent.width - 64 : 420, 420)
-        standardButtons: Dialog.Close
-
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 12
-
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                color: Theme.surfaceFg
-                text: "Gemma 4 runs entirely on your device. Your messages never leave " +
-                      "the computer and work offline. This needs a one-time download of " +
-                      "about 2.5 GB and enough free memory."
-            }
-
-            ProgressBar {
-                Layout.fillWidth: true
-                visible: app.onDeviceModel.status === "downloading"
-                value: app.onDeviceModel.progress
-            }
-
-            Text {
-                Layout.fillWidth: true
-                color: app.onDeviceModel.status === "failed" ? "#c0392b" : Theme.surfaceVarFg
-                text: {
-                    switch (app.onDeviceModel.status) {
-                    case "ready": return "Ready — runs offline.";
-                    case "downloading": return Math.round(app.onDeviceModel.progress * 100) + "%";
-                    case "failed": return "Download failed.";
-                    default: return "Download required (~2.5 GB).";
-                    }
-                }
-            }
-
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-                Button {
-                    text: app.onDeviceModel.status === "downloading" ? "Cancel download"
-                        : (app.onDeviceModel.status === "failed" ? "Retry" : "Download model")
-                    visible: app.onDeviceModel.status !== "ready"
-                    onClicked: app.onDeviceModel.status === "downloading"
-                        ? app.onDeviceModel.cancel() : app.onDeviceModel.start()
-                }
-                Button {
-                    text: "Delete model"
-                    visible: app.onDeviceModel.status === "ready"
-                    onClicked: app.onDeviceModel.remove()
-                }
-                Item { Layout.fillWidth: true }
-            }
-        }
-    }
 }

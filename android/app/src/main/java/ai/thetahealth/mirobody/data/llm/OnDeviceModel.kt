@@ -20,7 +20,7 @@ object OnDeviceModel {
      * a token header would be needed here (see [ModelManager]).
      */
     const val DOWNLOAD_URL: String =
-        "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/model.litertlm?download=true"
+        "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/" + FILE_NAME + "?download=true"
 
     /** Approximate download size, for the UI to show before the Content-Length lands. */
     const val APPROX_BYTES: Long = 2_583L * 1024 * 1024

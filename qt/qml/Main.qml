@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import Mirobody
 
 // The orchestration hub, the QML analogue of app.js render(): a top bar (brand /
@@ -136,7 +137,7 @@ ApplicationWindow {
         sourceComponent: (app.loggedIn && !app.addingAccount) ? chatComponent : loginComponent
     }
     Component { id: loginComponent; LoginPage {} }
-    Component { id: chatComponent;  ChatPage {} }
+    Component { id: chatComponent;  ChatPage { onManageOnDevice: onDeviceDialog.open() } }
 
     // --- shared dialogs / drawer ------------------------------------------
     LanguageDialog { id: languageDialog }
@@ -146,6 +147,166 @@ ApplicationWindow {
     AboutDialog    { id: aboutDialog }
     EhrDialog      { id: ehrDialog }
     VendorsDialog  { id: vendorsDialog }
+
+    // On-device model manager: a list of GGUF models (remote download or local file);
+    // one is active (●). Shared: reached from the provider picker AND the ⚙ menu.
+    Dialog {
+        id: onDeviceDialog
+        title: I18n.t("onDeviceAi")
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        modal: true
+        width: Math.min(parent ? parent.width - 40 : 480, 480)
+        standardButtons: Dialog.Close
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            Text {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                color: Theme.surfaceVarFg
+                font.pointSize: Theme.baseSize - 1
+                text: I18n.t("onDeviceIntro")
+            }
+
+            // The model list.
+            ListView {
+                id: modelList
+                Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(contentHeight, 240)
+                clip: true
+                spacing: 2
+                model: app.onDeviceModel.models
+                delegate: RowLayout {
+                    required property var modelData
+                    width: ListView.view.width
+                    spacing: 6
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 0
+                        Label {
+                            Layout.fillWidth: true
+                            text: modelData.name
+                            color: Theme.surfaceFg
+                            elide: Text.ElideRight
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            font.pointSize: Theme.baseSize - 3
+                            color: Theme.surfaceVarFg
+                            text: modelData.status === "ready" ? I18n.t("modelReady")
+                                : modelData.status === "downloading"
+                                    ? (I18n.t("modelDownloading") + " " + Math.round(modelData.progress * 100) + "%")
+                                    : (modelData.remote ? I18n.t("modelNotDownloaded") : I18n.t("modelFileMissing"))
+                        }
+                    }
+                    Button {
+                        text: I18n.t("download")
+                        visible: modelData.remote && modelData.status === "absent"
+                        onClicked: app.onDeviceModel.download(modelData.name)
+                    }
+                    Button {
+                        text: I18n.t("cancel")
+                        visible: modelData.status === "downloading"
+                        onClicked: app.onDeviceModel.cancel()
+                    }
+                    ToolButton {
+                        id: delBtn
+                        text: "✕"
+                        // Red glyph so the destructive action reads as such (Fusion
+                        // ToolButtons don't tint by role, so override the content).
+                        contentItem: Text {
+                            text: delBtn.text
+                            color: Theme.error
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: modelData.remote ? I18n.t("deleteModel") : I18n.t("forgetModel")
+                        // Deleting is destructive (a remote model's file is removed
+                        // from disk; a local one is only forgotten) — confirm first.
+                        onClicked: {
+                            deleteConfirm.pendingName = modelData.name;
+                            deleteConfirm.message = I18n.t(modelData.remote ? "deleteModelConfirm"
+                                                                            : "forgetModelConfirm", modelData.name);
+                            deleteConfirm.open();
+                        }
+                    }
+                }
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.outlineVar }
+
+            // One-click add from a curated catalog (so users don't have to hunt for URLs).
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                visible: app.onDeviceModel.suggestions.length > 0
+                Label { text: I18n.t("suggested"); color: Theme.surfaceVarFg }
+                ComboBox {
+                    id: suggestCombo
+                    Layout.fillWidth: true
+                    model: app.onDeviceModel.suggestions
+                    textRole: "label"
+                }
+                Button {
+                    text: I18n.t("add")
+                    onClicked: {
+                        var s = app.onDeviceModel.suggestions[suggestCombo.currentIndex];
+                        if (s) app.onDeviceModel.addRemote(s.name, s.url);
+                    }
+                }
+            }
+
+            // Or add any other GGUF by URL: name + URL.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                TextField {
+                    id: addName
+                    Layout.preferredWidth: 96
+                    placeholderText: I18n.t("modelName")
+                }
+                TextField {
+                    id: addUrl
+                    Layout.fillWidth: true
+                    placeholderText: "https://…/model.gguf"
+                }
+                Button {
+                    text: I18n.t("add")
+                    enabled: addUrl.text.trim().length > 0
+                    onClicked: { app.onDeviceModel.addRemote(addName.text, addUrl.text); addName.clear(); addUrl.clear(); }
+                }
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: I18n.t("addLocalFile")
+                onClicked: modelFileDialog.open()
+            }
+        }
+    }
+
+    // Register an existing GGUF as a local model (no copy is made).
+    FileDialog {
+        id: modelFileDialog
+        title: I18n.t("selectGgufModel")
+        nameFilters: ["GGUF models (*.gguf)", "All files (*)"]
+        onAccepted: app.onDeviceModel.addLocal("", selectedFile)
+    }
+
+    // Destructive-action confirm for the on-device model list (delete/forget).
+    // The ✕ button fills in pendingName + message, then opens this.
+    ConfirmDialog {
+        id: deleteConfirm
+        property string pendingName: ""
+        title: I18n.t("deleteModel")
+        confirmText: I18n.t("delete")
+        onConfirmed: if (pendingName.length) app.onDeviceModel.remove(pendingName)
+    }
     HistoryDrawer  {
         id: historyDrawer
         // The Health & data group opens these from the drawer (moved off the gear).

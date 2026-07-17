@@ -8,7 +8,7 @@ enum OnDeviceModel {
     static let displayName = "Gemma 4 E2B (instruction-tuned)"
     static let fileName = "gemma-4-E2B-it.litertlm"
     static let downloadURL = URL(
-        string: "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/model.litertlm?download=true"
+        string: "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/\(fileName)?download=true"
     )!
     /// Approximate size, for the UI to show before Content-Length lands.
     static let approxBytes: Int64 = 2_583 * 1024 * 1024

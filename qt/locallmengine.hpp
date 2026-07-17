@@ -5,12 +5,14 @@
 // ChatModel identically for local turns. The Qt analogue of Android's
 // LiteRtLlmEngine / iOS's LiteRtLlmEngine.
 //
-// LiteRT-LM C++ has no supported CMake/prebuilt-library path (it is Bazel-only, and
-// Google steers app devs to the Kotlin/Swift SDKs). So the real engine is compiled
-// ONLY when the build is configured with -DMIROBODY_ONDEVICE_LLM=ON and pointed at a
-// LiteRT-LM SDK (headers + libs). Otherwise a stub is built and the app still
-// compiles/links — on-device turns then report "not built in", mirroring the
-// graceful degradation used elsewhere in this repo (e.g. the absent JNI .so).
+// The real engine links the LiteRT-LM **C API** shared library (its //c:litert-lm
+// Bazel target -> litert-lm.dll + engine.h; the C ABI links from either an MSVC or a
+// GCC/Clang build). It is compiled ONLY when configured with -DMIROBODY_ONDEVICE_LLM=ON
+// and pointed at a LiteRT-LM SDK via -DLITERT_LM_SDK_DIR (include/engine.h + lib/). No
+// Windows/Linux prebuilt library is published, so build the C API DLL from source first
+// (see qt/README.md). Otherwise a stub is built and the app still compiles/links —
+// on-device turns then report "not built in", mirroring the graceful degradation used
+// elsewhere in this repo (e.g. the absent JNI .so).
 
 #include <QObject>
 #include <QString>

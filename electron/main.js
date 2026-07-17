@@ -5,7 +5,7 @@
 // only the server lives inside this process instead of a separate binary.
 const path = require('path');
 const http = require('http');
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const { MiroServer } = require('./mirobody');
 const ondevice = require('./ondevice');
 
@@ -138,17 +138,31 @@ function createWindow(port) {
 // renderer's window.ondevice (see preload.js). The engine runs here in main; the
 // renderer only sends a history and receives streamed reply chunks.
 function wireOnDeviceIpc() {
-  ipcMain.handle('ondevice:status', () => ondevice.status());
-  ipcMain.handle('ondevice:delete', () => ondevice.remove());
-  ipcMain.on('ondevice:download', (e) => {
-    ondevice.download((p) => {
+  ipcMain.handle('ondevice:models', () => ondevice.models());
+  ipcMain.handle('ondevice:suggestions', () => ondevice.suggestions());
+  ipcMain.handle('ondevice:isReady', (_e, name) => ondevice.isReady(name));
+  ipcMain.on('ondevice:addRemote', (_e, { name, uri }) => ondevice.addRemote(name, uri));
+  // Native file picker (main-only) so users can register a GGUF already on disk.
+  ipcMain.handle('ondevice:addLocal', async (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const r = await dialog.showOpenDialog(win, {
+      properties: ['openFile'],
+      filters: [{ name: 'GGUF models', extensions: ['gguf'] }, { name: 'All files', extensions: ['*'] }],
+    });
+    if (r.canceled || !r.filePaths || !r.filePaths[0]) return false;
+    ondevice.addLocal('', r.filePaths[0]);
+    return true;
+  });
+  ipcMain.on('ondevice:remove', (_e, { name }) => ondevice.remove(name));
+  ipcMain.on('ondevice:download', (e, { name }) => {
+    ondevice.download(name, (p) => {
       if (!e.sender.isDestroyed()) e.sender.send('ondevice:download:progress', p);
     });
   });
   ipcMain.on('ondevice:download:cancel', () => { ondevice.cancelDownload(); });
-  ipcMain.on('ondevice:generate', (e, { id, history }) => {
+  ipcMain.on('ondevice:generate', (e, { id, model, history }) => {
     const send = (channel, payload) => { if (!e.sender.isDestroyed()) e.sender.send(channel, payload); };
-    ondevice.generate(id, Array.isArray(history) ? history : [], {
+    ondevice.generate(id, model, Array.isArray(history) ? history : [], {
       // Wrap each delta as the same SSE reply chunk the server emits, so the
       // renderer reuses its existing parseAgentChunk/onmessage handlers verbatim.
       onChunk: (text) => send('ondevice:chunk', { id, data: JSON.stringify({ type: 'reply', content: text }) }),

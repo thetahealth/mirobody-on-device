@@ -39,10 +39,12 @@ const char* kFontKey     = "mirobody-font-offset";
 
 const char* kDefaultModel = "gemini-2.5-flash";
 
-// Synthetic, client-only provider that runs Gemma 4 fully on-device (no server).
-// Mirrors ProviderInfo.onDevice on Android/iOS.
-const char* kOnDeviceName = "Gemma 4 \xC2\xB7 On-device"; // "Gemma 4 · On-device" (UTF-8)
-const char* kOnDeviceCode = "__ondevice_gemma4__";
+// Synthetic, client-only providers that run a local GGUF fully on-device (no server).
+// One picker entry per registered model, named "<model> · On-device"; all share the
+// kOnDeviceCode sentinel and carry the model name in a "model" field. Mirrors
+// ProviderInfo.onDevice on Android/iOS.
+const char* kOnDeviceSuffix = " \xC2\xB7 On-device";  // " · On-device" (UTF-8)
+const char* kOnDeviceCode   = "__ondevice_gemma4__";
 
 // The ten languages the app offers (config.js LANGUAGES); the picker shows
 // these and the chosen code rides on each agent request.
@@ -111,6 +113,8 @@ AppController::AppController(QObject* parent)
     // on demand; the engine loads it lazily on the first local turn.
     downloader_  = new ModelDownloader(this);
     localEngine_ = new LocalLmEngine(this);
+    // Adding/removing/downloading a model changes the picker's on-device entries.
+    connect(downloader_, &ModelDownloader::modelsChanged, this, &AppController::rebuildProviders);
 
     // Direct BLE GATT ingestion shares the one ApiClient, so it always posts with
     // the current base URL + bearer token (updated on login / backend change).
@@ -400,48 +404,57 @@ void AppController::loadProviders() {
     if (api_->token().isEmpty()) return;
     api_->postEnvelope("/api/providers", QJsonObject(),
         [this](const QJsonValue& data) {
-            providers_.clear();
             // /api/providers returns groups: [{ agent, providers[] }]. Flatten to one
             // entry per model. "name" is the display + selection value (QML textRole/
             // valueRole = "name"); "agent" ("" for the default agent) rides on the
-            // request. "code" mirrors the model here and is only special-cased for the
-            // on-device sentinel in QML.
+            // request. "code" mirrors the model. On-device entries are appended by
+            // rebuildProviders() (one per model), so the two live in one picker.
+            serverProviders_.clear();
             const QJsonArray arr = data.toArray();
-            QStringList names;
             for (const QJsonValue& gv : arr) {
                 const QJsonObject g = gv.toObject();
                 const QString agent = g.value("agent").toString();
-                const QJsonArray provs = g.value("providers").toArray();
-                for (const QJsonValue& pv : provs) {
+                for (const QJsonValue& pv : g.value("providers").toArray()) {
                     const QString p = pv.toString();
                     if (p.isEmpty()) continue;
-                    names << p;
                     QVariantMap m;
                     m.insert("name", p);
                     m.insert("code", p);
                     m.insert("agent", agent);
-                    providers_.push_back(m);
+                    serverProviders_.push_back(m);
                 }
             }
-            // Always offer the on-device provider alongside the server's.
-            appendOnDeviceProvider();
-            names << QString::fromUtf8(kOnDeviceName);
-            // Restore the cached selection if still on offer, else default to the
-            // first provider (config/chat.js setProviderOptions).
-            if (!names.isEmpty() && !names.contains(provider_)) {
-                setProvider(names.first());
-            }
-            emit providersChanged();
+            rebuildProviders();
         },
         [this](const QString&, int code) {
             if (code == 401) { signOut(); return; }
-            // Server unreachable, but on-device chat still works offline — keep it.
-            if (providers_.isEmpty()) {
-                appendOnDeviceProvider();
-                if (provider_.isEmpty()) setProvider(QString::fromUtf8(kOnDeviceName));
-                emit providersChanged();
-            }
+            // Server unreachable, but on-device chat still works offline.
+            serverProviders_.clear();
+            rebuildProviders();
         });
+}
+
+// providers_ = the cached server providers + one synthetic entry per on-device model
+// ("<model> · On-device", sentinel code, model name in "model"). Rerun whenever the
+// server list or the model registry changes; keeps/repairs the current selection.
+void AppController::rebuildProviders() {
+    providers_ = serverProviders_;
+    QStringList names;
+    for (const QVariant& v : providers_) names << v.toMap().value("name").toString();
+    // Only *downloaded* on-device models appear in the picker; the rest are reached
+    // via the manager (the "Manage on-device AI" entry the QML picker appends).
+    for (const QString& model : downloader_->names()) {
+        if (!downloader_->isReady(model)) continue;
+        const QString label = model + QString::fromUtf8(kOnDeviceSuffix);
+        QVariantMap m;
+        m.insert("name", label);
+        m.insert("code", QString::fromUtf8(kOnDeviceCode));
+        m.insert("model", model);
+        providers_.push_back(m);
+        names << label;
+    }
+    if (!names.isEmpty() && !names.contains(provider_)) setProvider(names.first());
+    emit providersChanged();
 }
 
 //------------------------------------------------------------------------------
@@ -461,24 +474,23 @@ void AppController::sendMessage(const QString& text) {
 
     setStreaming(true);
 
+    // Find the selected provider entry once.
+    QVariantMap sel;
+    for (const QVariant& v : providers_) {
+        const QVariantMap m = v.toMap();
+        if (m.value("name").toString() == turnProvider) { sel = m; break; }
+    }
+
     // --- On-device mode: route to the local engine, no server ------------
-    if (turnProvider == QString::fromUtf8(kOnDeviceName)) {
-        sendOnDeviceMessage(q, assistantRow);
+    if (sel.value("code").toString() == QString::fromUtf8(kOnDeviceCode)) {
+        sendOnDeviceMessage(sel.value("model").toString(), turnProvider, assistantRow);
         return;
     }
 
     // --- Agent mode: a provider is selected -------------------------------
-    // turnProvider is the selected model name; look up its agent from providers_
-    // ("" for the default agent). Send {agent, provider} verbatim -- no parsing.
+    // Send {agent, provider} verbatim -- no parsing. agent is "" for the default agent.
     if (!turnProvider.isEmpty()) {
-        QString agentName;
-        for (const QVariant& v : providers_) {
-            const QVariantMap m = v.toMap();
-            if (m.value("name").toString() == turnProvider) {
-                agentName = m.value("agent").toString();
-                break;
-            }
-        }
+        const QString agentName = sel.value("agent").toString();
         const QString providerName = turnProvider;
 
         QJsonObject body{
@@ -622,23 +634,16 @@ void AppController::stopStreaming() {
 }
 
 //------------------------------------------------------------------------------
-// On-device chat (Gemma 4 via LiteRT-LM) — emits the same reply/finish/fail flow
-// the SSE path does, so ChatModel updates identically.
+// On-device chat (a local GGUF via llama.cpp) — emits the same reply/finish/fail
+// flow the SSE path does, so ChatModel updates identically. `model` is the registry
+// entry name; `label` is the picker's display name (used as the turn's provider tag).
 //------------------------------------------------------------------------------
 
-void AppController::appendOnDeviceProvider() {
-    QVariantMap m;
-    m.insert("code", QString::fromUtf8(kOnDeviceCode));
-    m.insert("name", QString::fromUtf8(kOnDeviceName));
-    providers_.push_back(m);
-}
-
-void AppController::sendOnDeviceMessage(const QString& question, int assistantRow) {
-    Q_UNUSED(question);
-    const QString turnProvider = QString::fromUtf8(kOnDeviceName);
-    if (!downloader_->isReady()) {
+void AppController::sendOnDeviceMessage(const QString& model, const QString& label, int assistantRow) {
+    const QString turnProvider = label;
+    if (model.isEmpty() || !downloader_->isReady(model)) {
         failTurn(assistantRow - 1, assistantRow,
-                 QStringLiteral("Error: on-device model not downloaded yet."));
+                 QStringLiteral("Error: on-device model not ready. Open ⚙ → On-device AI to download or pick one."));
         return;
     }
 
@@ -678,7 +683,7 @@ void AppController::sendOnDeviceMessage(const QString& question, int assistantRo
                      acc->isEmpty() ? (QStringLiteral("Error: ") + reason) : *acc);
         }));
 
-    localEngine_->generate(downloader_->modelPath(), history);
+    localEngine_->generate(downloader_->pathFor(model), history);
 }
 
 //------------------------------------------------------------------------------

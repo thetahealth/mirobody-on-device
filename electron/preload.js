@@ -35,22 +35,27 @@ ipcRenderer.on('ondevice:download:progress', (_e, payload) => {
 
 contextBridge.exposeInMainWorld('ondevice', {
   available: true,
-  getStatus: () => ipcRenderer.invoke('ondevice:status'),
-  startDownload: () => ipcRenderer.send('ondevice:download'),
+  // Model registry.
+  models: () => ipcRenderer.invoke('ondevice:models'),            // -> [{name,status,remote}]
+  suggestions: () => ipcRenderer.invoke('ondevice:suggestions'),  // -> [{name,uri,label}]
+  isReady: (name) => ipcRenderer.invoke('ondevice:isReady', name),
+  addRemote: (name, uri) => ipcRenderer.send('ondevice:addRemote', { name, uri }),
+  addLocal: () => ipcRenderer.invoke('ondevice:addLocal'),        // native file picker -> bool
+  remove: (name) => ipcRenderer.send('ondevice:remove', { name }),
+  download: (name) => ipcRenderer.send('ondevice:download', { name }),
   cancelDownload: () => ipcRenderer.send('ondevice:download:cancel'),
-  deleteModel: () => ipcRenderer.invoke('ondevice:delete'),
-  // Subscribe to download progress ({status, progress|error}); returns an unsubscribe.
+  // Download progress ({name, status, progress|error}); returns an unsubscribe.
   onDownloadProgress: (cb) => {
     progressCbs.push(cb);
     return () => { progressCbs = progressCbs.filter((x) => x !== cb); };
   },
-  // Stream a local turn. `history` is [{role,content}]; onmessage receives SSE-style
-  // chunk strings ({"type":"reply","content":...}); completion/errors come via the
-  // other callbacks. Returns { cancel }.
-  generate: (history, onmessage, oncomplete, onerror) => {
+  // Stream a local turn from `model` (registry entry name). `history` is [{role,content}];
+  // onmessage gets SSE-style chunk strings ({"type":"reply",...}); completion/errors via
+  // the other callbacks. Returns { cancel }.
+  generate: (model, history, onmessage, oncomplete, onerror) => {
     const id = ++genSeq;
     gens.set(id, { onmessage, oncomplete, onerror });
-    ipcRenderer.send('ondevice:generate', { id, history });
+    ipcRenderer.send('ondevice:generate', { id, model, history });
     return { cancel: () => { gens.delete(id); ipcRenderer.send('ondevice:cancel', { id }); } };
   },
 });

@@ -38,6 +38,7 @@ const SEND_ARROW_SVG = icons.SEND_ARROW_SVG;
 
 const formatLocalTime = require("./format").formatLocalTime;
 const showCostModal   = require("./modals").showCostModal;
+const showConfirmModal = require("./modals").showConfirmModal;
 
 var t = i18n.t;
 
@@ -46,22 +47,63 @@ var t = i18n.t;
 // (see electron/preload.js + electron/ondevice.js); a plain browser has no bridge,
 // so the on-device option never appears there. Name/code match the other clients.
 
-var ONDEVICE_NAME = "Gemma 4 · On-device";
-var ONDEVICE_CODE = "__ondevice_gemma4__";
+// Each registered on-device model shows in the picker as "<name> · On-device".
+var ONDEVICE_SUFFIX = " · On-device";
+var ONDEVICE_MANAGE = "__ondevice_manage__";   // sentinel picker option that opens the manager
+var onDeviceModels = [];                         // [{name,status,remote}] cached from the bridge
 
 function onDeviceBridge() {
     return (typeof window !== "undefined") ? window.ondevice : null;
 }
 function isOnDeviceProvider(name) {
-    return !!onDeviceBridge() && name === ONDEVICE_NAME;
+    return !!onDeviceBridge() && typeof name === "string"
+        && name.length > ONDEVICE_SUFFIX.length
+        && name.slice(-ONDEVICE_SUFFIX.length) === ONDEVICE_SUFFIX;
+}
+function modelFromProvider(name) { return name.slice(0, -ONDEVICE_SUFFIX.length); }
+
+// Refresh the cached on-device model list from the bridge, then rebuild the provider
+// picker (one entry per model) and run an optional callback.
+function refreshOnDeviceModels(then) {
+    var b = onDeviceBridge();
+    if (!b) { if (then) { then(); } return; }
+    b.models().then(function (m) {
+        onDeviceModels = (m instanceof Array) ? m : [];
+        if (app.slots && app.slots.providerRefill) { app.slots.providerRefill(state.providers); }
+        if (then) { then(); }
+    });
 }
 
-// Modal to download / manage the on-device model. Mirrors the Android/iOS/Qt
-// affordance; reuses the app's overlay+card pattern (see modals.js). English-only
-// for now — localize via i18n strings in a follow-up.
-function showOnDeviceModal() {
+// On-device model manager: a list of GGUF models (remote download or local file),
+// a curated "suggested" picker, and free-form add-by-URL / add-local-file. Mirrors
+// the Qt client's ⚙ → On-device AI dialog. Reuses the overlay+card pattern.
+function showOnDeviceManager() {
     var bridge = onDeviceBridge();
     if (!bridge) { return; }
+
+    // Uniform control metrics so the suggested <select>, the text inputs and the
+    // buttons all share one height and read as one row (native selects/inputs
+    // otherwise render shorter than button()).
+    var CTRL_H = "40px";
+    function ctrlStyle(extra) {
+        var s = {
+            height: CTRL_H, padding: "0 10px",
+            border: "1px solid " + color.outlineVar, borderRadius: "10px",
+            font: "inherit", fontSize: "0.875rem",
+            color: color.onSurface, background: color.background,
+            boxSizing: "border-box"
+        };
+        for (var k in extra) { s[k] = extra[k]; }
+        return s;
+    }
+    // A button() sized to CTRL_H (button()'s own padding drives height otherwise,
+    // which drifts a pixel or two from the inputs).
+    function sizedBtn(label, opts) {
+        var b = button(label, false, opts);
+        ui.setStyle(b, { height: CTRL_H, padding: "0 16px" });
+        if (opts && opts.minWidth) { ui.setStyle(b, { minWidth: opts.minWidth }); }
+        return b;
+    }
 
     var backdrop = ui.dom("div", {
         position: "fixed", inset: "0", background: "rgba(0, 0, 0, 0.4)",
@@ -70,78 +112,121 @@ function showOnDeviceModal() {
     });
     var card = ui.dom("div", {
         background: color.background, borderRadius: "14px", padding: "20px 22px",
-        width: "100%", maxWidth: "420px",
+        width: "100%", maxWidth: "480px",
         boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
-        display: "flex", flexDirection: "column", gap: "12px"
+        display: "flex", flexDirection: "column", gap: "10px"
     });
-    card.appendChild(widgets.modalHeader("On-device private AI", function () { dismiss(); }));
+    card.appendChild(widgets.modalHeader(t("onDeviceAi"), function () { dismiss(); }));
     card.appendChild(ui.setText(ui.dom("div", {
-        fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.4"
-    }), "Gemma 4 runs entirely on this computer. Your messages never leave the "
-       + "device and work offline. This needs a one-time model download and enough "
-       + "free memory."));
+        fontSize: "0.85rem", color: color.onSurfaceVar, lineHeight: "1.4"
+    }), t("onDeviceIntro")));
 
-    var statusLine = ui.dom("div", { fontSize: "0.85rem", color: color.onSurfaceVar });
-    card.appendChild(statusLine);
-
-    var track = ui.dom("div", {
-        height: "6px", borderRadius: "3px", background: color.outlineVar,
-        overflow: "hidden", display: "none"
+    var listWrap = ui.dom("div", {
+        display: "flex", flexDirection: "column", gap: "6px",
+        maxHeight: "240px", overflowY: "auto"
     });
-    var fill = ui.dom("div", { height: "100%", width: "0%", background: color.primary });
-    track.appendChild(fill);
-    card.appendChild(track);
+    card.appendChild(listWrap);
+    card.appendChild(ui.dom("div", { height: "1px", background: color.outlineVar }));
 
-    var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end", gap: "8px" });
-    card.appendChild(actions);
+    // Suggested (curated) dropdown + Add.
+    var sugRow = ui.dom("div", { display: "flex", gap: "6px", alignItems: "center" });
+    sugRow.appendChild(ui.setText(ui.dom("span", { fontSize: "0.85rem", color: color.onSurfaceVar }), t("suggested")));
+    var sugSelect = ui.dom("select", ctrlStyle({ flex: "1 1 auto", minWidth: "0" }));
+    sugRow.appendChild(sugSelect);
+    sugRow.appendChild(sizedBtn(t("add"), { click: function () {
+        var opt = sugSelect.options[sugSelect.selectedIndex];
+        if (opt && opt.__uri) { bridge.addRemote(opt.__name, opt.__uri); refreshOnDeviceModels(renderAll); }
+    } }));
+    card.appendChild(sugRow);
 
-    var unsub = null;
+    // Free-form add-by-URL: name + url.
+    var remoteRow = ui.dom("div", { display: "flex", gap: "6px", alignItems: "center" });
+    var nameIn = ui.dom("input", ctrlStyle({ width: "96px" }), { type: "text", placeholder: t("modelName") });
+    var urlIn = ui.dom("input", ctrlStyle({ flex: "1 1 auto", minWidth: "0" }), { type: "text", placeholder: "https://…/model.gguf" });
+    remoteRow.appendChild(nameIn); remoteRow.appendChild(urlIn);
+    remoteRow.appendChild(sizedBtn(t("add"), { click: function () {
+        if (urlIn.value.trim()) {
+            bridge.addRemote(nameIn.value, urlIn.value);
+            nameIn.value = ""; urlIn.value = "";
+            refreshOnDeviceModels(renderAll);
+        }
+    } }));
+    card.appendChild(remoteRow);
+
+    // Add a local file (native picker in main).
+    var localBtn = sizedBtn(t("addLocalFile"), { click: function () {
+        bridge.addLocal().then(function (ok) { if (ok) { refreshOnDeviceModels(renderAll); } });
+    } });
+    ui.setStyle(localBtn, { width: "100%" });
+    card.appendChild(localBtn);
+
+    var dlProg = {};   // name -> latest download fraction
+    var unsub = bridge.onDownloadProgress(function (p) {
+        if (!p || !p.name) { return; }
+        if (p.status === "downloading" && typeof p.progress === "number") { dlProg[p.name] = p.progress; }
+        else { delete dlProg[p.name]; }
+        refreshOnDeviceModels(renderAll);
+    });
     function dismiss() {
         if (unsub) { unsub(); unsub = null; }
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     }
 
-    function render(status, progress) {
-        ui.clear(actions);
-        var downloading = status === "downloading";
-        ui.setStyle(track, { display: downloading ? "block" : "none" });
-        if (downloading && typeof progress === "number") {
-            fill.style.width = Math.round(progress * 100) + "%";
-        }
-        if (status === "ready") {
-            ui.setText(statusLine, "Ready — runs offline.");
-            actions.appendChild(button("Delete model", false, { click: function () {
-                bridge.deleteModel().then(function () { render("absent"); });
-            } }));
-        } else if (downloading) {
-            ui.setText(statusLine, "Downloading… "
-                + (typeof progress === "number" ? Math.round(progress * 100) + "%" : ""));
-            actions.appendChild(button("Cancel", false, { click: function () {
-                bridge.cancelDownload();
-            } }));
-        } else {
-            ui.setText(statusLine, status === "failed"
-                ? "Download failed." : "Download required.");
-            actions.appendChild(button(status === "failed" ? "Retry" : "Download model", true, {
-                click: function () { bridge.startDownload(); render("downloading", 0); }
-            }));
-        }
+    function renderList() {
+        ui.clear(listWrap);
+        onDeviceModels.forEach(function (m) {
+            var row = ui.dom("div", { display: "flex", alignItems: "center", gap: "8px" });
+            var info = ui.dom("div", { flex: "1 1 auto", minWidth: "0" });
+            info.appendChild(ui.setText(ui.dom("div", {
+                color: color.onSurface, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
+            }), m.name));
+            var st;
+            if (m.status === "ready") { st = t("modelReady"); }
+            else if (m.status === "downloading") {
+                st = t("modelDownloading") + (dlProg[m.name] != null ? " " + Math.round(dlProg[m.name] * 100) + "%" : "");
+            } else { st = m.remote ? t("modelNotDownloaded") : t("modelFileMissing"); }
+            info.appendChild(ui.setText(ui.dom("div", { fontSize: "0.75rem", color: color.onSurfaceVar }), st));
+            row.appendChild(info);
+            // Download and Cancel share a min width so the two states line up
+            // across rows; ✕ is a fixed square.
+            if (m.remote && m.status === "absent") {
+                row.appendChild(sizedBtn(t("download"), { minWidth: "104px", click: function () { bridge.download(m.name); } }));
+            }
+            if (m.status === "downloading") {
+                row.appendChild(sizedBtn(t("cancel"), { minWidth: "104px", click: function () { bridge.cancelDownload(); } }));
+            }
+            // Deleting is destructive (a remote model's file is removed from disk;
+            // a local one is only forgotten) — red button + a confirm dialog first.
+            var rm = sizedBtn("✕", { click: function () {
+                showConfirmModal(
+                    t("deleteModel"),
+                    t(m.remote ? "deleteModelConfirm" : "forgetModelConfirm", m.name),
+                    t("delete"), true,
+                    function () { bridge.remove(m.name); refreshOnDeviceModels(renderAll); }
+                );
+            } });
+            ui.setStyle(rm, { width: CTRL_H, minWidth: "0", padding: "0",
+                              color: color.error, borderColor: color.error });
+            row.appendChild(rm);
+            listWrap.appendChild(row);
+        });
     }
+    function renderSuggest() {
+        bridge.suggestions().then(function (sugs) {
+            ui.clear(sugSelect);
+            (sugs || []).forEach(function (s) {
+                var o = ui.dom("option", null, { value: s.name });
+                o.__uri = s.uri; o.__name = s.name;
+                ui.setText(o, s.label);
+                sugSelect.appendChild(o);
+            });
+            ui.setStyle(sugRow, { display: (sugs && sugs.length) ? "flex" : "none" });
+        });
+    }
+    function renderAll() { renderList(); renderSuggest(); }
 
-    // Live progress updates pushed from the main process.
-    unsub = bridge.onDownloadProgress(function (p) {
-        if (!p) { return; }
-        render(p.status, p.progress);
-        if (p.status === "ready") {
-            // Reflect readiness and let the user dismiss.
-        }
-    });
-
-    bridge.getStatus().then(function (s) { render((s && s.status) || "absent"); });
-
-    backdrop.addEventListener("click", function (evt) {
-        if (evt.target === backdrop) { dismiss(); }
-    });
+    refreshOnDeviceModels(renderAll);
+    backdrop.addEventListener("click", function (evt) { if (evt.target === backdrop) { dismiss(); } });
     backdrop.appendChild(card);
     document.body.appendChild(backdrop);
 }
@@ -238,16 +323,24 @@ function buildChat() {
     var providerWrap   = _model.wrap;
     var providerSelect = _model.select;
     providerSelect.addEventListener("change", function () {
+        // The "Manage models…" sentinel isn't a real selection: open the manager
+        // and revert the picker to the previously chosen provider.
+        if (providerSelect.value === ONDEVICE_MANAGE) {
+            providerSelect.value = state.provider || "";
+            showOnDeviceManager();
+            return;
+        }
         state.provider = providerSelect.value;
         if (state.provider) {
             localStorage.setItem(PROVIDER_KEY, state.provider);
         } else {
             localStorage.removeItem(PROVIDER_KEY);
         }
-        // Picking the on-device provider before the model is downloaded → prompt.
+        // Picking an on-device model that isn't downloaded yet → open the manager.
         if (isOnDeviceProvider(state.provider)) {
-            onDeviceBridge().getStatus().then(function (s) {
-                if (!s || s.status !== "ready") { showOnDeviceModal(); }
+            var model = modelFromProvider(state.provider);
+            onDeviceBridge().isReady(model).then(function (ready) {
+                if (!ready) { showOnDeviceManager(); }
             });
         }
     });
@@ -267,7 +360,7 @@ function buildChat() {
             var agent = g.agent || "";
             for (var j = 0; j < g.providers.length; j ++) {
                 var p = g.providers[j];
-                if (!p || p === ONDEVICE_NAME) { continue; }   // on-device re-added below
+                if (!p || isOnDeviceProvider(p)) { continue; }   // on-device re-added below
                 providerAgent[p] = agent;
                 names.push(p);
                 var opt = ui.dom("option", null, { value: p });
@@ -276,12 +369,21 @@ function buildChat() {
             }
         }
 
-        // Desktop only: always offer the on-device provider (runs locally, offline).
+        // Desktop only: one entry per *downloaded* on-device model (runs locally,
+        // offline, no key), plus a sentinel that opens the model manager. Models
+        // that aren't ready yet are reached via the manager, not the picker.
         if (onDeviceBridge()) {
-            names.push(ONDEVICE_NAME);
-            var odOpt = ui.dom("option", null, { value: ONDEVICE_NAME });
-            ui.setText(odOpt, ONDEVICE_NAME);
-            providerSelect.appendChild(odOpt);
+            for (var k = 0; k < onDeviceModels.length; k ++) {
+                if (onDeviceModels[k].status !== "ready") { continue; }
+                var od = onDeviceModels[k].name + ONDEVICE_SUFFIX;
+                names.push(od);
+                var odOpt = ui.dom("option", null, { value: od });
+                ui.setText(odOpt, od);
+                providerSelect.appendChild(odOpt);
+            }
+            var mng = ui.dom("option", null, { value: ONDEVICE_MANAGE });
+            ui.setText(mng, t("manageModels"));
+            providerSelect.appendChild(mng);
         }
 
         if (names.length === 0) {
@@ -307,6 +409,9 @@ function buildChat() {
     // selector's refill so a later/in-flight /api/providers response updates it.
     setProviderOptions(state.providers);
     app.slots.providerRefill = setProviderOptions;
+    // Desktop: pull the on-device model list from the bridge, then rebuild the
+    // picker so each registered model shows as its own "<name> · On-device" option.
+    refreshOnDeviceModels();
 
     // Right slot: the settings gear (language / font / backend / about), the same
     // menu the login screen shows -- so app settings live in one consistent place
@@ -1514,14 +1619,15 @@ function buildChat() {
                     var hm = state.messages[hi];
                     if (hm && hm.content) { history.push({ role: hm.role, content: hm.content }); }
                 }
-                onDeviceBridge().getStatus().then(function (s) {
-                    if (!s || s.status !== "ready") {
+                var odModel = modelFromProvider(turnProvider);
+                onDeviceBridge().isReady(odModel).then(function (ready) {
+                    if (!ready) {
                         handled = true;
                         onStreamError(bubble, "Error: on-device model not downloaded.", finish);
-                        showOnDeviceModal();
+                        showOnDeviceManager();
                         return;
                     }
-                    onDeviceBridge().generate(history, streamOnMessage, streamOnComplete, streamOnError);
+                    onDeviceBridge().generate(odModel, history, streamOnMessage, streamOnComplete, streamOnError);
                 });
                 return;
             }
