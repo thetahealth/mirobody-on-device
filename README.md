@@ -28,8 +28,8 @@ up the core:
   [`llm::Client`](src/llm/client.hpp) per provider (OpenAI, Google Gemini, and
   MiroThinker today), with new providers slotting in behind the same contract.
   The native apps (Android · iOS · Qt · Electron) additionally offer a fully
-  **on-device** option — Gemma 4 via LiteRT-LM (llama.cpp on Electron) — so chat
-  can run with no server and no network at all.
+  **on-device** option — LiteRT-LM (Gemma 4 / Qwen) on mobile, llama.cpp (any GGUF)
+  on desktop — so chat can run with no server and no network at all.
 - **MCP tools** ([src/mcp/](src/mcp/) + [res/mcp_tools/](res/mcp_tools/)) -
   server-side tools exposed over a Model Context Protocol endpoint for clients
   to discover and call.
@@ -117,6 +117,45 @@ sensors (and legacy classic-Bluetooth HDP devices), the phone health stores (App
 Health Connect / HMS), and EHRs over SMART on FHIR — normalizes everything to FHIR R4, and
 keeps it on your device unless you choose to share it. See
 [src/health/README.md](src/health/README.md).
+
+## On-device LLM
+
+The native clients (Android · iOS · Electron · Qt) can run the **chat turn entirely
+on the device** — private by default, offline, and with no server or API key. A small
+model (1–4B parameters at 4-bit) is downloaded on demand and managed in-app; only the
+engine is bundled.
+
+<p align="center">
+  <img src="docs/images/on-device-llm.svg" alt="On-device LLM — one private chat model runs on the hardware you already own: no server round-trip; small enough to fit (quantized to device memory); fast enough to use (GPU-accelerated); and yours to choose or swap (not locked to one vendor's model)." width="920">
+</p>
+
+**Where the model runs.** CPU works everywhere but is slow; the GPU is the practical
+default today; the NPU is the most efficient but still too restricted for general LLMs.
+
+| | CPU | GPU | NPU |
+|---|---|---|---|
+| **Speed** | slow | fast | fastest |
+| **Power** | high | medium | low |
+| **Built for** | general compute | parallel math / graphics | vision & speech |
+| **Examples** | Intel · AMD · Apple/Arm | NVIDIA · AMD · Adreno · Mali · Apple GPU | Hexagon (Qualcomm) · ANE (Apple) · TPU (Pixel) |
+| **LLM today** | last resort | **the practical default** | early, restricted |
+
+**Which runtime runs on which backend** (● runs · ◐ early / limited):
+
+| Runtime | CPU | GPU | NPU |
+|---|:--:|:--:|:--:|
+| **llama.cpp** | ● | ● | |
+| **LiteRT-LM** | | ● | ◐ early |
+| **ONNX Runtime** | ● | ● | ● QNN |
+| **MLC-LLM** | | ● | |
+| **system service** (AICore, Apple FM) | | | ● |
+
+Desktop (Qt · Electron) runs **any GGUF** via llama.cpp — model-agnostic, managed in
+**⚙ → On-device AI**; mobile (Android · iOS) runs Gemma 4 or Qwen via LiteRT-LM. The fuller
+picture — formats (GGUF / ONNX / LiteRT-LM), quantization, the runnable-model catalog,
+and how it compares to Gemini Nano / Apple Foundation Models — is in the slide deck
+[docs/on-device-llm.md](docs/on-device-llm.md) (a Marp deck; open in a Marp viewer or
+export to PDF).
 
 ## Quick start
 
@@ -354,9 +393,9 @@ on-device LLM.
 
 **Notes**
 
-- **On-device LLM** — LiteRT-LM (Gemma 4) on Android / iOS / Qt, llama.cpp (Gemma
-  GGUF) on Electron. A plain browser has no on-device model; the web app exposes it
-  only when running inside Electron.
+- **On-device LLM** — LiteRT-LM (Gemma 4 / Qwen) on Android / iOS; llama.cpp (any
+  GGUF) on Qt / Electron. A plain browser has no on-device model; the web app exposes
+  it only when running inside Electron. See [On-device LLM](#on-device-llm).
 - **Phone health read** — Health Connect + HMS Health Kit (Android), HealthKit
   (iOS); the miniapp reads WeChat WeRun step data only. Qt and iOS additionally
   ingest BLE sensors directly.

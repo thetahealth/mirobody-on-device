@@ -11,13 +11,13 @@ struct ChatTurn {
 /// `/api/chat` SSE path does, so the existing chat UI renders on-device replies with
 /// no UI changes. Runs fully on-device — no network, no server.
 ///
-/// The concrete implementation is `LiteRtLlmEngine` (Gemma 4 via LiteRT-LM). The
-/// protocol is runtime-agnostic, matching the Android `OnDeviceLlmEngine` seam.
+/// The concrete implementation is `LiteRtLlmEngine` (LiteRT-LM). The protocol is
+/// runtime-agnostic, matching the Android `OnDeviceLlmEngine` seam.
 protocol OnDeviceLlmEngine: AnyObject {
-    /// Stream a reply for `history`; the final entry is the new user turn. Emits
-    /// `.reply` deltas (and optional `.thinking`), then `.end`. Failures surface as
+    /// Stream a reply for `history` using `model`; the final entry is the new user turn.
+    /// Emits `.reply` deltas (and optional `.thinking`), then `.end`. Failures surface as
     /// `.error` rather than throwing, mirroring the SSE client's contract.
-    func generate(history: [ChatTurn]) -> AsyncStream<ChatStreamEvent>
+    func generate(history: [ChatTurn], model: OnDeviceModelSpec) -> AsyncStream<ChatStreamEvent>
 
     /// Release native resources (the model file stays on disk). Safe to call repeatedly.
     func close()

@@ -69,7 +69,7 @@
     <string name="chat_no_providers">Нет доступных моделей</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">Приватный ИИ на устройстве</string>
-    <string name="chat_ondevice_desc">Gemma 4 работает полностью на вашем устройстве. Ваши сообщения никогда не покидают телефон и работают офлайн. Требуется разовая загрузка около 2,5 ГБ и устройство с достаточным объёмом памяти.</string>
+    <string name="chat_ondevice_desc">Работает полностью на вашем устройстве — приватно и офлайн. Каждая модель загружается один раз.</string>
     <string name="chat_ondevice_download">Скачать модель</string>
     <string name="chat_ondevice_downloading">Загрузка…</string>
     <string name="chat_ondevice_continue_background">Продолжить</string>

@@ -69,10 +69,10 @@ struct ChatView: View {
         .sheet(isPresented: $showOnDeviceModel) {
             sheetEnv {
                 OnDeviceModelView(
-                    status: vm.onDeviceStatus,
+                    statuses: vm.onDeviceStatuses,
                     onDownload: vm.downloadOnDeviceModel,
                     onPause: vm.pauseOnDeviceModel,
-                    onDelete: { vm.deleteOnDeviceModel(); showOnDeviceModel = false }
+                    onDelete: vm.deleteOnDeviceModel
                 )
             }
         }
@@ -343,10 +343,15 @@ struct ChatView: View {
             } else {
                 ForEach(vm.providers) { provider in
                     Button {
-                        vm.onProviderSelected(provider)
-                        if provider.isOnDevice && !vm.onDeviceStatus.isReady { showOnDeviceModel = true }
+                        if provider.isManageEntry {
+                            showOnDeviceModel = true
+                        } else {
+                            vm.onProviderSelected(provider)
+                        }
                     } label: {
-                        if provider.isOnDevice {
+                        if provider.isManageEntry {
+                            Label(provider.label, systemImage: "slider.horizontal.3")
+                        } else if provider.modelSpec != nil {
                             Label(provider.label, systemImage: "lock.fill")
                         } else {
                             Text(provider.label)

@@ -13,6 +13,8 @@ import ai.thetahealth.mirobody.data.circle.dto.HealthSharer
 import ai.thetahealth.mirobody.data.llm.ChatTurn
 import ai.thetahealth.mirobody.data.llm.MlKitTextService
 import ai.thetahealth.mirobody.data.llm.ModelManager
+import ai.thetahealth.mirobody.data.llm.OnDeviceModel
+import ai.thetahealth.mirobody.data.llm.OnDeviceModelSpec
 import ai.thetahealth.mirobody.data.llm.OnDeviceModelStatus
 import ai.thetahealth.mirobody.data.net.ErrorBus
 import ai.thetahealth.mirobody.data.settings.SettingsStore
@@ -84,9 +86,10 @@ data class ChatUiState(
     // The server-side thread id for the current conversation, learned from the
     // `conversation` SSE event. Empty until the first turn lands; powers sharing.
     val conversationId: String = "",
-    // State of the on-device model file (download/ready), driving the on-device
-    // provider's UI affordances. Mirrors ModelManager.status.
-    val onDeviceModel: OnDeviceModelStatus = OnDeviceModelStatus.Absent,
+    // Per-model download/ready state, keyed by OnDeviceModelSpec.id. Drives the model
+    // manager dialog and which on-device models appear in the picker. Mirrors
+    // ModelManager.statuses.
+    val onDeviceModels: Map<String, OnDeviceModelStatus> = emptyMap(),
     // Whether Gemini Nano (ML Kit) can rewrite on this device; gates the composer
     // "Polish" affordance. False on hardware without AICore.
     val polishAvailable: Boolean = false,
@@ -115,6 +118,11 @@ class ChatViewModel(
     // Session stashed when entering incognito, restored on exit (messages + thread id).
     private var incognitoSaved: Pair<List<ChatMessage>, String>? = null
 
+    // Server providers, kept so the picker can be rebuilt when the set of downloaded
+    // on-device models changes; and the persisted selection key for restore.
+    private var remoteProviders: List<ProviderInfo> = emptyList()
+    private var savedProviderKey: String? = null
+
     init {
         loadProviders()
         loadSharers()
@@ -130,7 +138,10 @@ class ChatViewModel(
             settings.language.collect { lang -> _state.update { it.copy(language = lang) } }
         }
         viewModelScope.launch {
-            modelManager.status.collect { st -> _state.update { it.copy(onDeviceModel = st) } }
+            modelManager.statuses.collect { st ->
+                _state.update { it.copy(onDeviceModels = st) }
+                rebuildProviders(st)
+            }
         }
         // Probe Gemini Nano support once; the composer "Polish" button only shows if true.
         viewModelScope.launch {
@@ -156,14 +167,14 @@ class ChatViewModel(
         }
     }
 
-    /** Start (or resume) the on-device model download. Safe to call when already running. */
-    fun downloadOnDeviceModel() {
-        viewModelScope.launch { runCatching { modelManager.download() } }
+    /** Start (or resume) a model download. Safe to call when already running. */
+    fun downloadOnDeviceModel(spec: OnDeviceModelSpec) {
+        viewModelScope.launch { runCatching { modelManager.download(spec) } }
     }
 
-    /** Remove the on-device model to reclaim storage. */
-    fun deleteOnDeviceModel() {
-        modelManager.delete()
+    /** Remove a downloaded model to reclaim storage. */
+    fun deleteOnDeviceModel(spec: OnDeviceModelSpec) {
+        modelManager.delete(spec)
     }
 
     /** Mirror the current conversation to local storage (best-effort, off the UI path). */
@@ -174,34 +185,43 @@ class ChatViewModel(
 
     fun loadProviders() {
         viewModelScope.launch {
-            val savedName = settings.selectedProviderName.first()
+            savedProviderKey = settings.selectedProviderName.first()
             runCatching { repo.listProviders() }
                 .onSuccess { remote ->
-                    // Always append the on-device provider so it's selectable alongside
-                    // the server's providers.
-                    val list = remote + ProviderInfo.onDevice
-                    val restored = list.firstOrNull { it.key == savedName }
-                    _state.update {
-                        it.copy(
-                            providers = list,
-                            selected = it.selected ?: restored ?: list.firstOrNull(),
-                            error = null,
-                        )
-                    }
+                    remoteProviders = remote
+                    _state.update { it.copy(error = null) }
+                    rebuildProviders()
                 }
                 .onFailure { t ->
                     errorBus.emit(t)
                     // The server is unreachable, but on-device chat still works offline —
-                    // keep it available rather than leaving the picker empty.
-                    val list = listOf(ProviderInfo.onDevice)
-                    _state.update {
-                        it.copy(
-                            providers = list,
-                            selected = it.selected ?: list.firstOrNull { p -> p.key == savedName } ?: list.first(),
-                            error = t.message,
-                        )
-                    }
+                    // keep the picker populated (manage entry + any downloaded models).
+                    remoteProviders = emptyList()
+                    _state.update { it.copy(error = t.message) }
+                    rebuildProviders()
                 }
+        }
+    }
+
+    /**
+     * Rebuild the provider picker: server providers + one entry per *downloaded*
+     * on-device model + the "manage on-device AI" entry (mirroring the Qt desktop
+     * client — undownloaded models aren't listed; the manage entry downloads them).
+     * Called on provider load and whenever a model's download state changes. Keeps the
+     * current selection if still present, else restores the saved one, else the first.
+     */
+    private fun rebuildProviders(
+        statuses: Map<String, OnDeviceModelStatus> = _state.value.onDeviceModels,
+    ) {
+        val downloaded = OnDeviceModel.CATALOG
+            .filter { statuses[it.id] is OnDeviceModelStatus.Ready }
+            .map { ProviderInfo.forModel(it) }
+        val list = remoteProviders + downloaded + ProviderInfo.manage
+        _state.update { s ->
+            val selected = s.selected?.let { sel -> list.firstOrNull { it.key == sel.key } }
+                ?: list.firstOrNull { it.key == savedProviderKey }
+                ?: list.firstOrNull()
+            s.copy(providers = list, selected = selected)
         }
     }
 
@@ -323,6 +343,9 @@ class ChatViewModel(
         val attachments = s.attachments
         // Allow an attachment-only turn (no text), matching the web composer.
         if ((question.isEmpty() && attachments.isEmpty()) || s.sending || selected == null) return
+        // The "manage on-device AI" entry isn't a chat provider; selecting it opens the
+        // manager (handled in the UI), never sends.
+        if (selected.isManageEntry) return
 
         val userMsg = ChatMessage(
             id = "u-${System.currentTimeMillis()}",
@@ -353,13 +376,14 @@ class ChatViewModel(
         streamJob?.cancel()
         streamJob = viewModelScope.launch {
             runCatching {
-                val flow = if (selected.isOnDevice) {
+                val onDeviceSpec = selected.modelSpec
+                val flow = if (onDeviceSpec != null) {
                     // Offline path: hand the settled transcript (incl. this new question,
                     // excluding the in-flight placeholder) to the on-device engine.
                     val turns = _state.value.messages
                         .filter { it.id != assistantMsg.id && it.text.isNotBlank() }
                         .map { ChatTurn(fromUser = it.role == Role.User, text = it.text) }
-                    repo.chatOnDevice(turns)
+                    repo.chatOnDevice(turns, onDeviceSpec)
                 } else {
                     repo.chat(
                         sessionId = s.sessionId,

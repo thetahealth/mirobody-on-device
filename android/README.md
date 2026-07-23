@@ -52,7 +52,7 @@ Two paths, both producing the same backend JWT (Bearer, HS256, 30-day TTL — no
   - Expandable tool-call cards driven by `queryTitle` / `queryArguments` / `queryDetail`.
   - Inline images from `image` events, tap to open the fullscreen viewer with save-to-gallery (`ui/chat/ImageViewerDialog`).
   - Per-turn cost statistics dialog from `costStatistics`.
-  - **On-device option**: pick **"Gemma 4 · On-device"** to run the model locally and offline (see *On-device LLM* below).
+  - **On-device option**: run a model locally and offline — pick a downloaded model (**Gemma 4**, **Qwen**, …) shown as **"&lt;name&gt; · On-device"**, or open the on-device AI manager to download one (see *On-device LLM* below).
 - Session history with per-row delete, lazily loaded — `/api/history` is not called until the navigation drawer is opened (`ui/chat/HistoryScreen`).
 - Server URL configuration with presets (`ui/settings/BaseUrlScreen`)
 - Language and font-size preferences (`ui/settings`)
@@ -60,15 +60,18 @@ Two paths, both producing the same backend JWT (Bearer, HS256, 30-day TTL — no
 
 ## On-device LLM (private chat)
 
-Alongside the server's agents, the provider picker offers **"Gemma 4 · On-device"** —
-chat that runs entirely on the phone (no network, no server), emitting the same
-`reply` stream so the chat UI is unchanged (`data/llm/`). It stays available even when
-the server is unreachable.
+Alongside the server's agents, the provider picker exposes an **on-device AI manager**
+plus any **downloaded on-device models** — **Gemma 4 E2B**, **Qwen2.5 1.5B**, … shown
+as **"&lt;name&gt; · On-device"** — chat that runs entirely on the phone (no network,
+no server), emitting the same `reply` stream so the chat UI is unchanged (`data/llm/`).
+It stays available even when the server is unreachable.
 
-- **Engine** (`LiteRtLlmEngine`): Gemma 4 (E2B) via **LiteRT-LM**
-  (`com.google.ai.edge.litertlm`). The ~2.5 GB `.litertlm` model is **not bundled** —
-  `ModelManager` downloads it on demand from Hugging Face (resumable, with progress)
-  into app-private storage; a dialog drives download / delete.
+- **Engine** (`LiteRtLlmEngine`): **LiteRT-LM** (`com.google.ai.edge.litertlm`),
+  model-agnostic over the catalog in `OnDeviceModel` (LiteRT-LM `.litertlm` files, from
+  the Apache-2.0 `litert-community` HF org). Weights are **not bundled** — `ModelManager`
+  downloads each on demand from Hugging Face (resumable, with progress) into app-private
+  storage. The manager dialog lists the catalog with per-model download / delete; a model
+  appears in the picker once downloaded, and switching models reloads the engine.
 - **Layered ML Kit GenAI** (Gemini Nano): on AICore-capable devices (Pixel 9/10,
   Galaxy S25/S26, …) `MlKitTextService` powers a composer **"Polish draft"** action
   (rewrite/proofread). Hidden where AICore is unavailable — it can't do open-ended

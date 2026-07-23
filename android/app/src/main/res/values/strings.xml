@@ -115,7 +115,7 @@
     <string name="chat_no_providers">No providers loaded</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">On-device private AI</string>
-    <string name="chat_ondevice_desc">Gemma 4 runs entirely on your device. Your messages never leave the phone and work offline. It needs a one-time download of about 2.5 GB of storage, and about 3 GB of free RAM to run.</string>
+    <string name="chat_ondevice_desc">Runs entirely on your device — private and offline. Each model is a one-time download.</string>
     <string name="chat_ondevice_download">Download model</string>
     <string name="chat_ondevice_downloading">Downloading…</string>
     <string name="chat_ondevice_continue_background">Continue</string>

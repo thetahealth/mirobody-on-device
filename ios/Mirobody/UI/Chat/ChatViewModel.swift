@@ -14,8 +14,9 @@ final class ChatViewModel: ObservableObject {
     @Published private(set) var language = "en"
     /// Files staged in the composer for the next turn (cleared on send).
     @Published private(set) var attachments: [ChatAttachment] = []
-    /// State of the on-device model file, driving the on-device provider's UI.
-    @Published private(set) var onDeviceStatus: OnDeviceModelStatus = .absent
+    /// Per-model download/ready state, keyed by OnDeviceModelSpec.id — drives the model
+    /// manager and which on-device models appear in the picker.
+    @Published private(set) var onDeviceStatuses: [String: OnDeviceModelStatus] = [:]
     /// Privacy mode: entering swaps the session for a fresh ephemeral one; while on,
     /// turns aren't persisted and each request carries `incognito:true`. Mirrors web.
     @Published private(set) var incognito = false
@@ -33,6 +34,10 @@ final class ChatViewModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     /// Session stashed when entering incognito, restored on exit (messages + thread id).
     private var incognitoSaved: (messages: [ChatMessage], conversationId: String)?
+    /// Server providers, kept so the picker can be rebuilt when downloaded models change;
+    /// and the persisted selection key for restore.
+    private var remoteProviders: [ProviderInfo] = []
+    private var savedProviderKey: String?
 
     init(repo: ChatRepository, settings: SettingsStore, errorBus: ErrorBus, modelManager: ModelManager) {
         self.repo = repo
@@ -40,38 +45,54 @@ final class ChatViewModel: ObservableObject {
         self.errorBus = errorBus
         self.modelManager = modelManager
         self.language = settings.language
-        self.onDeviceStatus = modelManager.status
+        self.onDeviceStatuses = modelManager.statuses
         settings.$language.sink { [weak self] lang in self?.language = lang }.store(in: &cancellables)
-        modelManager.$status.sink { [weak self] st in self?.onDeviceStatus = st }.store(in: &cancellables)
+        modelManager.$statuses.sink { [weak self] st in
+            self?.onDeviceStatuses = st
+            self?.rebuildProviders(statuses: st)
+        }.store(in: &cancellables)
         loadProviders()
     }
 
-    /// Start (or resume) the on-device model download.
-    func downloadOnDeviceModel() { modelManager.startDownload() }
-    /// Pause the in-flight download (resumable).
-    func pauseOnDeviceModel() { modelManager.pauseDownload() }
-    /// Remove the on-device model to reclaim storage.
-    func deleteOnDeviceModel() { modelManager.delete() }
+    /// Start (or resume) a model download.
+    func downloadOnDeviceModel(_ spec: OnDeviceModelSpec) { modelManager.startDownload(spec) }
+    /// Pause an in-flight download (resumable).
+    func pauseOnDeviceModel(_ spec: OnDeviceModelSpec) { modelManager.pauseDownload(spec) }
+    /// Remove a downloaded model to reclaim storage.
+    func deleteOnDeviceModel(_ spec: OnDeviceModelSpec) { modelManager.delete(spec) }
 
     func loadProviders() {
         Task {
-            let savedName = settings.selectedProviderName
+            savedProviderKey = settings.selectedProviderName
             do {
-                // Always append the on-device provider alongside the server's.
-                let list = try await repo.listProviders() + [ProviderInfo.onDevice]
-                providers = list
-                if selected == nil { selected = list.first { $0.key == savedName } ?? list.first }
+                remoteProviders = try await repo.listProviders()
                 error = nil
+                rebuildProviders()
             } catch {
                 errorBus.emit(error)
                 self.error = localizedMessage(error.toAppError(), language: language)
                 // The server is unreachable, but on-device chat still works offline —
-                // keep it available rather than leaving the picker empty.
-                let list = [ProviderInfo.onDevice]
-                providers = list
-                if selected == nil { selected = list.first { $0.key == savedName } ?? list.first }
+                // keep the picker populated (manage entry + any downloaded models).
+                remoteProviders = []
+                rebuildProviders()
             }
         }
+    }
+
+    /// Rebuild the provider picker: server providers + one entry per *downloaded*
+    /// on-device model + the "manage on-device AI" entry (mirroring the Qt desktop
+    /// client — undownloaded models aren't listed; the manage entry downloads them).
+    /// Keeps the current selection if still present, else the saved one, else the first.
+    private func rebuildProviders(statuses: [String: OnDeviceModelStatus]? = nil) {
+        let st = statuses ?? onDeviceStatuses
+        let downloaded = OnDeviceModel.catalog
+            .filter { st[$0.id]?.isReady == true }
+            .map { ProviderInfo.forModel($0) }
+        let list = remoteProviders + downloaded + [ProviderInfo.manage]
+        providers = list
+        selected = selected.flatMap { s in list.first { $0.key == s.key } }
+            ?? list.first { $0.key == savedProviderKey }
+            ?? list.first
     }
 
     func onProviderSelected(_ provider: ProviderInfo) {
@@ -156,6 +177,9 @@ final class ChatViewModel: ObservableObject {
         let turnAttachments = attachments
         // Allow an attachment-only turn (no text), matching the web composer.
         guard (!question.isEmpty || !turnAttachments.isEmpty), !sending, let selected else { return }
+        // The "manage on-device AI" entry isn't a chat provider; selecting it opens the
+        // manager (handled in the view), never sends.
+        if selected.isManageEntry { return }
 
         let userMsg = ChatMessage(
             id: "u-\(UUID().uuidString)", role: .user, text: question,
@@ -173,13 +197,13 @@ final class ChatViewModel: ObservableObject {
         streamTask?.cancel()
         streamTask = Task {
             let stream: AsyncStream<ChatStreamEvent>
-            if selected.isOnDevice {
+            if let onDeviceSpec = selected.modelSpec {
                 // Offline path: hand the settled transcript (incl. this new question,
                 // excluding the in-flight placeholder) to the on-device engine.
                 let turns = messages
                     .filter { $0.id != assistantId && !$0.text.isEmpty }
                     .map { ChatTurn(fromUser: $0.role == .user, text: $0.text) }
-                stream = repo.chatOnDevice(history: turns)
+                stream = repo.chatOnDevice(history: turns, model: onDeviceSpec)
             } else {
                 stream = repo.chat(
                     sessionId: sessionId,

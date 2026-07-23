@@ -60,10 +60,10 @@ final class ChatRepository {
         )
     }
 
-    /// Local, offline turn: routes to the on-device engine (Gemma 4) instead of the
+    /// Local, offline turn: routes to the on-device engine (`model`) instead of the
     /// server. `history`'s final entry is the new user question. Emits the same
     /// `ChatStreamEvent` stream the SSE path does.
-    func chatOnDevice(history: [ChatTurn]) -> AsyncStream<ChatStreamEvent> {
-        onDeviceEngine.generate(history: history)
+    func chatOnDevice(history: [ChatTurn], model: OnDeviceModelSpec) -> AsyncStream<ChatStreamEvent> {
+        onDeviceEngine.generate(history: history, model: model)
     }
 }

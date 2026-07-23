@@ -13,7 +13,7 @@ with no `electron-rebuild` step — unlike a native N-API addon.
 electron/
   main.js        # start embedded server, wait for it, open the window; on-device LLM IPC
   mirobody.js    # koffi wrapper over the 4 functions in src/mirobody.h
-  ondevice.js    # main-process on-device LLM: Gemma 4 (GGUF) via node-llama-cpp + model download
+  ondevice.js    # main-process on-device LLM: any GGUF via node-llama-cpp + model registry/download
   preload.js     # context-isolated; desktop marker + window.ondevice bridge
   package.json   # electron + electron-builder + koffi + node-llama-cpp; packaging config
 ```
@@ -71,16 +71,19 @@ the config store honors above the file.
 
 The renderer is the **shared** web client (`htdoc/`), sandboxed with no Node access,
 so the on-device model runs in the **main process** and is bridged to the page via
-`preload.js` (`window.ondevice`). The chat picker then offers **"Gemma 4 · On-device"**
-— private, offline, no LLM key needed. Because it's gated on that bridge, it appears
-only in the desktop app, never when `htdoc/` is served to a plain browser.
+`preload.js` (`window.ondevice`). Downloaded models then appear in the chat picker as
+**"&lt;name&gt; · On-device"** — private, offline, no LLM key needed. Because it's gated
+on that bridge, it appears only in the desktop app, never when `htdoc/` is served to a
+plain browser.
 
-- **Engine** (`ondevice.js`): Gemma 4 (GGUF) via **node-llama-cpp**, loaded lazily
-  (ESM `import()`); it streams tokens back as the same `reply` chunks the SSE path
-  emits, so the chat UI is unchanged. Missing dependency ⇒ graceful "unavailable".
-- **Model**: the GGUF is **not bundled** — downloaded on demand from Hugging Face
-  (`createModelDownloader`, with progress) into Electron's `userData`. Confirm the
-  `MODEL_URI` in `ondevice.js` points at a real Gemma 4 GGUF before shipping.
+- **Engine** (`ondevice.js`): **node-llama-cpp**, loaded lazily (ESM `import()`),
+  **model-agnostic** over any GGUF (uses each model's own chat template — Gemma, Qwen,
+  Llama, …). Streams tokens back as the same `reply` chunks the SSE path emits, so the
+  chat UI is unchanged. Missing dependency ⇒ graceful "unavailable".
+- **Models**: a **user-managed registry** (parity with Qt) — add any GGUF by URL or a
+  local file, or one-click a curated suggestion (Gemma 4, Qwen2.5). Nothing is bundled;
+  each is downloaded on demand from Hugging Face (`createModelDownloader`, with progress)
+  into Electron's `userData`, managed in **⚙ → On-device AI**.
 - **Dependency**: `node-llama-cpp` (in `package.json`). `npm install` fetches a
   prebuilt native binary and electron-builder bundles it. Unlike koffi it's a native
   N-API addon, so a major Node/Electron bump may need a rebuild.

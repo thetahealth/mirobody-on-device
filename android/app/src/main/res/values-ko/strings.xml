@@ -69,7 +69,7 @@
     <string name="chat_no_providers">사용 가능한 모델이 없습니다</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">온디바이스 프라이빗 AI</string>
-    <string name="chat_ondevice_desc">Gemma 4는 전적으로 기기에서 실행됩니다. 메시지는 휴대폰을 벗어나지 않으며 오프라인에서도 작동합니다. 약 2.5GB의 일회성 다운로드와 충분한 메모리를 갖춘 기기가 필요합니다.</string>
+    <string name="chat_ondevice_desc">전적으로 기기에서 실행됩니다 — 비공개, 오프라인. 각 모델은 한 번만 다운로드합니다.</string>
     <string name="chat_ondevice_download">모델 다운로드</string>
     <string name="chat_ondevice_downloading">다운로드 중…</string>
     <string name="chat_ondevice_continue_background">계속</string>

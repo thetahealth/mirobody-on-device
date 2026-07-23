@@ -2,28 +2,30 @@ package ai.thetahealth.mirobody.data.llm
 
 import android.content.Context
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.coroutines.coroutineContext
 
 /**
- * Owns the on-device model file: where it lives, whether it's present, and the
- * download (with resume + progress). Deliberately independent of the user's
- * configured server — the download goes straight to Hugging Face over its own
- * timeout-free [OkHttpClient], so it works regardless of the chat backend.
+ * Owns the on-device model files: where each lives, whether it's present, and the
+ * download (with resume + progress) — for every model in [OnDeviceModel.CATALOG].
+ * Deliberately independent of the user's configured server: downloads go straight to
+ * Hugging Face over a timeout-free [OkHttpClient], so they work regardless of the chat
+ * backend. Several models can coexist on disk; the user picks which to run.
  *
- * NOTE: a ~2.5 GB download should ultimately run under a foreground service /
- * WorkManager to survive process death. This v1 runs it from the caller's
- * coroutine scope and supports HTTP range-resume so an interrupted download
- * continues from the partial file rather than restarting.
+ * NOTE: a multi-GB download should ultimately run under a foreground service /
+ * WorkManager to survive process death. This runs from the caller's coroutine scope
+ * and supports HTTP range-resume so an interrupted download continues from the partial
+ * file rather than restarting.
  */
 class ModelManager(context: Context) {
 
@@ -33,11 +35,8 @@ class ModelManager(context: Context) {
         File(appContext.filesDir, "models").apply { mkdirs() }
     }
 
-    /** Final model file once a download completes. */
-    val modelFile: File get() = File(modelsDir, OnDeviceModel.FILE_NAME)
-
-    /** Partial download target; promoted to [modelFile] on success. */
-    private val partFile: File get() = File(modelsDir, OnDeviceModel.FILE_NAME + ".part")
+    fun fileFor(spec: OnDeviceModelSpec): File = File(modelsDir, spec.fileName)
+    private fun partFor(spec: OnDeviceModelSpec): File = File(modelsDir, spec.fileName + ".part")
 
     private val http: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -49,70 +48,83 @@ class ModelManager(context: Context) {
             .build()
     }
 
-    private val _status = MutableStateFlow<OnDeviceModelStatus>(
-        if (modelFile.exists() && modelFile.length() > 0) OnDeviceModelStatus.Ready
-        else OnDeviceModelStatus.Absent,
+    /** Per-model status, keyed by [OnDeviceModelSpec.id]. Seeded from what's on disk. */
+    private val _statuses = MutableStateFlow<Map<String, OnDeviceModelStatus>>(
+        OnDeviceModel.CATALOG.associate { spec ->
+            spec.id to if (isReady(spec)) OnDeviceModelStatus.Ready else OnDeviceModelStatus.Absent
+        },
     )
-    val status: StateFlow<OnDeviceModelStatus> = _status.asStateFlow()
+    val statuses: StateFlow<Map<String, OnDeviceModelStatus>> = _statuses.asStateFlow()
 
-    private val downloading = AtomicBoolean(false)
+    fun status(spec: OnDeviceModelSpec): OnDeviceModelStatus =
+        _statuses.value[spec.id] ?: OnDeviceModelStatus.Absent
 
-    fun isReady(): Boolean = modelFile.exists() && modelFile.length() > 0
+    private fun setStatus(spec: OnDeviceModelSpec, status: OnDeviceModelStatus) {
+        _statuses.update { it + (spec.id to status) }
+    }
+
+    /** Ids currently in flight, so a repeated download() of the same model is a no-op. */
+    private val downloading = ConcurrentHashMap.newKeySet<String>()
+
+    fun isReady(spec: OnDeviceModelSpec): Boolean {
+        val f = fileFor(spec)
+        return f.exists() && f.length() > 0
+    }
 
     /**
-     * Download the model to private storage, resuming a prior partial file when present.
-     * Updates [status] as it goes. Cancelling the calling coroutine pauses the download
-     * (the `.part` file is kept for resume). Returns true on success.
+     * Download [spec] to private storage, resuming a prior partial file when present.
+     * Updates [statuses] as it goes. Cancelling the calling coroutine pauses the
+     * download (the `.part` file is kept for resume). Returns true on success.
      */
-    suspend fun download(): Boolean {
-        if (isReady()) {
-            _status.value = OnDeviceModelStatus.Ready
+    suspend fun download(spec: OnDeviceModelSpec): Boolean {
+        if (isReady(spec)) {
+            setStatus(spec, OnDeviceModelStatus.Ready)
             return true
         }
-        if (!downloading.compareAndSet(false, true)) return false
+        if (!downloading.add(spec.id)) return false
         try {
             return withContext(Dispatchers.IO) {
-                runCatching { performDownload() }
+                runCatching { performDownload(spec) }
                     .onFailure {
                         // A cancellation is a pause, not a failure: keep the .part file
                         // and report the partial-progress state, not an error.
                         if (it is kotlinx.coroutines.CancellationException) {
-                            _status.value = OnDeviceModelStatus.Downloading(partFile.length(), -1)
+                            setStatus(spec, OnDeviceModelStatus.Downloading(partFor(spec).length(), -1))
                             throw it
                         }
-                        _status.value = OnDeviceModelStatus.Failed(it.message ?: "Download failed")
+                        setStatus(spec, OnDeviceModelStatus.Failed(it.message ?: "Download failed"))
                     }
                     .getOrDefault(false)
             }
         } finally {
-            downloading.set(false)
+            downloading.remove(spec.id)
         }
     }
 
-    private suspend fun performDownload(): Boolean {
+    private suspend fun performDownload(spec: OnDeviceModelSpec): Boolean {
+        val partFile = partFor(spec)
         val existing = if (partFile.exists()) partFile.length() else 0L
-        val builder = Request.Builder().url(OnDeviceModel.DOWNLOAD_URL)
+        val builder = Request.Builder().url(spec.downloadUrl)
         if (existing > 0) builder.header("Range", "bytes=$existing-")
 
-        _status.value = OnDeviceModelStatus.Downloading(existing, OnDeviceModel.APPROX_BYTES)
+        setStatus(spec, OnDeviceModelStatus.Downloading(existing, spec.approxBytes))
 
         http.newCall(builder.build()).execute().use { resp ->
             if (!resp.isSuccessful) {
-                _status.value = OnDeviceModelStatus.Failed("HTTP ${resp.code}")
+                setStatus(spec, OnDeviceModelStatus.Failed("HTTP ${resp.code}"))
                 return false
             }
             val body = resp.body ?: run {
-                _status.value = OnDeviceModelStatus.Failed("Empty response")
+                setStatus(spec, OnDeviceModelStatus.Failed("Empty response"))
                 return false
             }
             // When the server honours the Range request (206) the body length is the
             // remainder; otherwise it restarts from zero, so reset the part file.
             val resumed = resp.code == 206
             val startAt = if (resumed) existing else 0L
-            val total = (body.contentLength().takeIf { it > 0 }?.plus(startAt)) ?: OnDeviceModel.APPROX_BYTES
+            val total = (body.contentLength().takeIf { it > 0 }?.plus(startAt)) ?: spec.approxBytes
 
-            val sink = if (resumed) java.io.FileOutputStream(partFile, /* append = */ true)
-            else java.io.FileOutputStream(partFile, /* append = */ false)
+            val sink = java.io.FileOutputStream(partFile, /* append = */ resumed)
 
             sink.use { out ->
                 body.byteStream().use { input ->
@@ -124,25 +136,25 @@ class ModelManager(context: Context) {
                         if (n < 0) break
                         out.write(buf, 0, n)
                         written += n
-                        _status.value = OnDeviceModelStatus.Downloading(written, total)
+                        setStatus(spec, OnDeviceModelStatus.Downloading(written, total))
                     }
                     out.flush()
                 }
             }
         }
 
-        if (!partFile.renameTo(modelFile)) {
-            _status.value = OnDeviceModelStatus.Failed("Could not finalize model file")
+        if (!partFile.renameTo(fileFor(spec))) {
+            setStatus(spec, OnDeviceModelStatus.Failed("Could not finalize model file"))
             return false
         }
-        _status.value = OnDeviceModelStatus.Ready
+        setStatus(spec, OnDeviceModelStatus.Ready)
         return true
     }
 
-    /** Remove the model (and any partial) to reclaim ~2.5 GB. */
-    fun delete() {
-        modelFile.delete()
-        partFile.delete()
-        _status.value = OnDeviceModelStatus.Absent
+    /** Remove [spec] (and any partial) to reclaim its storage. */
+    fun delete(spec: OnDeviceModelSpec) {
+        fileFor(spec).delete()
+        partFor(spec).delete()
+        setStatus(spec, OnDeviceModelStatus.Absent)
     }
 }

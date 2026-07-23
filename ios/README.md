@@ -67,18 +67,22 @@ are referenced — the app is a pure client.
 
 ## On-device LLM (private chat)
 
-The provider picker includes **"Gemma 4 · On-device"** — chat that runs entirely on
-device (no network, no server), emitting the same event stream so the chat UI is
-unchanged (`Data/LLM/`). It stays available even when the backend is unreachable.
+The provider picker exposes an **on-device AI manager** plus any **downloaded
+on-device models** — **Gemma 4 E2B**, **Qwen2.5 1.5B**, … shown as
+**"&lt;name&gt; · On-device"** — chat that runs entirely on device (no network, no
+server), emitting the same event stream so the chat UI is unchanged (`Data/LLM/`). It
+stays available even when the backend is unreachable.
 
-- **Engine** (`LiteRtLlmEngine`): Gemma 4 (E2B) via **LiteRT-LM**'s Swift API, added
-  as the `LiteRTLM` Swift Package in [`project.yml`](project.yml). The engine is
-  wrapped in `#if canImport(LiteRTLM)`, so the app still builds if the package is
-  removed (on-device turns then report it isn't built in). Re-run `xcodegen generate`
-  after changing packages.
-- **Model**: the ~2.5 GB `.litertlm` file is **not bundled** — `ModelManager`
-  downloads it on demand from Hugging Face (`URLSession`, resumable, with progress)
-  into Application Support; a sheet drives download / delete.
+- **Engine** (`LiteRtLlmEngine`): **LiteRT-LM**'s Swift API, added as the `LiteRTLM`
+  Swift Package in [`project.yml`](project.yml), model-agnostic over the catalog in
+  `OnDeviceModel`. The engine is wrapped in `#if canImport(LiteRTLM)`, so the app still
+  builds if the package is removed (on-device turns then report it isn't built in).
+  Re-run `xcodegen generate` after changing packages.
+- **Models**: LiteRT-LM `.litertlm` files (from the `litert-community` HF org), **not
+  bundled** — `ModelManager` downloads each on demand from Hugging Face (`URLSession`,
+  resumable, with progress) into Application Support. The manager sheet lists the
+  catalog with per-model download / delete; a model appears in the picker once
+  downloaded, and switching models reloads the engine.
 - Android's ML Kit **"Polish draft"** (Gemini Nano) has no iOS counterpart — ML Kit
   GenAI is Android-only.
 

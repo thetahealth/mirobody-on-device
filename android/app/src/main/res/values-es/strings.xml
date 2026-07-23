@@ -69,7 +69,7 @@
     <string name="chat_no_providers">No hay modelos disponibles</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">IA privada en el dispositivo</string>
-    <string name="chat_ondevice_desc">Gemma 4 se ejecuta completamente en tu dispositivo. Tus mensajes nunca salen del teléfono y funcionan sin conexión. Requiere una descarga única de unos 2,5 GB y un dispositivo con suficiente memoria.</string>
+    <string name="chat_ondevice_desc">Se ejecuta completamente en tu dispositivo: privado y sin conexión. Cada modelo es una descarga única.</string>
     <string name="chat_ondevice_download">Descargar modelo</string>
     <string name="chat_ondevice_downloading">Descargando…</string>
     <string name="chat_ondevice_continue_background">Continuar</string>

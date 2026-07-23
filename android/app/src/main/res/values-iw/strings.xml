@@ -80,7 +80,7 @@
     <string name="chat_no_providers">לא נטענו ספקים</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">בינה מלאכותית פרטית במכשיר</string>
-    <string name="chat_ondevice_desc">Gemma 4 פועל כולו במכשיר שלך. ההודעות שלך לעולם לא עוזבות את הטלפון ופועלות במצב לא מקוון. נדרשת הורדה חד-פעמית של כ-2.5 GB ומכשיר עם מספיק זיכרון.</string>
+    <string name="chat_ondevice_desc">פועל כולו במכשיר שלך — פרטי וללא חיבור. כל מודל מורד פעם אחת בלבד.</string>
     <string name="chat_ondevice_download">הורדת המודל</string>
     <string name="chat_ondevice_downloading">מוריד…</string>
     <string name="chat_ondevice_continue_background">המשך</string>

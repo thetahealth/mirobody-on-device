@@ -102,7 +102,7 @@
     <string name="chat_no_providers">暂无可用模型</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">设备端私有 AI</string>
-    <string name="chat_ondevice_desc">Gemma 4 完全在你的设备上运行。你的消息不会离开手机，可离线使用。需一次性下载约 2.5 GB 存储空间，运行时约需 3 GB 空闲内存。</string>
+    <string name="chat_ondevice_desc">完全在你的设备上运行——私密、离线。每个模型只需一次性下载。</string>
     <string name="chat_ondevice_download">下载模型</string>
     <string name="chat_ondevice_downloading">正在下载…</string>
     <string name="chat_ondevice_continue_background">继续</string>

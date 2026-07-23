@@ -199,20 +199,36 @@ struct ProviderInfo: Hashable, Identifiable {
     /// Stable key for persisting / restoring the selection.
     var key: String { agent.isEmpty ? provider : "\(agent)/\(provider)" }
 
-    /// Picker display: the model name (or the on-device label).
-    var label: String { isOnDevice ? ProviderInfo.onDeviceName : provider }
+    /// Picker display text.
+    var label: String {
+        if isManageEntry { return ProviderInfo.onDeviceManageName }
+        if let spec = modelSpec { return spec.displayName + ProviderInfo.onDeviceSuffix }
+        return provider
+    }
 
-    // MARK: On-device (private) provider — client-only, no server round-trip.
+    // MARK: On-device (private) entries — client-only, no server round-trip. Two kinds
+    // mirror the Qt desktop client: a "manage" entry that opens the model manager, and
+    // one entry per downloaded model. Both route to `OnDeviceLlmEngine`.
 
-    /// Sentinel `provider` marking the synthetic on-device provider. When selected,
-    /// chat routes to `OnDeviceLlmEngine` instead of the SSE stream. Mirrors Android.
-    static let onDeviceCode = "__ondevice_gemma4__"
-    /// Stable display name (kept non-localized so the persisted selection survives a
-    /// UI-language change).
-    static let onDeviceName = "Gemma 4 · On-device"
-    static let onDevice = ProviderInfo(agent: "", provider: onDeviceCode)
+    /// Sentinel `provider` for the manage entry (never collides with a server model).
+    static let onDeviceManageCode = "__ondevice_manage__"
+    /// Non-localized labels (so the persisted selection survives a UI-language change).
+    static let onDeviceManageName = "On-device AI…"
+    static let onDeviceSuffix = " · On-device"
 
-    var isOnDevice: Bool { provider == ProviderInfo.onDeviceCode }
+    /// The manage entry, injected into the picker on every client.
+    static let manage = ProviderInfo(agent: "", provider: onDeviceManageCode)
+    /// A picker entry for a downloaded on-device model.
+    static func forModel(_ spec: OnDeviceModelSpec) -> ProviderInfo {
+        ProviderInfo(agent: "", provider: spec.providerCode)
+    }
+
+    /// The "manage on-device AI" entry — opens the manager instead of chatting.
+    var isManageEntry: Bool { provider == ProviderInfo.onDeviceManageCode }
+    /// The concrete on-device model this entry runs, or nil (server model / manage entry).
+    var modelSpec: OnDeviceModelSpec? { OnDeviceModel.byProviderCode(provider) }
+    /// Any client-only on-device entry (manage or a model) — routed locally, not to the server.
+    var isOnDevice: Bool { isManageEntry || modelSpec != nil }
 }
 
 // MARK: - SSE chunk + cost stats (mirror data/chat/dto/SseEvent.kt)

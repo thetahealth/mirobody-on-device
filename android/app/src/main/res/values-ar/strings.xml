@@ -80,7 +80,7 @@
     <string name="chat_no_providers">لم يتم تحميل أي مزوّدين</string>
     <!-- On-device private LLM (Gemma 4 via LiteRT-LM) -->
     <string name="chat_ondevice_title">ذكاء اصطناعي خاص على الجهاز</string>
-    <string name="chat_ondevice_desc">يعمل Gemma 4 بالكامل على جهازك. لا تغادر رسائلك الهاتف أبدًا وتعمل دون اتصال بالإنترنت. يتطلب ذلك تنزيلًا لمرة واحدة بحجم 2.5 غيغابايت تقريبًا وجهازًا يتوفر على ذاكرة كافية.</string>
+    <string name="chat_ondevice_desc">يعمل بالكامل على جهازك — خصوصي وبدون اتصال. كل نموذج يُنزَّل لمرة واحدة.</string>
     <string name="chat_ondevice_download">تنزيل النموذج</string>
     <string name="chat_ondevice_downloading">جارٍ التنزيل…</string>
     <string name="chat_ondevice_continue_background">متابعة</string>

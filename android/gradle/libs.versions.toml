@@ -9,7 +9,11 @@ composeBom = "2024.12.01"
 navigationCompose = "2.8.5"
 lifecycleViewmodelCompose = "2.8.7"
 kotlinxSerialization = "1.7.3"
-kotlinxCoroutines = "1.9.0"
+# Must be >= 1.11.0: litertlm-android (Kotlin 2.2, -Xjvm-default=all) calls
+# SendChannel.close$default as a static in the interface. Coroutines < 1.11.0 put that
+# synthetic in $DefaultImpls, so litertlm's onDone callback hits a NoSuchMethodError and
+# the app hard-crashes right after inference finishes. 1.11.0+ places it in the interface.
+kotlinxCoroutines = "1.11.0"
 firebaseBom = "33.7.0"
 wechatOpensdk = "6.8.0"
 okhttp = "4.12.0"

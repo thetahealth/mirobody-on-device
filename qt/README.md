@@ -143,7 +143,7 @@ qt/
   blehealth.{hpp,cpp}      BLE GATT sensor scan/connect -> FHIR Observation ingestion
   appcontroller.{hpp,cpp}  settings, login, providers, streaming, persistence
   modeldownloader.{hpp,cpp}  on-device model registry (remote downloads + local files), persisted
-  locallmengine.{hpp,cpp}  on-device Gemma engine (llama.cpp; stub unless enabled)
+  locallmengine.{hpp,cpp}  on-device LLM engine — any GGUF (llama.cpp; stub unless enabled)
   qml/
     Main.qml               top bar + login/chat loader + shared dialogs
     LoginPage.qml  ChatPage.qml  MessageDelegate.qml

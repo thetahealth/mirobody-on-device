@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="960" height="360" font-family="Helvetica, Arial, sans-serif">
+  <text x="480" y="24" text-anchor="middle" font-size="16" fill="#456">One private chat model, running on the hardware you already own.</text>
+  <!-- ===== center device ===== -->
+  <rect x="360" y="66" width="170" height="250" rx="22" fill="#fff" stroke="#234" stroke-width="3"/>
+  <rect x="374" y="90" width="142" height="200" rx="8" fill="#f7faf8" stroke="#cfd8e3"/>
+  <text x="445" y="110" text-anchor="middle" font-size="10.5" font-weight="bold" fill="#2f7d4a">on your device</text>
+  <!-- LLM chip -->
+  <rect x="386" y="120" width="118" height="46" rx="8" fill="#f3e8f7" stroke="#8a4fb0"/>
+  <text x="445" y="140" text-anchor="middle" font-size="12" font-weight="bold" fill="#5e2e80">on-device LLM</text>
+  <text x="445" y="156" text-anchor="middle" font-size="8.5" fill="#8a4fb0">Gemma · GGUF / LiteRT-LM</text>
+  <!-- data chip -->
+  <rect x="386" y="176" width="118" height="40" rx="8" fill="#fff3e0" stroke="#c08a3e"/>
+  <text x="445" y="200" text-anchor="middle" font-size="11" font-weight="bold" fill="#7a5419">your health data</text>
+  <!-- shield / lock -->
+  <path d="M445 226 L473 236 V256 C473 270 460 278 445 284 C430 278 417 270 417 256 V236 Z" fill="#eef6f0" stroke="#2f7d4a" stroke-width="2"/>
+  <rect x="438" y="250" width="14" height="12" rx="2" fill="#2f7d4a"/>
+  <path d="M441 250 V245 A4 4 0 0 1 449 245 V250" fill="none" stroke="#2f7d4a" stroke-width="2"/>
+  <text x="445" y="302" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#1c5233">private by default</text>
+  <!-- ===== left: no cloud ===== -->
+  <g>
+    <circle cx="110" cy="150" r="24" fill="#dbe1e8"/>
+    <circle cx="146" cy="138" r="31" fill="#dbe1e8"/>
+    <circle cx="180" cy="152" r="22" fill="#dbe1e8"/>
+    <rect x="94" y="140" width="94" height="34" rx="17" fill="#dbe1e8"/>
+    <text x="142" y="160" text-anchor="middle" font-size="11" fill="#8a97a5">server</text>
+    <line x1="96" y1="186" x2="192" y2="118" stroke="#c0392b" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <text x="142" y="212" text-anchor="middle" font-size="12" font-weight="bold" fill="#c0392b">no server round-trip</text>
+  <!-- blocked link device -> cloud -->
+  <line x1="356" y1="180" x2="204" y2="180" stroke="#c9c9c9" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <g stroke="#c0392b" stroke-width="2.5" stroke-linecap="round">
+    <line x1="273" y1="172" x2="287" y2="188"/>
+    <line x1="287" y1="172" x2="273" y2="188"/>
+  </g>
+  <!-- ===== right: the landscape (vertical list) ===== -->
+  <text x="600" y="60" font-size="14" font-weight="bold" fill="#234">On-device, in three constraints</text>
+  <text x="600" y="78" font-size="10.5" fill="#456">how a chat model runs on a phone or laptop</text>
+  <g>
+    <rect x="600" y="92" width="344" height="70" rx="10" fill="#f5f7fa" stroke="#d5dbe3"/>
+    <rect x="600" y="92" width="8" height="70" rx="4" fill="#8a4fb0"/>
+    <text x="632" y="124" font-size="16" font-weight="bold" fill="#234">Small enough to fit</text>
+    <text x="632" y="146" font-size="11" fill="#456">quantized to run in device memory</text>
+    <rect x="600" y="174" width="344" height="70" rx="10" fill="#f5f7fa" stroke="#d5dbe3"/>
+    <rect x="600" y="174" width="8" height="70" rx="4" fill="#4072b8"/>
+    <text x="632" y="206" font-size="16" font-weight="bold" fill="#234">Fast enough to use</text>
+    <text x="632" y="228" font-size="11" fill="#456">GPU-accelerated</text>
+    <rect x="600" y="256" width="344" height="70" rx="10" fill="#f5f7fa" stroke="#d5dbe3"/>
+    <rect x="600" y="256" width="8" height="70" rx="4" fill="#2f7d4a"/>
+    <text x="632" y="288" font-size="16" font-weight="bold" fill="#234">Yours to choose or swap</text>
+    <text x="632" y="310" font-size="11" fill="#456">not locked to one vendor's model</text>
+  </g>
+</svg>

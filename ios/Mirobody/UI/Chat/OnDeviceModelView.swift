@@ -1,14 +1,15 @@
 import SwiftUI
 
-/// Manage the on-device Gemma 4 model: explains the privacy trade-off, drives the
-/// (resumable) download with progress, and offers delete. Mirrors the Android
-/// `OnDeviceModelDialog`. Strings are inline English for now — localize via the
-/// `.lproj` tables in a follow-up to match the rest of the app.
+/// Manage the on-device models: explains the privacy trade-off, then lists the catalog
+/// (Gemma, Qwen, …) with a per-model (resumable) download / progress / delete. A model
+/// appears in the provider picker once it finishes downloading. Mirrors Android's
+/// `OnDeviceModelDialog`. Strings are inline English for now — localize via the `.lproj`
+/// tables in a follow-up to match the rest of the app.
 struct OnDeviceModelView: View {
-    let status: OnDeviceModelStatus
-    let onDownload: () -> Void
-    let onPause: () -> Void
-    let onDelete: () -> Void
+    let statuses: [String: OnDeviceModelStatus]
+    let onDownload: (OnDeviceModelSpec) -> Void
+    let onPause: (OnDeviceModelSpec) -> Void
+    let onDelete: (OnDeviceModelSpec) -> Void
 
     @Environment(\.dismiss) private var dismiss
 
@@ -17,24 +18,58 @@ struct OnDeviceModelView: View {
             Label("On-device private AI", systemImage: "lock.fill")
                 .font(.title3.bold())
 
-            Text("Gemma 4 runs entirely on your device. Your messages never leave the phone and work offline. This needs a one-time download of about 2.5 GB and a device with enough memory.")
+            Text("Runs entirely on your device — private and offline. Each model is a one-time download.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
-            statusSection
+            ForEach(OnDeviceModel.catalog) { spec in
+                ModelRow(
+                    spec: spec,
+                    status: statuses[spec.id] ?? .absent,
+                    onDownload: { onDownload(spec) },
+                    onPause: { onPause(spec) },
+                    onDelete: { onDelete(spec) }
+                )
+                Divider()
+            }
 
             Spacer()
 
-            controls
+            Button { dismiss() } label: { Text("Done").frame(maxWidth: .infinity) }
+                .buttonStyle(.borderedProminent)
         }
         .padding()
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
+    }
+}
+
+/// One catalog row: model name + its download / progress / delete affordance.
+private struct ModelRow: View {
+    let spec: OnDeviceModelSpec
+    let status: OnDeviceModelStatus
+    let onDownload: () -> Void
+    let onPause: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(spec.displayName).font(.headline)
+                    Text("~" + formatBytes(spec.approxBytes) + " · " + spec.recommendedRam + " RAM")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                controls
+            }
+            statusSection
+        }
     }
 
     @ViewBuilder private var statusSection: some View {
         switch status {
         case .downloading(let downloaded, let total):
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 ProgressView(value: status.fraction)
                 Text("\(formatBytes(downloaded)) / \(formatBytes(total))")
                     .font(.caption).foregroundStyle(.secondary)
@@ -43,7 +78,7 @@ struct OnDeviceModelView: View {
             Text(message).font(.caption).foregroundStyle(.red)
         case .ready:
             Label("Ready — runs offline", systemImage: "checkmark.circle.fill")
-                .font(.callout).foregroundStyle(.green)
+                .font(.caption).foregroundStyle(.green)
         case .absent:
             EmptyView()
         }
@@ -52,22 +87,14 @@ struct OnDeviceModelView: View {
     @ViewBuilder private var controls: some View {
         switch status {
         case .absent, .failed:
-            Button(action: onDownload) {
-                Text(status.isFailed ? "Retry download" : "Download model")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
+            Button(action: onDownload) { Text(status.isFailed ? "Retry" : "Download") }
+                .buttonStyle(.bordered)
         case .downloading:
-            Button(action: onPause) { Text("Pause").frame(maxWidth: .infinity) }
+            Button(action: onPause) { Text("Pause") }
                 .buttonStyle(.bordered)
         case .ready:
-            VStack(spacing: 8) {
-                Button { dismiss() } label: { Text("Done").frame(maxWidth: .infinity) }
-                    .buttonStyle(.borderedProminent)
-                Button(role: .destructive, action: onDelete) {
-                    Text("Delete model").frame(maxWidth: .infinity)
-                }
-            }
+            Button(role: .destructive, action: onDelete) { Text("Delete") }
+                .buttonStyle(.bordered)
         }
     }
 

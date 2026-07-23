@@ -9,6 +9,7 @@ import ai.thetahealth.mirobody.data.chat.dto.ProviderInfo
 import ai.thetahealth.mirobody.data.chat.dto.SessionSummary
 import ai.thetahealth.mirobody.data.llm.ChatTurn
 import ai.thetahealth.mirobody.data.llm.OnDeviceLlmEngine
+import ai.thetahealth.mirobody.data.llm.OnDeviceModelSpec
 import ai.thetahealth.mirobody.data.net.ensureOk
 import ai.thetahealth.mirobody.data.net.unwrap
 import kotlinx.coroutines.flow.Flow
@@ -56,10 +57,10 @@ class ChatRepository(
     )
 
     /**
-     * Local, offline turn: routes to the on-device engine (Gemma 4) instead of the
+     * Local, offline turn: routes to the on-device engine ([model]) instead of the
      * server. [history]'s final entry is the new user question; earlier entries are
      * conversation context. Emits the same [ChatStreamEvent] flow the SSE path does.
      */
-    fun chatOnDevice(history: List<ChatTurn>): Flow<ChatStreamEvent> =
-        onDeviceEngine.generate(history)
+    fun chatOnDevice(history: List<ChatTurn>, model: OnDeviceModelSpec): Flow<ChatStreamEvent> =
+        onDeviceEngine.generate(history, model)
 }

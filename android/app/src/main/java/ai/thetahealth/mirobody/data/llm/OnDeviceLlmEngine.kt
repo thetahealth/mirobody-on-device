@@ -11,18 +11,18 @@ data class ChatTurn(val fromUser: Boolean, val text: String)
  * `/api/chat` SSE path does, so the existing chat UI renders on-device replies with
  * no UI changes. Implementations run fully on-device — no network, no server.
  *
- * The Android implementation is [LiteRtLlmEngine] (Gemma 4 via LiteRT-LM). The
- * interface is deliberately runtime-agnostic so an ML Kit GenAI (Gemini Nano) path
- * can slot in later behind the same seam.
+ * The Android implementation is [LiteRtLlmEngine] (LiteRT-LM). The interface is
+ * deliberately runtime-agnostic so an ML Kit GenAI (Gemini Nano) path can slot in
+ * later behind the same seam.
  */
 interface OnDeviceLlmEngine {
     /**
-     * Stream a reply for [history]; the final entry is the new user turn. Emits
-     * [ChatStreamEvent.Reply] deltas (and optional [ChatStreamEvent.Thinking]),
-     * then [ChatStreamEvent.End]. Failures surface as [ChatStreamEvent.Error]
-     * rather than throwing, mirroring the SSE client's contract.
+     * Stream a reply for [history] using [model]; the final entry is the new user turn.
+     * Emits [ChatStreamEvent.Reply] deltas (and optional [ChatStreamEvent.Thinking]),
+     * then [ChatStreamEvent.End]. Failures surface as [ChatStreamEvent.Error] rather
+     * than throwing, mirroring the SSE client's contract.
      */
-    fun generate(history: List<ChatTurn>): Flow<ChatStreamEvent>
+    fun generate(history: List<ChatTurn>, model: OnDeviceModelSpec): Flow<ChatStreamEvent>
 
     /** Release native resources (the model file stays on disk). Safe to call repeatedly. */
     fun close()

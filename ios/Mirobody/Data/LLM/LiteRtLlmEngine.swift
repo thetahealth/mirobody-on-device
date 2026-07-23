@@ -3,8 +3,8 @@ import Foundation
 import LiteRTLM
 #endif
 
-/// On-device LLM backed by Gemma 4 (E2B) via LiteRT-LM. Fully offline. Mirrors
-/// Android's `data/llm/LiteRtLlmEngine.kt`.
+/// On-device LLM via LiteRT-LM (any model in `OnDeviceModel.catalog`). Fully offline.
+/// Mirrors Android's `data/llm/LiteRtLlmEngine.kt`.
 ///
 /// Guarded by `#if canImport(LiteRTLM)`: until the LiteRT-LM Swift package is added
 /// to the project (see `project.yml`), the app still builds and on-device turns
@@ -22,10 +22,10 @@ final class LiteRtLlmEngine: OnDeviceLlmEngine {
 #if canImport(LiteRTLM)
     private let state = EngineState()
 
-    func generate(history: [ChatTurn]) -> AsyncStream<ChatStreamEvent> {
+    func generate(history: [ChatTurn], model: OnDeviceModelSpec) -> AsyncStream<ChatStreamEvent> {
         AsyncStream { continuation in
             let task = Task {
-                guard models.isReady else {
+                guard models.isReady(model) else {
                     continuation.yield(.error(message: "On-device model not downloaded yet."))
                     continuation.yield(.end)
                     continuation.finish()
@@ -39,7 +39,8 @@ final class LiteRtLlmEngine: OnDeviceLlmEngine {
                 }
                 do {
                     let conversation = try await state.conversation(
-                        modelPath: ModelManager.modelURL.path,
+                        modelId: model.id,
+                        modelPath: models.fileURL(model).path,
                         history: history
                     )
                     // The SDK may emit cumulative or delta chunks; diff against what we've
@@ -68,7 +69,7 @@ final class LiteRtLlmEngine: OnDeviceLlmEngine {
         Task { await state.close() }
     }
 #else
-    func generate(history: [ChatTurn]) -> AsyncStream<ChatStreamEvent> {
+    func generate(history: [ChatTurn], model: OnDeviceModelSpec) -> AsyncStream<ChatStreamEvent> {
         AsyncStream { continuation in
             continuation.yield(.error(message: "On-device model support is not built into this app."))
             continuation.yield(.end)
@@ -88,12 +89,17 @@ final class LiteRtLlmEngine: OnDeviceLlmEngine {
 private actor EngineState {
     private var engine: Engine?
     private var conversation: Conversation?
+    /// Which model the live engine was loaded from; a different one forces a reload.
+    private var loadedModelId: String?
 
-    func conversation(modelPath: String, history: [ChatTurn]) async throws -> Conversation {
+    func conversation(modelId: String, modelPath: String, history: [ChatTurn]) async throws -> Conversation {
         let engine: Engine
-        if let existing = self.engine {
+        if let existing = self.engine, loadedModelId == modelId {
             engine = existing
         } else {
+            // Different (or first) model: drop any live engine/conversation, load fresh.
+            conversation = nil
+            self.engine = nil
             let config = try EngineConfig(
                 modelPath: modelPath,
                 backend: .cpu(),
@@ -103,6 +109,7 @@ private actor EngineState {
             let created = Engine(engineConfig: config)
             try await created.initialize()
             self.engine = created
+            loadedModelId = modelId
             engine = created
         }
 
@@ -110,8 +117,12 @@ private actor EngineState {
         if let existing = conversation { return existing }
 
         let sampler = try SamplerConfig(topK: 40, topP: 0.95, temperature: 0.8)
+        // NB: don't seed the prior transcript into the system prompt — on small on-device
+        // models the context window is tiny (e.g. Qwen3 0.6B is 2048 tokens) and a
+        // restored/long history overflows it. Multi-turn within a session is carried by
+        // the reused Conversation itself; the system prompt stays a short fixed instruction.
         let config = ConversationConfig(
-            systemMessage: Message(Self.systemInstruction(prior: Array(history.dropLast()))),
+            systemMessage: Message(Self.systemPrompt),
             samplerConfig: sampler
         )
         let created = try await engine.createConversation(with: config)
@@ -122,16 +133,10 @@ private actor EngineState {
     func close() {
         conversation = nil
         engine = nil
+        loadedModelId = nil
     }
 
-    static func systemInstruction(prior: [ChatTurn]) -> String {
-        let base = "You are Mirobody's private on-device health assistant. Answer concisely. " +
-            "You have no internet or tools; rely only on the conversation."
-        if prior.isEmpty { return base }
-        let transcript = prior
-            .map { ($0.fromUser ? "User: " : "Assistant: ") + $0.text }
-            .joined(separator: "\n")
-        return base + "\n\nConversation so far:\n" + transcript
-    }
+    static let systemPrompt = "You are Mirobody's private on-device health assistant. " +
+        "Answer concisely. You have no internet or tools; rely only on the conversation."
 }
 #endif
