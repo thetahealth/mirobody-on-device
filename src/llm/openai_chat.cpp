@@ -10,6 +10,7 @@
 #include <rapidjson/writer.h>
 
 #include <map>
+#include <cctype>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -36,6 +37,7 @@ struct PendingToolCall {
 struct StreamContext {
     SseParser parser;
     std::string text_buffer;
+    std::string thinking_buffer;    // reasoning_content deltas, coalesced like text
     std::string full_text;          // the turn's complete assistant text (for the tool loop)
     std::size_t min_chunk_size = 30;
 
@@ -67,6 +69,15 @@ bool flush_text(StreamContext& ctx) {
     e.type    = EventType::Reply;
     e.content = std::move(ctx.text_buffer);
     ctx.text_buffer.clear();
+    return dispatch(ctx, e);
+}
+
+bool flush_thinking(StreamContext& ctx) {
+    if (ctx.thinking_buffer.empty()) return true;
+    Event e;
+    e.type    = EventType::Thinking;
+    e.content = std::move(ctx.thinking_buffer);
+    ctx.thinking_buffer.clear();
     return dispatch(ctx, e);
 }
 
@@ -186,9 +197,17 @@ void handle_data_event(StreamContext& ctx, const char* payload) {
     const auto& delta = choice0["delta"];
     if (!delta.IsObject()) return;
 
+    // Answer and chain-of-thought deltas are both coalesced up to min_chunk_size
+    // before an event goes out -- reasoning models tokenize the thought stream
+    // just as finely as the answer, and emitting one event per token would flood
+    // every consumer downstream (SSE writes; on mobile, one thread-safe-function
+    // hop plus a UI re-render each). Crossing from one stream to the other
+    // flushes the other buffer first, so events are delivered in arrival order.
+
     if (delta.HasMember("content") && delta["content"].IsString()) {
         std::string txt(delta["content"].GetString(), delta["content"].GetStringLength());
         if (!txt.empty()) {
+            if (!flush_thinking(ctx)) return;   // thought stream ended: emit its tail first
             ctx.text_buffer.append(txt.data(), txt.size());
             ctx.full_text.append(txt.data(), txt.size());
             if (ctx.text_buffer.size() >= ctx.min_chunk_size) {
@@ -203,10 +222,11 @@ void handle_data_event(StreamContext& ctx, const char* payload) {
         std::string txt(delta["reasoning_content"].GetString(),
                              delta["reasoning_content"].GetStringLength());
         if (!txt.empty()) {
-            Event e;
-            e.type    = EventType::Thinking;
-            e.content = txt;
-            if (!dispatch(ctx, e)) return;
+            if (!flush_text(ctx)) return;       // answer stream paused: keep ordering
+            ctx.thinking_buffer.append(txt.data(), txt.size());
+            if (ctx.thinking_buffer.size() >= ctx.min_chunk_size) {
+                flush_thinking(ctx);
+            }
         }
     }
 
@@ -284,6 +304,18 @@ std::string make_tool_result_message(const std::string& tool_id, const std::stri
 // Request building
 //------------------------------------------------------------------------------
 
+// Does `tools_json` describe at least one tool? Distinguishes "no tools" ("[]",
+// or blank) from a populated array without paying for a full parse.
+bool has_any_tool(const std::string& tools_json) {
+    for (std::size_t i = 0; i < tools_json.size(); ++i) {
+        const char c = tools_json[i];
+        if (c == '{') return true;                       // first member object
+        if (c == ']') return false;                      // closed before any member
+        if (c != '[' && !std::isspace(static_cast<unsigned char>(c))) return true;
+    }
+    return false;                                        // empty / unterminated
+}
+
 std::string build_request_body(const OpenAIChatOptions& opt,
                                const std::vector<std::string>& message_objs,
                                bool tools_enabled) {
@@ -314,6 +346,28 @@ std::string build_request_body(const OpenAIChatOptions& opt,
         w.Key("tools");
         w.RawValue(opt.tools_json.data(), opt.tools_json.size(), rapidjson::kArrayType);
         w.Key("tool_choice"); w.String("auto");
+    }
+
+    // Provider-specific root fields (see OpenAIChatOptions::extra_body_json).
+    // Spliced member-by-member rather than as one blob so the writer keeps its
+    // own bookkeeping, and so a malformed value degrades to a warning instead of
+    // corrupting the body.
+    if (!opt.extra_body_json.empty()) {
+        rapidjson::Document extra;
+        if (extra.Parse(opt.extra_body_json.c_str()).HasParseError() || !extra.IsObject()) {
+            mirobody::platform::log_warn(
+                "openai-chat: ignoring extra_body_json, not a JSON object: %.120s",
+                opt.extra_body_json.c_str());
+        } else {
+            for (rapidjson::Value::ConstMemberIterator it = extra.MemberBegin();
+                 it != extra.MemberEnd(); ++it) {
+                rapidjson::StringBuffer vb;
+                rapidjson::Writer<rapidjson::StringBuffer> vw(vb);
+                it->value.Accept(vw);
+                w.Key(it->name.GetString(), it->name.GetStringLength());
+                w.RawValue(vb.GetString(), vb.GetSize(), it->value.GetType());
+            }
+        }
     }
 
     w.EndObject();
@@ -476,7 +530,13 @@ bool OpenAIChatClient::ainvoke(const std::vector<ChatMessage>& messages,
         auth = "Authorization: Bearer " + opt_.api_key;
     }
 
-    const bool tools_enabled = !opt_.tools_json.empty() && static_cast<bool>(opt_.tool_executor);
+    // An EMPTY tools array counts as disabled, not just an empty string: with no
+    // MCP tools registered, functions_json() yields "[]", which is a non-empty
+    // std::string. Emitting `"tools":[], "tool_choice":"auto"` makes strict
+    // endpoints reject the whole request -- NVIDIA NIM answers 400 "When using
+    // `tool_choice`, `tools` must be set" -- while laxer ones silently accept it.
+    const bool tools_enabled = has_any_tool(opt_.tools_json) &&
+                               static_cast<bool>(opt_.tool_executor);
 
     // The running conversation as raw JSON message objects; the tool loop
     // appends the assistant tool-call turn and the tool results between rounds.
@@ -510,6 +570,11 @@ bool OpenAIChatClient::ainvoke(const std::vector<ChatMessage>& messages,
             return false;
         }
 
+        // Thinking first: if its buffer still holds anything here, the answer
+        // stream never started (e.g. the turn hit the token limit mid-thought),
+        // so the thought tail precedes any buffered text chronologically.
+        flush_thinking(stream);
+        if (stream.aborted) return false;
         flush_text(stream);
         if (stream.aborted) return false;
         flush_tool_calls(stream);

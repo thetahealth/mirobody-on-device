@@ -17,8 +17,16 @@ struct OnDeviceModelSpec: Identifiable, Hashable {
     let approxBytes: Int64
     /// Recommended device RAM (peak inference footprint is device/context-dependent).
     let recommendedRam: String
+    /// Absolute path to a user-imported model file that lives OUTSIDE the app sandbox
+    /// (picked from the Files app), or nil for a catalog model under Application Support.
+    /// When set, the model is loaded from here as-is — never downloaded, and never
+    /// deleted from disk on removal (it's the user's own file).
+    var localPath: String? = nil
 
     var providerCode: String { OnDeviceModel.providerPrefix + id }
+
+    /// True for a user-imported model (referenced by `localPath`), false for a catalog model.
+    var isImported: Bool { localPath != nil }
 }
 
 /// The catalog of on-device models the app ships support for. Desktop (llama.cpp) is
@@ -89,9 +97,44 @@ enum OnDeviceModel {
         ),
     ]
 
-    static func byId(_ id: String) -> OnDeviceModelSpec? { catalog.first { $0.id == id } }
+    /// Id prefix for a user-imported model, so it never collides with a catalog id.
+    static let importedIdPrefix = "imported-"
+
+    /// User-imported models, registered at runtime by `ModelManager` from its persisted
+    /// list. Kept alongside `catalog` so `byId` / `byProviderCode` — and therefore
+    /// `ProviderInfo.modelSpec` and the whole chat/engine path — resolve imports with no
+    /// further changes. Keyed by `OnDeviceModelSpec.id`.
+    private static var imported: [String: OnDeviceModelSpec] = [:]
+
+    /// Register (or replace) an imported model so it resolves through `byId`/`byProviderCode`.
+    static func registerImported(_ spec: OnDeviceModelSpec) { imported[spec.id] = spec }
+
+    /// Forget an imported model (does not touch the file on disk).
+    static func unregisterImported(_ id: String) { imported[id] = nil }
+
+    /// Currently-registered imported models, name-sorted for stable UI ordering.
+    static func importedSpecs() -> [OnDeviceModelSpec] {
+        imported.values.sorted { $0.displayName < $1.displayName }
+    }
+
+    /// Build an imported spec from a picked file's absolute `path` and known `sizeBytes`.
+    static func importedSpec(id: String, displayName: String, path: String, sizeBytes: Int64) -> OnDeviceModelSpec {
+        OnDeviceModelSpec(
+            id: id,
+            displayName: displayName,
+            fileName: (path as NSString).lastPathComponent,
+            downloadURL: URL(string: "https://invalid.local/imported")!,
+            approxBytes: sizeBytes,
+            recommendedRam: "—",
+            localPath: path
+        )
+    }
+
+    static func byId(_ id: String) -> OnDeviceModelSpec? {
+        catalog.first { $0.id == id } ?? imported[id]
+    }
     static func byProviderCode(_ code: String) -> OnDeviceModelSpec? {
-        catalog.first { $0.providerCode == code }
+        catalog.first { $0.providerCode == code } ?? imported.values.first { $0.providerCode == code }
     }
 }
 

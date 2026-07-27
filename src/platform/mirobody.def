@@ -8,4 +8,10 @@ EXPORTS
     mirobody_is_running
     mirobody_listen_port
     mirobody_chat
+    mirobody_chat_messages
     mirobody_get_providers
+    mirobody_set_config
+    mirobody_reload_providers
+    mirobody_store_file
+    mirobody_list_files
+    mirobody_read_file

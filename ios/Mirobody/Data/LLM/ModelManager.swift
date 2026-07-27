@@ -14,6 +14,16 @@ final class ModelManager: NSObject, ObservableObject {
     /// Per-model status, keyed by `OnDeviceModelSpec.id`. Seeded from what's on disk.
     @Published private(set) var statuses: [String: OnDeviceModelStatus] = [:]
 
+    /// User-imported models (picked from the Files app, live OUTSIDE the app sandbox so
+    /// they survive an app reinstall). Drives the imported section of the picker.
+    @Published private(set) var imported: [OnDeviceModelSpec] = []
+
+    /// Security-scoped URLs we hold open for the session (imported files), keyed by model
+    /// id, so the engine can read them; released on `deleteImported` / `deinit`.
+    private var scopedURLs: [String: URL] = [:]
+
+    private let importsKey = "ondevice_imports"
+
     /// Live download tasks, keyed by model id.
     private var tasks: [String: URLSessionDownloadTask] = [:]
     /// Resume data captured on pause/cancel, keyed by model id.
@@ -37,6 +47,11 @@ final class ModelManager: NSObject, ObservableObject {
             seeded[spec.id] = isReady(spec) ? .ready : .absent
         }
         statuses = seeded
+        loadImports()
+    }
+
+    deinit {
+        for url in scopedURLs.values { url.stopAccessingSecurityScopedResource() }
     }
 
     static var modelsDir: URL {
@@ -47,7 +62,8 @@ final class ModelManager: NSObject, ObservableObject {
     }
 
     func fileURL(_ spec: OnDeviceModelSpec) -> URL {
-        ModelManager.modelsDir.appendingPathComponent(spec.fileName)
+        if let path = spec.localPath { return URL(fileURLWithPath: path) }
+        return ModelManager.modelsDir.appendingPathComponent(spec.fileName)
     }
 
     func isReady(_ spec: OnDeviceModelSpec) -> Bool {
@@ -103,6 +119,86 @@ final class ModelManager: NSObject, ObservableObject {
     private func spec(for task: URLSessionTask) -> OnDeviceModelSpec? {
         guard let id = idByTaskId[task.taskIdentifier] else { return nil }
         return OnDeviceModel.byId(id)
+    }
+
+    // MARK: - Import (a model file the user already has, from the Files app)
+
+    /// Import the model at `pickedURL` (from the document picker) as a new on-device model.
+    /// The file stays OUTSIDE the app sandbox — referenced in place via a security-scoped
+    /// bookmark, so it survives an app reinstall and is never copied. Returns the new spec,
+    /// or nil on failure. `pickedURL` is expected to be a security-scoped URL from SwiftUI's
+    /// `.fileImporter`.
+    func importModel(from pickedURL: URL) -> OnDeviceModelSpec? {
+        let didScope = pickedURL.startAccessingSecurityScopedResource()
+        // Persist a bookmark so we can re-resolve (and re-scope) after relaunch.
+        guard let bookmark = try? pickedURL.bookmarkData(
+            options: [], includingResourceValuesForKeys: nil, relativeTo: nil
+        ) else {
+            if didScope { pickedURL.stopAccessingSecurityScopedResource() }
+            return nil
+        }
+
+        let attrs = try? FileManager.default.attributesOfItem(atPath: pickedURL.path)
+        let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+        let id = OnDeviceModel.importedIdPrefix + String(UUID().uuidString.prefix(8))
+        let name = pickedURL.deletingPathExtension().lastPathComponent
+        let label = name.isEmpty ? "Imported model" : name
+
+        let spec = OnDeviceModel.importedSpec(
+            id: id, displayName: label, path: pickedURL.path, sizeBytes: size
+        )
+        OnDeviceModel.registerImported(spec)
+        scopedURLs[id] = pickedURL
+        setStatus(spec, .ready)
+        imported.append(spec)
+        persistImports(appending: (id: id, name: label, bookmark: bookmark))
+        return spec
+    }
+
+    /// Forget an imported model. The user's file on disk is left untouched — we only drop
+    /// the bookmark and release the security-scoped access.
+    func deleteImported(_ spec: OnDeviceModelSpec) {
+        if let url = scopedURLs[spec.id] { url.stopAccessingSecurityScopedResource() }
+        scopedURLs[spec.id] = nil
+        OnDeviceModel.unregisterImported(spec.id)
+        statuses[spec.id] = nil
+        imported.removeAll { $0.id == spec.id }
+        var stored = (UserDefaults.standard.array(forKey: importsKey) as? [[String: Any]]) ?? []
+        stored.removeAll { ($0["id"] as? String) == spec.id }
+        UserDefaults.standard.set(stored, forKey: importsKey)
+    }
+
+    private func persistImports(appending entry: (id: String, name: String, bookmark: Data)) {
+        var stored = (UserDefaults.standard.array(forKey: importsKey) as? [[String: Any]]) ?? []
+        stored.append(["id": entry.id, "name": entry.name, "bookmark": entry.bookmark])
+        UserDefaults.standard.set(stored, forKey: importsKey)
+    }
+
+    /// Restore persisted imports: resolve each bookmark, re-open security-scoped access,
+    /// and register the spec. Entries whose file has since disappeared are dropped.
+    private func loadImports() {
+        let stored = (UserDefaults.standard.array(forKey: importsKey) as? [[String: Any]]) ?? []
+        var kept: [[String: Any]] = []
+        for entry in stored {
+            guard let id = entry["id"] as? String,
+                  let name = entry["name"] as? String,
+                  let bookmark = entry["bookmark"] as? Data else { continue }
+            var stale = false
+            guard let url = try? URL(
+                resolvingBookmarkData: bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale
+            ), url.startAccessingSecurityScopedResource(),
+                  FileManager.default.fileExists(atPath: url.path) else { continue }
+
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+            let spec = OnDeviceModel.importedSpec(id: id, displayName: name, path: url.path, sizeBytes: size)
+            OnDeviceModel.registerImported(spec)
+            scopedURLs[id] = url
+            statuses[id] = .ready
+            imported.append(spec)
+            kept.append(entry)
+        }
+        if kept.count != stored.count { UserDefaults.standard.set(kept, forKey: importsKey) }
     }
 }
 

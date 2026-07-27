@@ -1,0 +1,286 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Mirobody 入口模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Mirobody"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Mirobody"
+    },
+    {
+      "name": "home_hint",
+      "value": "仅 ArkTS UI —— 尚未接入原生 C++ 核心"
+    },
+    {
+      "name": "perm_internet_reason",
+      "value": "向你选择的云端大模型 provider 发送对话请求(BYOK)"
+    },
+
+    {
+      "name": "chat_pick_model",
+      "value": "选择模型"
+    },
+    {
+      "name": "chat_menu_config_model",
+      "value": "＋ 配置模型"
+    },
+    {
+      "name": "chat_menu_config_cloud",
+      "value": "＋ 配置云服务"
+    },
+    {
+      "name": "chat_input_hint",
+      "value": "给 Mirobody 发消息…"
+    },
+    {
+      "name": "chat_need_model",
+      "value": "请先在下拉框选择或添加一个模型。"
+    },
+    {
+      "name": "chat_empty_response",
+      "value": "模型没有返回内容,换个模型或稍后再试。"
+    },
+    {
+      "name": "chat_model_removed_failures",
+      "value": "「%s」多次调用失败,已从下拉框移除。"
+    },
+    {
+      "name": "chat_call_failed_count",
+      "value": "调用失败(%d/3):该模型未开放或已下线,累计 3 次将自动移除。"
+    },
+    {
+      "name": "chat_cloud_notice",
+      "value": "已交给云端 %s 处理 — 使用你的 key,这条消息离开了本机。"
+    },
+    {
+      "name": "chat_err_busy",
+      "value": "云端繁忙或额度用尽,请稍后再试或换个模型。"
+    },
+    {
+      "name": "chat_err_key",
+      "value": "key 无效或过期,请到\"配置云服务\"重新粘贴。"
+    },
+    {
+      "name": "chat_err_model_unavailable",
+      "value": "该模型当前不可用(未对你的账号开放或已下线),请换一个模型。"
+    },
+    {
+      "name": "chat_err_server",
+      "value": "服务暂时不可用(HTTP %d),请稍后重试。"
+    },
+    {
+      "name": "chat_err_request",
+      "value": "请求失败(HTTP %d)。"
+    },
+    {
+      "name": "toast_removed",
+      "value": "已移除 %s"
+    },
+    {
+      "name": "toast_added",
+      "value": "已添加 %s"
+    },
+
+    {
+      "name": "model_dialog_title",
+      "value": "配置模型"
+    },
+    {
+      "name": "model_fetch_failed",
+      "value": "拉取模型失败,请重试"
+    },
+    {
+      "name": "model_calls",
+      "value": "调用 %s"
+    },
+    {
+      "name": "model_retires",
+      "value": "%s 下线"
+    },
+    {
+      "name": "model_no_keys",
+      "value": "还没有配置任何云服务的 key。请先到\"配置云服务\"里添加 key。"
+    },
+    {
+      "name": "model_search_hint",
+      "value": "搜索模型…"
+    },
+    {
+      "name": "model_free",
+      "value": "免费"
+    },
+    {
+      "name": "model_loading",
+      "value": "正在实时拉取模型清单…"
+    },
+
+    {
+      "name": "provider_dialog_title",
+      "value": "配置云服务"
+    },
+    {
+      "name": "provider_paste_key_first",
+      "value": "请先粘贴 key"
+    },
+    {
+      "name": "provider_validating",
+      "value": "正在验证…"
+    },
+    {
+      "name": "provider_network_error",
+      "value": "网络错误"
+    },
+    {
+      "name": "provider_saved",
+      "value": "✓ key 可用,已保存"
+    },
+    {
+      "name": "provider_saved_limited",
+      "value": "✓ 已保存(当前被限流)"
+    },
+    {
+      "name": "provider_key_invalid",
+      "value": "✗ key 无效或未授权"
+    },
+    {
+      "name": "provider_save_failed",
+      "value": "验证通过但保存失败"
+    },
+    {
+      "name": "provider_delete_failed",
+      "value": "删除失败"
+    },
+    {
+      "name": "provider_open_browser_failed",
+      "value": "无法打开浏览器"
+    },
+    {
+      "name": "provider_time_unknown",
+      "value": "时间未知"
+    },
+    {
+      "name": "provider_configured_at",
+      "value": "配置于 %s"
+    },
+    {
+      "name": "provider_intro",
+      "value": "每个供应商一个 key，只存本机，绝不上传。\n保存前会发一个最小请求验证是否可用。模型在对话时再选。"
+    },
+    {
+      "name": "provider_add_key",
+      "value": "添加 Key"
+    },
+    {
+      "name": "provider_paste_hint",
+      "value": "粘贴 %s 的 key"
+    },
+    {
+      "name": "provider_validating_btn",
+      "value": "验证中…"
+    },
+    {
+      "name": "provider_validate_save",
+      "value": "验证并保存"
+    },
+    {
+      "name": "provider_register",
+      "value": "去注册 ›"
+    },
+    {
+      "name": "provider_configured_count",
+      "value": "已配置 (%d)"
+    },
+    {
+      "name": "provider_no_keys",
+      "value": "暂无已配置的 key"
+    },
+
+    {
+      "name": "settings_language",
+      "value": "语言"
+    },
+    {
+      "name": "settings_font_size",
+      "value": "字体大小"
+    },
+    {
+      "name": "settings_about",
+      "value": "关于"
+    },
+    {
+      "name": "settings_lang_switched",
+      "value": "语言已切换,重启应用后完全生效"
+    },
+    {
+      "name": "settings_lang_switch_failed",
+      "value": "切换失败"
+    },
+    {
+      "name": "font_preview",
+      "value": "示例文字 Aa"
+    },
+    {
+      "name": "font_smaller",
+      "value": "更小"
+    },
+    {
+      "name": "font_larger",
+      "value": "更大"
+    },
+    {
+      "name": "font_small",
+      "value": "小"
+    },
+    {
+      "name": "font_standard",
+      "value": "标准"
+    },
+    {
+      "name": "font_large",
+      "value": "大"
+    },
+    {
+      "name": "font_xlarge",
+      "value": "特大"
+    },
+    {
+      "name": "about_version",
+      "value": "版本 %s"
+    },
+    {
+      "name": "about_desc",
+      "value": "一个隐私优先的健康对话应用。\n云端推理使用您自己的 API key，该 key 只存本机。"
+    },
+
+    {
+      "name": "engine_local_stub_byok",
+      "value": "本地模型尚未在 HarmonyOS 上接入。可打开\"深度思考\"改用云端处理这条消息。"
+    },
+    {
+      "name": "engine_local_stub_nokey",
+      "value": "本地模型尚未在 HarmonyOS 上接入,且未配置云端 key。请到设置里选择一个 provider 并粘贴 key。"
+    },
+
+    {
+      "name": "chat_thinking_label",
+      "value": "深度思考"
+    },
+    {
+      "name": "chat_block_generating",
+      "value": "生成中…"
+    },
+    {
+      "name": "chat_chart_placeholder",
+      "value": "图表（渲染即将上线）"
+    },
+    {
+      "name": "chat_math_placeholder",
+      "value": "公式（渲染即将上线）"
+    }
+  ]
+}

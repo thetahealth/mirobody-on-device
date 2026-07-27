@@ -111,6 +111,11 @@
     <string name="chat_ondevice_failed">下载失败</string>
     <string name="chat_ondevice_retry">重新下载</string>
     <string name="chat_ondevice_delete">删除模型</string>
+    <string name="chat_ondevice_imported">已导入的模型</string>
+    <string name="chat_ondevice_import">导入文件…</string>
+    <string name="chat_ondevice_remove">移除</string>
+    <string name="chat_ondevice_storage_hint">模型存放在共享存储中,重装应用后不会丢失。下载或导入需授予文件访问权限。</string>
+    <string name="chat_ondevice_grant_storage">授予文件访问权限</string>
     <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
     <string name="chat_polish">在设备端润色草稿</string>
     <string name="chat_polish_rephrase">改写</string>

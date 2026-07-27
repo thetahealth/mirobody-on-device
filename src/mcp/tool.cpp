@@ -205,7 +205,7 @@ std::string Registry::tools_list_json() const {
     return serialize(d);
 }
 
-std::string Registry::functions_json(const char* style) const {
+std::string Registry::functions_json(const char* style, bool include_auth) const {
     using rapidjson::Value;
 
     const bool gemini = style && std::string(style) == "gemini";
@@ -217,6 +217,7 @@ std::string Registry::functions_json(const char* style) const {
 
     for (std::size_t i = 0; i < tools_.size(); ++i) {
         const Tool& t = tools_[i];
+        if (!include_auth && t.auth) continue;   // see the header comment
 
         Value name        = str_value(t.name, a);
         Value description  = str_value(t.description, a);

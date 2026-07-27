@@ -78,6 +78,19 @@ struct OpenAIChatOptions {
                               const std::string& arguments_json,
                               const UserContext& user)> tool_executor;
     int max_tool_iterations = 8;
+
+    // Provider-specific request fields, as a JSON OBJECT whose members are
+    // spliced into the request body's root (e.g. {"chat_template_kwargs":
+    // {"thinking":false}}). "OpenAI-compatible" endpoints keep inventing
+    // non-standard knobs; this is the escape hatch so a per-model quirk lives in
+    // the provider table (res/agents/*.cpp) instead of here. Empty by default,
+    // and a value that is not a parseable object is warned about and ignored --
+    // never fatal.
+    //
+    // Known user: NVIDIA NIM's DeepSeek V4 (flash and pro) are reasoning models
+    // that stream ONLY `reasoning_content` unless {"chat_template_kwargs":
+    // {"thinking":false}} is present, leaving `content` empty for the whole turn.
+    std::string extra_body_json;
 };
 
 //------------------------------------------------------------------------------

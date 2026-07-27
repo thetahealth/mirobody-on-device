@@ -1,0 +1,286 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Mirobody entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Mirobody"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Mirobody"
+    },
+    {
+      "name": "home_hint",
+      "value": "ArkTS UI only — native C++ core not wired yet"
+    },
+    {
+      "name": "perm_internet_reason",
+      "value": "Send chat requests to your chosen cloud LLM provider (BYOK)"
+    },
+
+    {
+      "name": "chat_pick_model",
+      "value": "Select model"
+    },
+    {
+      "name": "chat_menu_config_model",
+      "value": "＋ Configure models"
+    },
+    {
+      "name": "chat_menu_config_cloud",
+      "value": "＋ Configure cloud service"
+    },
+    {
+      "name": "chat_input_hint",
+      "value": "Message Mirobody…"
+    },
+    {
+      "name": "chat_need_model",
+      "value": "Select or add a model from the dropdown first."
+    },
+    {
+      "name": "chat_empty_response",
+      "value": "The model returned nothing. Try another model or again later."
+    },
+    {
+      "name": "chat_model_removed_failures",
+      "value": "\"%s\" failed repeatedly and was removed from the dropdown."
+    },
+    {
+      "name": "chat_call_failed_count",
+      "value": "Call failed (%d/3): model unavailable or retired; auto-removed after 3."
+    },
+    {
+      "name": "chat_cloud_notice",
+      "value": "Handed off to cloud %s — using your key; this message left the device."
+    },
+    {
+      "name": "chat_err_busy",
+      "value": "Cloud is busy or your quota is used up. Try again later or switch models."
+    },
+    {
+      "name": "chat_err_key",
+      "value": "Key invalid or expired. Re-paste it under \"Configure cloud service\"."
+    },
+    {
+      "name": "chat_err_model_unavailable",
+      "value": "This model is currently unavailable (not enabled for your account or retired). Please pick another."
+    },
+    {
+      "name": "chat_err_server",
+      "value": "Service temporarily unavailable (HTTP %d). Please retry later."
+    },
+    {
+      "name": "chat_err_request",
+      "value": "Request failed (HTTP %d)."
+    },
+    {
+      "name": "toast_removed",
+      "value": "Removed %s"
+    },
+    {
+      "name": "toast_added",
+      "value": "Added %s"
+    },
+
+    {
+      "name": "model_dialog_title",
+      "value": "Configure models"
+    },
+    {
+      "name": "model_fetch_failed",
+      "value": "Failed to fetch models, please retry"
+    },
+    {
+      "name": "model_calls",
+      "value": "%s calls"
+    },
+    {
+      "name": "model_retires",
+      "value": "Retires %s"
+    },
+    {
+      "name": "model_no_keys",
+      "value": "No cloud service key configured yet. Add a key under \"Configure cloud service\" first."
+    },
+    {
+      "name": "model_search_hint",
+      "value": "Search models…"
+    },
+    {
+      "name": "model_free",
+      "value": "Free"
+    },
+    {
+      "name": "model_loading",
+      "value": "Fetching the model list live…"
+    },
+
+    {
+      "name": "provider_dialog_title",
+      "value": "Configure cloud service"
+    },
+    {
+      "name": "provider_paste_key_first",
+      "value": "Paste a key first"
+    },
+    {
+      "name": "provider_validating",
+      "value": "Validating…"
+    },
+    {
+      "name": "provider_network_error",
+      "value": "Network error"
+    },
+    {
+      "name": "provider_saved",
+      "value": "✓ Key works — saved"
+    },
+    {
+      "name": "provider_saved_limited",
+      "value": "✓ Saved (currently rate-limited)"
+    },
+    {
+      "name": "provider_key_invalid",
+      "value": "✗ Key invalid or unauthorized"
+    },
+    {
+      "name": "provider_save_failed",
+      "value": "Validated but failed to save"
+    },
+    {
+      "name": "provider_delete_failed",
+      "value": "Delete failed"
+    },
+    {
+      "name": "provider_open_browser_failed",
+      "value": "Cannot open browser"
+    },
+    {
+      "name": "provider_time_unknown",
+      "value": "Time unknown"
+    },
+    {
+      "name": "provider_configured_at",
+      "value": "Configured %s"
+    },
+    {
+      "name": "provider_intro",
+      "value": "One key per provider, stored only in this device's secure storage and never uploaded. Before saving, a minimal request checks that it works. Pick the model at chat time."
+    },
+    {
+      "name": "provider_add_key",
+      "value": "Add key"
+    },
+    {
+      "name": "provider_paste_hint",
+      "value": "Paste your %s key"
+    },
+    {
+      "name": "provider_validating_btn",
+      "value": "Validating…"
+    },
+    {
+      "name": "provider_validate_save",
+      "value": "Validate & save"
+    },
+    {
+      "name": "provider_register",
+      "value": "Register ›"
+    },
+    {
+      "name": "provider_configured_count",
+      "value": "Configured (%d)"
+    },
+    {
+      "name": "provider_no_keys",
+      "value": "No keys configured yet"
+    },
+
+    {
+      "name": "settings_language",
+      "value": "Language"
+    },
+    {
+      "name": "settings_font_size",
+      "value": "Font size"
+    },
+    {
+      "name": "settings_about",
+      "value": "About"
+    },
+    {
+      "name": "settings_lang_switched",
+      "value": "Language switched. Restart the app to fully apply."
+    },
+    {
+      "name": "settings_lang_switch_failed",
+      "value": "Switch failed"
+    },
+    {
+      "name": "font_preview",
+      "value": "Sample text Aa"
+    },
+    {
+      "name": "font_smaller",
+      "value": "Smaller"
+    },
+    {
+      "name": "font_larger",
+      "value": "Larger"
+    },
+    {
+      "name": "font_small",
+      "value": "Small"
+    },
+    {
+      "name": "font_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "font_large",
+      "value": "Large"
+    },
+    {
+      "name": "font_xlarge",
+      "value": "Extra large"
+    },
+    {
+      "name": "about_version",
+      "value": "Version %s"
+    },
+    {
+      "name": "about_desc",
+      "value": "A privacy-first health chat app. Cloud inference runs on your own API key (BYOK); keys stay on this device only."
+    },
+
+    {
+      "name": "engine_local_stub_byok",
+      "value": "On-device models aren't wired up on HarmonyOS yet. Turn on \"Deep thinking\" to handle this message via the cloud (BYOK)."
+    },
+    {
+      "name": "engine_local_stub_nokey",
+      "value": "On-device models aren't wired up on HarmonyOS yet, and no cloud key is configured. Go to Settings, choose a provider, and paste a key."
+    },
+
+    {
+      "name": "chat_thinking_label",
+      "value": "Deep thinking"
+    },
+    {
+      "name": "chat_block_generating",
+      "value": "generating…"
+    },
+    {
+      "name": "chat_chart_placeholder",
+      "value": "chart (rendering coming soon)"
+    },
+    {
+      "name": "chat_math_placeholder",
+      "value": "formula (rendering coming soon)"
+    }
+  ]
+}

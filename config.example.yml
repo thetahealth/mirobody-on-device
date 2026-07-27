@@ -907,19 +907,17 @@ DEFAULT_AGENT: 'Baseline'
 # No true free tier: unlike Gemini (AI Studio) and DashScope, OpenAI
 # requires a payment method on the account before it issues an API key.
 # The historical $5 trial credit is no longer handed out to new accounts.
-# Three closest paths if you want to keep development costs at zero:
-#   1. GitHub Models - https://github.com/marketplace/models gives free
-#      rate-limited access to GPT-4o / 4.1 / o-mini and many others. Sign
-#      in with a GitHub account; daily request/token caps apply. Most
-#      "real free GPT" path today.
-#   2. Azure OpenAI - run GPT inside an Azure resource under the $200 new-
+# Two closest paths if you want to keep development costs at zero:
+#   1. Azure OpenAI - run GPT inside an Azure resource under the $200 new-
 #      account credit. See the AZURE_OPENAI_* block right below for how
 #      to set up the resource and switch this client into Azure mode.
-#   3. OpenAI-compatible third-party endpoints - DashScope (configured
-#      above), OpenRouter, DeepSeek, Together, Groq, Volcengine Ark, etc.
-#      all speak the OpenAI /chat/completions protocol; point
-#      OPENAI_BASE_URL at the right host and put their key in
-#      OPENAI_API_KEY. Each has its own free quota.
+#   2. OpenAI-compatible third-party endpoints - DashScope, NVIDIA NIM and
+#      Zhipu GLM (all configured below), plus OpenRouter, DeepSeek, Together,
+#      Groq, Volcengine Ark, etc. all speak the OpenAI /chat/completions
+#      protocol; point OPENAI_BASE_URL at the right host and put their key
+#      in OPENAI_API_KEY. Each has its own free quota - NVIDIA NIM and Zhipu
+#      GLM-4.7-Flash are genuinely free (dedicated NVIDIA_* / ZHIPU_* blocks
+#      below wire them in as first-class providers).
 #
 # Drop the resulting key below.
 # OPENAI_API_KEY: ''
@@ -975,6 +973,44 @@ DEFAULT_AGENT: 'Baseline'
 #
 # Drop the resulting key below.
 # DASHSCOPE_API_KEY: ''
+
+
+# >>> [RECOMMENDED - free access to large models] <<<
+#
+# NVIDIA NIM (build.nvidia.com) API key. Registers the `deepseek-v4-pro`
+# provider (DeepSeek V4 Pro, hosted OpenAI-compatible on NVIDIA's free
+# developer tier) - the cloud "complex" tier in docs/tiered-inference.md.
+#
+# Genuinely free for individual use, gated by rate not a hard usage cap:
+#   1. Sign in at https://build.nvidia.com with any email; join the (free)
+#      NVIDIA Developer Program for the higher rate ceiling.
+#   2. Create an API key from any model page ("Get API Key"). It works
+#      across every model in the catalog (Llama, Qwen, Nemotron, DeepSeek).
+#   3. Free tier is ~40 requests/min per key; large models cost more of the
+#      initial credit allotment. Limits change - check the model page.
+# NVIDIA_BASE_URL defaults to https://integrate.api.nvidia.com (the client
+# appends /v1/chat/completions); override only for a proxy.
+#
+# Drop the resulting key below.
+# NVIDIA_API_KEY: ''
+
+
+# Zhipu GLM (open.bigmodel.cn) API key. Registers the `glm-4.7-flash`
+# provider - GLM-4.7-Flash is permanently free with no total cap, the
+# recommended long-term free domestic (CN) option (200K context, function
+# calling). GLM_API_KEY is accepted as an alias.
+#
+# To get one of your own (free):
+#   1. Register at https://open.bigmodel.cn (mainland China real-name
+#      verification required).
+#   2. Create a key under the API key management page; shape is `<id>.<secret>`.
+#   3. GLM-4.7-Flash is free with no usage cap; paid models (GLM-4.7, etc.)
+#      draw on the account balance. The old GLM-4.5-Flash id auto-routes here.
+# ZHIPU_BASE_URL defaults to https://open.bigmodel.cn/api/paas/v4 (the client
+# appends /chat/completions); override only for a proxy.
+#
+# Drop the resulting key below.
+# ZHIPU_API_KEY: ''
 
 
 # Anthropic Claude API key. Required only if you call Claude through this

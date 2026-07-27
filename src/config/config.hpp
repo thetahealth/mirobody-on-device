@@ -294,6 +294,26 @@ struct Config {
         "",
         ""
     };
+    // NVIDIA NIM (build.nvidia.com), an OpenAI-compatible upstream hosting 100+
+    // open models on a free developer tier (~40 RPM). base_url is the API root;
+    // consumers append "/v1" then the OpenAI-style path tail. The offered models
+    // live in res/agents/baseline.cpp (the NvidiaModel table). Set via
+    // NVIDIA_BASE_URL / NVIDIA_API_KEY.
+    UpstreamConfig nvidia{
+        "https://integrate.api.nvidia.com",
+        "",
+        ""
+    };
+    // Zhipu GLM (open.bigmodel.cn), an OpenAI-compatible upstream. GLM-4.7-Flash
+    // is permanently free with no total cap -- the recommended long-term free
+    // domestic option. base_url already includes the "/api/paas/v4" root, so
+    // consumers append only the OpenAI-style path tail. Set via ZHIPU_BASE_URL /
+    // ZHIPU_API_KEY (GLM_API_KEY also accepted).
+    UpstreamConfig zhipu{
+        "https://open.bigmodel.cn/api/paas/v4",
+        "",
+        ""
+    };
     // Azure OpenAI resource (optional alternative to the direct openai upstream).
     // Populated from AZURE_OPENAI_* by load_config; endpoint empty => not used.
     AzureConfig azure;

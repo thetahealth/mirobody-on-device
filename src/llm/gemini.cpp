@@ -28,6 +28,13 @@ struct FunctionCall {
     std::string id;        // synthetic when the model omits one (for event tool_id)
     std::string name;
     std::string args_json; // the call's "args" object, serialized ("{}" if absent)
+
+    // Gemini 3.x reasoning models attach an opaque `thoughtSignature` to the
+    // PART carrying the call, and the follow-up request must replay it on that
+    // same part -- omitting it is a 400 ("Function call is missing a
+    // thought_signature in functionCall part"). Empty on models that don't
+    // send one (2.x), and then not replayed.
+    std::string thought_signature;
 };
 
 struct StreamContext {
@@ -146,6 +153,7 @@ void handle_part(StreamContext& ctx, const rapidjson::Value& part) {
         call.name = name;
         call.args_json = (fc.HasMember("args") && !fc["args"].IsNull())
                        ? serialize(fc["args"]) : std::string{"{}"};
+        call.thought_signature = get_string(part, "thoughtSignature");
 
         Event title;
         title.type    = EventType::QueryTitle;
@@ -308,6 +316,12 @@ std::string make_model_function_call_turn(const std::string& text,
         w.Key("name"); w.String(c.name.data(), static_cast<rapidjson::SizeType>(c.name.size()));
         w.Key("args"); w.RawValue(args.data(), args.size(), rapidjson::kObjectType);
         w.EndObject();
+        // Round-trip the part-level thought signature (see FunctionCall).
+        if (!c.thought_signature.empty()) {
+            w.Key("thoughtSignature");
+            w.String(c.thought_signature.data(),
+                     static_cast<rapidjson::SizeType>(c.thought_signature.size()));
+        }
         w.EndObject();
     }
     w.EndArray();

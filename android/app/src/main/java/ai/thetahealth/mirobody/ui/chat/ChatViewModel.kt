@@ -90,6 +90,8 @@ data class ChatUiState(
     // manager dialog and which on-device models appear in the picker. Mirrors
     // ModelManager.statuses.
     val onDeviceModels: Map<String, OnDeviceModelStatus> = emptyMap(),
+    // User-imported on-device models (picked from the filesystem, live outside app storage).
+    val onDeviceImported: List<OnDeviceModelSpec> = emptyList(),
     // Whether Gemini Nano (ML Kit) can rewrite on this device; gates the composer
     // "Polish" affordance. False on hardware without AICore.
     val polishAvailable: Boolean = false,
@@ -143,6 +145,12 @@ class ChatViewModel(
                 rebuildProviders(st)
             }
         }
+        viewModelScope.launch {
+            modelManager.imported.collect { imported ->
+                _state.update { it.copy(onDeviceImported = imported) }
+                rebuildProviders()
+            }
+        }
         // Probe Gemini Nano support once; the composer "Polish" button only shows if true.
         viewModelScope.launch {
             val supported = runCatching { mlKit.isRewriteSupported() }.getOrDefault(false)
@@ -176,6 +184,23 @@ class ChatViewModel(
     fun deleteOnDeviceModel(spec: OnDeviceModelSpec) {
         modelManager.delete(spec)
     }
+
+    /** Import a model file the user picked from the filesystem (lives outside app storage). */
+    fun importOnDeviceModel(uri: android.net.Uri) {
+        viewModelScope.launch {
+            runCatching { modelManager.import(uri) }
+                .onFailure { errorBus.emit(it) }
+                .onSuccess { if (it == null) errorBus.emit(IllegalStateException("Could not import model file")) }
+        }
+    }
+
+    /** Forget an imported model (its file is kept unless we copied it in). */
+    fun deleteImportedOnDeviceModel(spec: OnDeviceModelSpec) {
+        modelManager.deleteImported(spec)
+    }
+
+    /** Whether the app can access shared storage for downloads / path-referenced imports. */
+    fun hasStorageAccess(): Boolean = modelManager.hasStorageAccess()
 
     /** Mirror the current conversation to local storage (best-effort, off the UI path). */
     private fun persist() {
@@ -216,7 +241,8 @@ class ChatViewModel(
         val downloaded = OnDeviceModel.CATALOG
             .filter { statuses[it.id] is OnDeviceModelStatus.Ready }
             .map { ProviderInfo.forModel(it) }
-        val list = remoteProviders + downloaded + ProviderInfo.manage
+        val imported = modelManager.imported.value.map { ProviderInfo.forModel(it) }
+        val list = remoteProviders + downloaded + imported + ProviderInfo.manage
         _state.update { s ->
             val selected = s.selected?.let { sel -> list.firstOrNull { it.key == sel.key } }
                 ?: list.firstOrNull { it.key == savedProviderKey }

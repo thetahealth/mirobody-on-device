@@ -14,16 +14,26 @@ data class OnDeviceModelSpec(
     val id: String,
     /** Non-localized display name, e.g. "Gemma 4 E2B" (kept stable across UI languages). */
     val displayName: String,
-    /** Local filename under `<filesDir>/models/`. */
+    /** Filename under the shared models dir (download target / basename of an import). */
     val fileName: String,
-    /** Direct Hugging Face download URL (`resolve/main/<file>?download=true`). */
+    /** Direct Hugging Face download URL (`resolve/main/<file>?download=true`); "" when imported. */
     val downloadUrl: String,
     /** Approximate download size, for the UI to show before the Content-Length lands. */
     val approxBytes: Long,
     /** Recommended device RAM (peak inference footprint is device/context-dependent). */
     val recommendedRam: String,
+    /**
+     * Absolute path to a user-imported model file that lives OUTSIDE the app's control
+     * (picked from the filesystem), or null for a catalog model that lives under the
+     * shared models dir. When set, the model is loaded from here as-is — never downloaded,
+     * and never deleted from disk on removal (it's the user's own file).
+     */
+    val localPath: String? = null,
 ) {
     val providerCode: String get() = OnDeviceModel.PROVIDER_PREFIX + id
+
+    /** True for a user-imported model (referenced by [localPath]), false for a catalog model. */
+    val isImported: Boolean get() = localPath != null
 }
 
 /**
@@ -34,6 +44,38 @@ data class OnDeviceModelSpec(
 object OnDeviceModel {
     /** Prefix marking a synthetic on-device provider code (never collides with a server model). */
     const val PROVIDER_PREFIX: String = "__ondevice__/"
+
+    /** Id prefix for a user-imported model, so it never collides with a catalog id. */
+    const val IMPORTED_ID_PREFIX: String = "imported-"
+
+    /**
+     * User-imported models, registered at runtime by [ModelManager] from its persisted
+     * list. Kept alongside [CATALOG] so [byId] / [byProviderCode] — and therefore
+     * `ProviderInfo.modelSpec` and the whole chat/engine path — resolve imports with no
+     * further changes. Keyed by [OnDeviceModelSpec.id].
+     */
+    private val imported = java.util.concurrent.ConcurrentHashMap<String, OnDeviceModelSpec>()
+
+    /** Register (or replace) an imported model so it resolves through [byId]/[byProviderCode]. */
+    fun registerImported(spec: OnDeviceModelSpec) { imported[spec.id] = spec }
+
+    /** Forget an imported model (does not touch the file on disk). */
+    fun unregisterImported(id: String) { imported.remove(id) }
+
+    /** Currently-registered imported models, name-sorted for stable UI ordering. */
+    fun importedSpecs(): List<OnDeviceModelSpec> = imported.values.sortedBy { it.displayName }
+
+    /** Build an imported spec from a picked file's absolute [path] and known [sizeBytes]. */
+    fun importedSpec(id: String, displayName: String, path: String, sizeBytes: Long): OnDeviceModelSpec =
+        OnDeviceModelSpec(
+            id = id,
+            displayName = displayName,
+            fileName = path.substringAfterLast('/'),
+            downloadUrl = "",
+            approxBytes = sizeBytes,
+            recommendedRam = "—",
+            localPath = path,
+        )
 
     // Ordered smallest → largest so low-memory devices see the light options first.
     // `approxBytes` is only the pre-flight estimate; the real size comes from the
@@ -90,10 +132,12 @@ object OnDeviceModel {
         ),
     )
 
-    fun byId(id: String): OnDeviceModelSpec? = CATALOG.firstOrNull { it.id == id }
+    fun byId(id: String): OnDeviceModelSpec? =
+        CATALOG.firstOrNull { it.id == id } ?: imported[id]
 
     fun byProviderCode(code: String): OnDeviceModelSpec? =
         CATALOG.firstOrNull { it.providerCode == code }
+            ?: imported.values.firstOrNull { it.providerCode == code }
 }
 
 /** Lifecycle of an on-device model file on this device. */

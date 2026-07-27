@@ -124,6 +124,11 @@
     <string name="chat_ondevice_failed">Download failed</string>
     <string name="chat_ondevice_retry">Retry download</string>
     <string name="chat_ondevice_delete">Delete model</string>
+    <string name="chat_ondevice_imported">Imported models</string>
+    <string name="chat_ondevice_import">Import file…</string>
+    <string name="chat_ondevice_remove">Remove</string>
+    <string name="chat_ondevice_storage_hint">Models are stored in shared storage so they survive an app reinstall. Grant file access to download or import.</string>
+    <string name="chat_ondevice_grant_storage">Grant file access</string>
     <!-- On-device draft rewrite via Gemini Nano (ML Kit) -->
     <string name="chat_polish">Polish draft on-device</string>
     <string name="chat_polish_rephrase">Rephrase</string>

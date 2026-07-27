@@ -13,9 +13,36 @@
 //   SentryGuard   — RAII flush + close on scope exit.
 //   init_sentry() — bring a session up from Config; returns whether it started.
 // The rest are inline helpers under mirobody::detail.
+//
+// sentry-native is OPTIONAL (find_package(sentry CONFIG QUIET) in CMakeLists.txt):
+// cross-compiled sysroots — Android, iOS, HarmonyOS — don't ship it. When it is
+// absent MIROBODY_HAS_SENTRY is 0 and the two public entry points below degrade
+// to no-ops, so main.cpp compiles and runs unchanged, just without reporting.
 
 #include "config/config.hpp"
 #include "platform/log.hpp"
+
+#ifndef MIROBODY_HAS_SENTRY
+#  define MIROBODY_HAS_SENTRY 0
+#endif
+
+#if !MIROBODY_HAS_SENTRY
+
+namespace mirobody {
+
+// No-op stand-ins: same surface, nothing behind it.
+struct SentryGuard {
+    bool active = false;
+};
+
+inline bool init_sentry(const Config&) {
+    platform::log_info("sentry: not built in; crash reporting disabled");
+    return false;
+}
+
+}   // namespace mirobody
+
+#else
 
 #include <sentry.h>
 
@@ -214,3 +241,5 @@ inline bool init_sentry(const Config& cfg) {
 }
 
 }  // namespace mirobody
+
+#endif  // MIROBODY_HAS_SENTRY

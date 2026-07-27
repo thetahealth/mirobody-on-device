@@ -35,12 +35,24 @@
 #include "database/database.hpp"
 #include "database/schema.hpp"
 #include "llm/event.hpp"
+#include "memory/memory.hpp"
 #include "platform/log.hpp"
-#include "server/server.hpp"
 #include "storage/storage.hpp"
 #include "transcode/file.hpp"
 
-#include <libwebsockets.h>
+// The mobile/embedded profile has no HTTP front door (MIROBODY_MOBILE in
+// CMakeLists.txt), so there is no Server to start: the four lifecycle functions
+// below become not-running stubs and everything else -- chat, files -- is
+// unaffected. That is how the HarmonyOS bridge under harmony/entry/src/main/cpp
+// reaches the core: mirobody_chat only.
+#ifndef MIROBODY_MOBILE
+#  define MIROBODY_MOBILE 0
+#endif
+
+#if !MIROBODY_MOBILE
+#  include "server/server.hpp"
+#  include <libwebsockets.h>
+#endif
 
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
@@ -48,6 +60,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>   // setenv / _putenv_s (mirobody_set_config)
 #include <exception>
 #include <memory>
 #include <mutex>
@@ -65,9 +78,11 @@ void ensure_curl_init() {
     });
 }
 
+#if !MIROBODY_MOBILE
 void lws_log_to_platform(int /*level*/, const char* line) {
     mirobody::platform::log_info("%s", line);
 }
+#endif
 
 std::string c_to_std(const char* s) {
     return s ? std::string(s) : std::string{};
@@ -180,6 +195,25 @@ FileContext& file_context() {
 
 //------------------------------------------------------------------------------
 
+#if MIROBODY_MOBILE
+
+// Built without the HTTP front door: nothing to start. Hosts are expected to
+// call mirobody_chat / the file functions directly, which need no server (they
+// load the process-wide config on first use). Returning NULL is the documented
+// failure mode, and matches how a pure-client build behaves on iOS/Android.
+
+extern "C" mirobody_server_t* mirobody_start(const char*, const char*) {
+    mirobody::platform::log_info(
+        "mirobody_start: built without the HTTP front door; use mirobody_chat directly");
+    return nullptr;
+}
+
+extern "C" void mirobody_stop(mirobody_server_t*)          {}
+extern "C" int  mirobody_is_running(mirobody_server_t*)    { return 0; }
+extern "C" int  mirobody_listen_port(mirobody_server_t*)   { return -1; }
+
+#else
+
 extern "C" mirobody_server_t* mirobody_start(
         const char* config_path,
         const char* data_dir) {
@@ -250,6 +284,8 @@ extern "C" int mirobody_listen_port(mirobody_server_t* handle) {
     return static_cast<int>(server->config().listen_port);
 }
 
+#endif   // MIROBODY_MOBILE
+
 //------------------------------------------------------------------------------
 
 extern "C" const char* mirobody_get_providers(void) {
@@ -282,22 +318,109 @@ extern "C" const char* mirobody_get_providers(void) {
 
 //------------------------------------------------------------------------------
 
-extern "C" int mirobody_chat(
-        const char* provider,
-        const char* message,
-        long long user_id,
-        mirobody_chat_handler on_event,
-        void* user_data) {
+//------------------------------------------------------------------------------
+// Configuration (embedded hosts)
+//------------------------------------------------------------------------------
 
-    if (!on_event) return -1;
+extern "C" int mirobody_set_config(const char* key, const char* value) {
+    if (!key || !*key) return -1;
+#ifdef _WIN32
+    // _putenv_s with "" removes the variable, which is exactly the NULL contract.
+    return _putenv_s(key, value ? value : "") == 0 ? 0 : -1;
+#else
+    if (!value) return unsetenv(key) == 0 ? 0 : -1;
+    return setenv(key, value, /*overwrite=*/1) == 0 ? 0 : -1;
+#endif
+}
 
-    const std::string msg = c_to_std(message);
-    if (msg.empty()) {
-        mirobody::platform::log_error("mirobody_chat: empty message");
+extern "C" int mirobody_reload_providers(void) {
+    ensure_curl_init();
+    try {
+        // init_config re-reads every source, environment included -- the typed
+        // Config fields (cfg.zhipu.api_key, ...) snapshot the environment at
+        // load time, so a plain load_clients() over the OLD config would not see
+        // anything mirobody_set_config changed.
+        mirobody::Config& cfg = mirobody::init_config();
+        mirobody::chat::agent_registry().load_clients(cfg);
+        return static_cast<int>(
+            mirobody::chat::agent_registry().provider_names(/*public_only=*/true).size());
+    } catch (const std::exception& e) {
+        mirobody::platform::log_error("mirobody_reload_providers: %s", e.what());
         return -1;
     }
+}
+
+//------------------------------------------------------------------------------
+// Chat
+//------------------------------------------------------------------------------
+
+namespace {
+
+// Serverless chat services: the database / cache / long-term memory the
+// auth-scoped MCP tools (family_health, remember, recall_memory, the history
+// tools) reach through the AgentRequest. Built once, lazily, from the global
+// config -- mirroring how the server wires them -- and each piece degrades
+// independently: no database => db and memory stay null and the tools that
+// need them answer with their own "unavailable" errors, while the turn itself
+// runs fine. The embedded host must inject SQLITE_PATH and SQL_DIR (see
+// mirobody_set_config) before the first chat for the database to come up.
+struct ChatServices {
+    std::unique_ptr<mirobody::database::Database> db;
+    std::unique_ptr<mirobody::cache::Cache>       cache;
+    std::unique_ptr<mirobody::memory::Memory>     memory;
+};
+
+ChatServices& chat_services() {
+    static ChatServices ctx;
+    static std::once_flag flag;
+    std::call_once(flag, [] {
+        const mirobody::Config& cfg = mirobody::config();
+        try {
+            apply_migrations(cfg);        // idempotent DDL, same as mirobody_start
+            ctx.db = open_file_db(cfg);   // backend-appropriate connection (null on failure)
+        } catch (const std::exception& e) {
+            mirobody::platform::log_warn(
+                "mirobody chat: database unavailable (%s); db-backed tools degrade", e.what());
+        }
+        try {
+            const bool use_redis = !cfg.redis.host.empty();
+            ctx.cache.reset(new mirobody::cache::Cache(
+                use_redis ? cfg.redis.open() : cfg.memory_kv.open()));
+        } catch (const std::exception& e) {
+            mirobody::platform::log_warn("mirobody chat: cache unavailable (%s)", e.what());
+        }
+        if (ctx.db) {
+            try {
+                ctx.memory = mirobody::memory::make_memory(cfg, *ctx.db);
+            } catch (const std::exception& e) {
+                mirobody::platform::log_warn(
+                    "mirobody chat: memory store unavailable (%s)", e.what());
+            }
+        }
+    });
+    return ctx;
+}
+
+// Shared body of mirobody_chat / mirobody_chat_messages: everything after the
+// conversation itself has been assembled. `question` is the current user turn
+// (persist_history's summary field); `messages` the full context in order.
+int run_chat_turn(const char* provider,
+                  std::vector<mirobody::llm::ChatMessage> messages,
+                  std::string question,
+                  long long user_id,
+                  mirobody_chat_handler on_event,
+                  void* user_data) {
 
     ensure_curl_init();
+
+#if MIROBODY_MOBILE
+    // Single-user device: the phone owner IS the first users row (the mobile
+    // schema holds only them -- see res/sql/sqlite/1_user.sql). An anonymous
+    // turn therefore runs as that user, so the auth-scoped tools (memory,
+    // files, history, family_health) work instead of answering
+    // "Authentication required".
+    if (user_id <= 0) user_id = 1;
+#endif
 
     // The global config is loaded automatically here on first use, so the host
     // can call mirobody_chat() without first standing up a server.
@@ -323,10 +446,28 @@ extern "C" int mirobody_chat(
     }
 
     mirobody::chat::AgentRequest req;
-    req.question = msg;
-    req.messages.push_back(mirobody::llm::ChatMessage{"user", msg, {}});
+    req.question = std::move(question);
+    req.messages = std::move(messages);
     req.provider = model;
     req.user_id  = static_cast<std::int64_t>(user_id);
+
+    // Hand the locally-executed tools their services (see ChatServices above).
+    // The object store rides on the file API's context so files stored through
+    // either surface share one backend; only consulted when one is configured,
+    // so a chat-only setup doesn't pay for (or log about) storage.
+    {
+        ChatServices& svc = chat_services();
+        req.cache  = svc.cache.get();
+        req.db     = svc.db.get();
+        req.memory = svc.memory.get();
+
+        const mirobody::Config& cfg = mirobody::config();
+        if (cfg.s3().configured() || cfg.oss().configured() ||
+            cfg.local_storage().configured()) {
+            FileContext& fc = file_context();
+            if (fc.ok) req.storage = fc.storage.get();
+        }
+    }
 
     // A token naming no agent is a bare provider under the default agent (the
     // prefix-less list); an empty token likewise defaults. resolve_agent carries
@@ -364,6 +505,71 @@ extern "C" int mirobody_chat(
     }
 
     return aborted ? 1 : 0;
+}
+
+}   // namespace
+
+extern "C" int mirobody_chat(
+        const char* provider,
+        const char* message,
+        long long user_id,
+        mirobody_chat_handler on_event,
+        void* user_data) {
+
+    if (!on_event) return -1;
+
+    const std::string msg = c_to_std(message);
+    if (msg.empty()) {
+        mirobody::platform::log_error("mirobody_chat: empty message");
+        return -1;
+    }
+
+    std::vector<mirobody::llm::ChatMessage> messages;
+    messages.push_back(mirobody::llm::ChatMessage{"user", msg, {}});
+    return run_chat_turn(provider, std::move(messages), msg, user_id, on_event, user_data);
+}
+
+extern "C" int mirobody_chat_messages(
+        const char* provider,
+        const char* messages_json,
+        long long user_id,
+        mirobody_chat_handler on_event,
+        void* user_data) {
+
+    if (!on_event) return -1;
+
+    rapidjson::Document d;
+    if (!messages_json || d.Parse(messages_json).HasParseError() || !d.IsArray()) {
+        mirobody::platform::log_error("mirobody_chat_messages: messages_json is not a JSON array");
+        return -1;
+    }
+
+    // Tolerant extraction: an entry missing role or content is skipped rather
+    // than failing the turn. `question` is the LAST user turn -- the summary
+    // persist_history records, and what history-keyed features key off.
+    std::vector<mirobody::llm::ChatMessage> messages;
+    std::string question;
+    for (rapidjson::SizeType i = 0; i < d.Size(); ++i) {
+        const rapidjson::Value& m = d[i];
+        if (!m.IsObject()) continue;
+        rapidjson::Value::ConstMemberIterator role    = m.FindMember("role");
+        rapidjson::Value::ConstMemberIterator content = m.FindMember("content");
+        if (role == m.MemberEnd()    || !role->value.IsString())    continue;
+        if (content == m.MemberEnd() || !content->value.IsString()) continue;
+
+        mirobody::llm::ChatMessage msg;
+        msg.role.assign(role->value.GetString(), role->value.GetStringLength());
+        msg.content.assign(content->value.GetString(), content->value.GetStringLength());
+        if (msg.role == "user") question = msg.content;
+        messages.push_back(std::move(msg));
+    }
+    if (messages.empty()) {
+        mirobody::platform::log_error("mirobody_chat_messages: no usable messages");
+        return -1;
+    }
+
+    return run_chat_turn(provider, std::move(messages), std::move(question),
+                         user_id, on_event, user_data);
 }
 
 //------------------------------------------------------------------------------

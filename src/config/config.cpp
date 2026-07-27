@@ -243,6 +243,15 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.deepseek.realtime_url = store.get_str("DEEPSEEK_REALTIME_URL", cfg.deepseek.realtime_url);
     cfg.deepseek.api_key      = store.get_str("DEEPSEEK_API_KEY",      cfg.deepseek.api_key);
 
+    cfg.nvidia.base_url     = store.get_str("NVIDIA_BASE_URL",     cfg.nvidia.base_url);
+    cfg.nvidia.api_key      = store.get_str("NVIDIA_API_KEY",      cfg.nvidia.api_key);
+
+    cfg.zhipu.base_url     = store.get_str("ZHIPU_BASE_URL",     cfg.zhipu.base_url);
+    cfg.zhipu.api_key      = store.get_str("ZHIPU_API_KEY",      cfg.zhipu.api_key);
+    if (cfg.zhipu.api_key.empty()) {
+        cfg.zhipu.api_key = store.get_str("GLM_API_KEY");
+    }
+
     cfg.azure = load_azure_config(store);
 
     cfg.memory.provider = store.get_str("MEMORY_PROVIDER", cfg.memory.provider);
@@ -702,6 +711,18 @@ void Config::print() const {
         if (!deepseek.realtime_url.empty())
             std::fprintf(out, "    realtime_url  : %s\n", deepseek.realtime_url.c_str());
         std::fprintf(out, "    api_key       : %s\n", mask(deepseek.api_key).c_str());
+    }
+    if (!nvidia.api_key.empty()) {
+        std::fprintf(out, "\n");
+        std::fprintf(out, "  nvidia\n");
+        std::fprintf(out, "    base_url      : %s\n", nvidia.base_url.c_str());
+        std::fprintf(out, "    api_key       : %s\n", mask(nvidia.api_key).c_str());
+    }
+    if (!zhipu.api_key.empty()) {
+        std::fprintf(out, "\n");
+        std::fprintf(out, "  zhipu\n");
+        std::fprintf(out, "    base_url      : %s\n", zhipu.base_url.c_str());
+        std::fprintf(out, "    api_key       : %s\n", mask(zhipu.api_key).c_str());
     }
 
     if (!vitalera.api_key.empty()) {

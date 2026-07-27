@@ -8,7 +8,7 @@ PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
     cat <<EOF
-Usage: build.sh [arch] [backend] [clean]      (tokens in any order)
+Usage: build.sh [arch] [backend] [mobile] [clean]      (tokens in any order)
 
   With no arguments: build the host arch with the POSTGRESQL default
   (into "build"). Pass help / -h / --help to show this help.
@@ -17,11 +17,14 @@ Usage: build.sh [arch] [backend] [clean]      (tokens in any order)
             build.sh builds natively, so the arch must match the host.
   Backend   pg / postgresql, legacy / pg_legacy, mysql, sqlite, ck / clickhouse, duckdb
             (omit for the POSTGRESQL default)
+  mobile    build the profile HarmonyOS/Android/iOS ship: no HTTP front door (no
+            libwebsockets) and the BYOK provider menu (a provider with no key is
+            not listed). Libraries only -- no server executable, CLIs or tests.
   clean     remove the build dir and reconfigure from scratch
   help / -h / --help   show this help
 
-The build dir is build[-<arch>][-<backend>]: the arch suffix is omitted for the
-host arch, the backend suffix for the POSTGRESQL default. So the plain
+The build dir is build[-<arch>][-<backend>][-mobile]: the arch suffix is omitted
+for the host arch, the backend suffix for the POSTGRESQL default. So the plain
 host+postgresql build is just "build"; "build.sh legacy" -> build-legacy, and each
 combo gets its own dir so they can coexist.
 
@@ -29,7 +32,8 @@ Arch and backend come only from the command line (no environment variables).
 
 Install system packages first (cmake, ninja, the libwebsockets / curl / ssl /
 rapidjson / yaml-cpp / hiredis -dev set, plus the chosen backend's -dev package).
-See the README "Building - Linux / WSL / macOS" section.
+With mobile, libwebsockets is not needed. See the README
+"Building - Linux / WSL / macOS" section.
 EOF
 }
 
@@ -37,10 +41,12 @@ EOF
 ARCH=""
 DB_BACKEND=""
 CLEAN=""
+MOBILE=""
 for arg in "$@"; do
     case "$arg" in
         help|-h|--help|-\?) usage; exit 0 ;;
         clean)              CLEAN=1 ;;
+        mobile)             MOBILE=1 ;;
         amd64|x86_64|x64)   ARCH=amd64 ;;
         arm64|aarch64)      ARCH=arm64 ;;
         x86|i386|i686)      ARCH=x86 ;;
@@ -86,6 +92,15 @@ esac
 # only arch build.sh targets), the backend suffix for the POSTGRESQL default.
 DIR="build"
 [ -n "$DB_TAG" ] && DIR="${DIR}-${DB_TAG}"
+
+# mobile gets its own build dir so it never clobbers the normal one, and its own
+# CMake arg (see MIROBODY_MOBILE in CMakeLists.txt).
+PROFILE_ARG=""
+if [ -n "$MOBILE" ]; then
+    PROFILE_ARG="-DMIROBODY_MOBILE=ON"
+    DIR="${DIR}-mobile"
+fi
+
 BUILD_DIR="$PROJECT_DIR/$DIR"
 
 # clean: wipe the build dir so the next run reconfigures from scratch.
@@ -96,7 +111,8 @@ fi
 if [ ! -f "$BUILD_DIR/build.ninja" ]; then
     cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DMIROBODY_DATABASE_BACKEND="$DB_BACKEND"
+        -DMIROBODY_DATABASE_BACKEND="$DB_BACKEND" \
+        $PROFILE_ARG
 fi
 
 cmake --build "$BUILD_DIR" --config Release

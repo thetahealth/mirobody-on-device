@@ -2,10 +2,20 @@
 
 #include "chat/history.hpp"
 #include "database/enums.hpp"   // MessageRole
-#include "llm/gemini_live.hpp"
-#include "llm/openai_realtime.hpp"
 #include "platform/clock.hpp"   // now_unix_ms
 #include "platform/log.hpp"
+
+// The realtime (voice) lanes speak WebSocket, which the mobile/embedded profile
+// does not link (MIROBODY_MOBILE in CMakeLists.txt). There live_response reports
+// the lane as unavailable; the text turn is unaffected.
+#ifndef MIROBODY_MOBILE
+#  define MIROBODY_MOBILE 0
+#endif
+
+#if !MIROBODY_MOBILE
+#  include "llm/gemini_live.hpp"
+#  include "llm/openai_realtime.hpp"
+#endif
 
 #include <openssl/rand.h>
 
@@ -159,6 +169,10 @@ void Chat::response(const std::string& agent_name, AgentRequest& req,
 //------------------------------------------------------------------------------
 
 void Chat::live_response(const LiveRequest& req, const llm::EventHandler& on_event) {
+#if MIROBODY_MOBILE
+    (void)req;
+    emit_error(on_event, "realtime lane not built (no WebSocket support in this build)");
+#else
     if (req.provider == "openai") {
         if (cfg_.openai.api_key.empty()) {
             emit_error(on_event, "OPENAI_API_KEY not configured");
@@ -188,6 +202,7 @@ void Chat::live_response(const LiveRequest& req, const llm::EventHandler& on_eve
         emit_error(on_event, "unknown provider: " +
                              (req.provider.empty() ? std::string("(none)") : req.provider));
     }
+#endif
 }
 
 //------------------------------------------------------------------------------

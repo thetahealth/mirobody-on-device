@@ -129,9 +129,12 @@ import ai.thetahealth.mirobody.ui.theme.BrandBlue
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.OpenableColumns
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.Dispatchers
@@ -272,8 +275,12 @@ fun ChatScreen(
     if (showModelDialog) {
         OnDeviceModelDialog(
             statuses = state.onDeviceModels,
+            imported = state.onDeviceImported,
+            hasStorageAccess = vm::hasStorageAccess,
             onDownload = vm::downloadOnDeviceModel,
             onDelete = vm::deleteOnDeviceModel,
+            onImport = vm::importOnDeviceModel,
+            onDeleteImported = vm::deleteImportedOnDeviceModel,
             onDismiss = { showModelDialog = false },
         )
     }
@@ -1228,10 +1235,47 @@ private fun PolishButton(
 @Composable
 private fun OnDeviceModelDialog(
     statuses: Map<String, OnDeviceModelStatus>,
+    imported: List<OnDeviceModelSpec>,
+    hasStorageAccess: () -> Boolean,
     onDownload: (OnDeviceModelSpec) -> Unit,
     onDelete: (OnDeviceModelSpec) -> Unit,
+    onImport: (Uri) -> Unit,
+    onDeleteImported: (OnDeviceModelSpec) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var storageOk by remember { mutableStateOf(hasStorageAccess()) }
+
+    // SAF picker: any file type, since .litertlm/.task/.gguf have no registered MIME.
+    val pickLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) onImport(uri) }
+
+    // All-Files-Access lives in Settings (API 30+); returning re-checks the grant.
+    val settingsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { storageOk = hasStorageAccess() }
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { storageOk = hasStorageAccess() }
+
+    fun requestStorage() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            runCatching {
+                settingsLauncher.launch(
+                    Intent(
+                        Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:" + context.packageName),
+                    ),
+                )
+            }.onFailure {
+                settingsLauncher.launch(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+        } else {
+            permLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
@@ -1240,6 +1284,21 @@ private fun OnDeviceModelDialog(
             Column {
                 Text(stringResource(R.string.chat_ondevice_desc))
                 Spacer(Modifier.height(12.dp))
+
+                // Downloads and file imports both write/read shared storage (so models
+                // survive an uninstall); prompt for the one-time grant when missing.
+                if (!storageOk) {
+                    Text(
+                        stringResource(R.string.chat_ondevice_storage_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = { requestStorage() }) {
+                        Text(stringResource(R.string.chat_ondevice_grant_storage))
+                    }
+                    Spacer(Modifier.height(4.dp))
+                }
+
                 OnDeviceModel.CATALOG.forEach { spec ->
                     OnDeviceModelRow(
                         spec = spec,
@@ -1249,12 +1308,58 @@ private fun OnDeviceModelDialog(
                     )
                     Spacer(Modifier.height(10.dp))
                 }
+
+                HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        stringResource(R.string.chat_ondevice_imported),
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = { pickLauncher.launch(arrayOf("*/*")) },
+                        enabled = storageOk,
+                    ) { Text(stringResource(R.string.chat_ondevice_import)) }
+                }
+                imported.forEach { spec ->
+                    ImportedModelRow(spec = spec, onDelete = { onDeleteImported(spec) })
+                    Spacer(Modifier.height(8.dp))
+                }
             }
         },
         confirmButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
         },
     )
+}
+
+/** One imported-model row: name + size, with a "forget" action (keeps the user's file). */
+@Composable
+private fun ImportedModelRow(
+    spec: OnDeviceModelSpec,
+    onDelete: () -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(spec.displayName, style = MaterialTheme.typography.titleSmall)
+            Text(
+                "~" + formatBytes(spec.approxBytes) + " · " + spec.fileName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        TextButton(onClick = onDelete) {
+            Text(
+                stringResource(R.string.chat_ondevice_remove),
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
 }
 
 /** One catalog row: model name + its download/progress/delete affordance. */

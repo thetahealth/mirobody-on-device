@@ -46,6 +46,32 @@ int mirobody_is_running(mirobody_server_t* handle);
 int mirobody_listen_port(mirobody_server_t* handle);
 
 //------------------------------------------------------------------------------
+// Configuration (embedded hosts)
+//------------------------------------------------------------------------------
+//
+// An embedded host (a mobile app linking the library directly) has no config.yml
+// and no shell to export variables from; its configuration lives in platform
+// stores (secure key store, preferences). These two calls bridge that world onto
+// the process-wide config every other entry point already reads.
+
+// Set one configuration value, by the same UPPER_SNAKE name config.yml uses
+// (e.g. "ZHIPU_API_KEY", "LOG_LEVEL"). Implemented as a process environment
+// write, which the config loader gives precedence over YAML. Returns 0 on
+// success. NULL value unsets the variable.
+//
+// Values already captured by loaded state do NOT retroactively change: call this
+// for everything BEFORE the first chat, or follow up with
+// mirobody_reload_providers() to rebuild from the current environment.
+int mirobody_set_config(const char* key, const char* value);
+
+// Reload the process-wide config from its sources (environment included) and
+// rebuild every agent's provider clients from it. Call after mirobody_set_config
+// once chat has already run -- e.g. the user pasted a new API key mid-session.
+// Returns the number of providers now loaded for the default agent, or -1 on
+// failure. Not safe to call concurrently with an in-flight mirobody_chat turn.
+int mirobody_reload_providers(void);
+
+//------------------------------------------------------------------------------
 // Chat
 //------------------------------------------------------------------------------
 
@@ -111,6 +137,26 @@ typedef int (*mirobody_chat_handler)(
 int mirobody_chat(
     const char* provider,
     const char* message,
+    long long user_id,
+    mirobody_chat_handler on_event,
+    void* user_data);
+
+// mirobody_chat for a host that manages its own conversation history: the same
+// turn, but the context arrives as a JSON array of chat messages instead of a
+// single string. This is the entry point an embedded client (the HarmonyOS
+// bridge) calls -- the server-side session memory needs a cache + session id the
+// C ABI does not carry, so multi-turn context must ride in with the request.
+//
+//   messages_json  '[{"role":"user"|"assistant"|"system","content":"..."}, ...]'
+//                  in conversation order, ending with the current user turn.
+//                  Unknown members are ignored; entries missing role/content are
+//                  skipped. Required; empty/unparseable => error return.
+//
+// Everything else (provider token, user_id, callback protocol, return values)
+// is exactly mirobody_chat.
+int mirobody_chat_messages(
+    const char* provider,
+    const char* messages_json,
     long long user_id,
     mirobody_chat_handler on_event,
     void* user_data);

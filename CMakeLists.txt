@@ -23,10 +23,50 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic -Wno-unused-parameter)
 endif()
 
-find_package(libwebsockets CONFIG QUIET)
-if(NOT libwebsockets_FOUND)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(LIBWEBSOCKETS REQUIRED IMPORTED_TARGET libwebsockets)
+# --- Target profile: mobile vs desktop/server ---------------------------------
+# THE build-target axis. One switch, two consequences:
+#
+#   ON  (mobile: HarmonyOS, and Android/iOS once they migrate)
+#       - No HTTP/WebSocket front door. The app embeds the core through the C ABI
+#         (mirobody_chat + the file calls in src/mirobody.h), so the server, its
+#         router, every *service.cpp that registers routes, the SSE/WS/MQTT chat
+#         transports and the realtime (voice) LLM clients are all dropped -- and
+#         with them the libwebsockets dependency. mirobody_start / _stop /
+#         _is_running / _listen_port become not-running stubs (src/platform/c_api.cpp).
+#         What remains is the whole domain tier: agents, the chat dispatcher, chat
+#         events and their filters (so render_chart still collapses into a
+#         ChartEvent), the MCP tool registry, the LLM clients that speak HTTP over
+#         libcurl, transcode, storage, memory.
+#       - BYOK provider menu: a provider with no credential is not listed at all,
+#         because mirobody_get_providers() IS the app's model picker. See
+#         kRequireCredentials in res/agents/baseline.cpp.
+#
+#   OFF (desktop / server, including the Qt and Electron frontends)
+#       - Full front door, and every provider listed whether or not it has a key,
+#         so the operator can see what is missing.
+#
+# Android and iOS default to OFF for now: their entry points ARE the embedded
+# loopback server (src/platform/android_jni.cpp, src/platform/ios_bridge.mm both
+# stand up mirobody_start), so flipping them today would not compile. They move to
+# ON once the HarmonyOS C-ABI path has proven out.
+if(OHOS OR CMAKE_SYSTEM_NAME STREQUAL "OHOS")
+    set(_MIROBODY_MOBILE_DEFAULT ON)
+else()
+    set(_MIROBODY_MOBILE_DEFAULT OFF)
+endif()
+option(MIROBODY_MOBILE
+       "Build the mobile/embedded profile: no HTTP front door, BYOK provider menu"
+       ${_MIROBODY_MOBILE_DEFAULT})
+
+if(MIROBODY_MOBILE)
+    message(STATUS "target profile: mobile (no front door; providers listed only once configured)")
+else()
+    message(STATUS "target profile: desktop/server (front door on; all providers listed)")
+    find_package(libwebsockets CONFIG QUIET)
+    if(NOT libwebsockets_FOUND)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(LIBWEBSOCKETS REQUIRED IMPORTED_TARGET libwebsockets)
+    endif()
 endif()
 
 find_package(CURL REQUIRED)
@@ -202,13 +242,16 @@ find_package(BLAS)
 
 # --- Sentry (crash / error reporting) -----------------------------------------
 # sentry-native is linked only into the standalone desktop/server executable and
-# initialised in src/main.cpp from the SENTRY_DSN config value. It is a required
-# dependency of that executable; the mobile (Android/iOS) targets don't build
-# src/main.cpp and so don't link it (see the target definitions below) -- and the
-# mobile prebuilt sysroots omit sentry-native, so skip the lookup there rather than
-# fail find_package(REQUIRED).
-if(NOT (ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
-    find_package(sentry CONFIG REQUIRED)
+# initialised in src/main.cpp from the SENTRY_DSN config value. OPTIONAL: the
+# cross-compiled sysroots (Android, iOS, HarmonyOS) omit it, and it is not worth a
+# hard failure on a host that simply hasn't installed it. src/sentry.hpp keys off
+# MIROBODY_HAS_SENTRY and degrades to no-ops when absent, so main.cpp is unchanged
+# either way -- the binary just runs without crash reporting.
+find_package(sentry CONFIG QUIET)
+if(TARGET sentry::sentry)
+    message(STATUS "crash reporting: sentry ON")
+else()
+    message(STATUS "crash reporting: sentry OFF (sentry-native not found)")
 endif()
 
 # Short git SHA captured at configure time. Used as the Sentry release fallback
@@ -237,19 +280,11 @@ set(MIROBODY_CORE_SOURCES
     src/jwt/firebase.cpp
     src/jwt/google.cpp
     src/jwt/jwt.cpp
-    src/server/server.cpp
     src/platform/log.cpp
-    src/server/router.cpp
-    src/user/service.cpp
-    src/user/tanka.cpp
     src/user/email.cpp
     src/health/vendor_link.cpp
-    src/health/vendor_service.cpp
     src/health/vendor_fhir.cpp
-    src/health/werun.cpp
-    src/health/ehr_connect.cpp
     src/health/timeseries/ingest.cpp
-    src/chat/service.cpp
     src/chat/chat.cpp
     src/chat/history.cpp
     src/chat/dispatcher.cpp
@@ -258,20 +293,14 @@ set(MIROBODY_CORE_SOURCES
     src/chat/event/filter/filter.cpp
     src/chat/event/filter/chart.cpp
     src/chat/packet.cpp
-    src/chat/transport/sse.cpp
-    src/chat/transport/ws.cpp
-    src/chat/transport/mqtt.cpp
     src/chat/agent.cpp
-    src/circle/service.cpp
+    src/circle/access.cpp
     src/mcp/tool.cpp
     src/mcp/resource.cpp
-    src/mcp/service.cpp
     src/transcode/file.cpp
     src/transcode/parser.cpp
     src/oauth/pkce.cpp
-    src/oauth/service.cpp
     src/client/http_client.cpp
-    src/client/websocket_client.cpp
     src/storage/storage.cpp
     src/storage/sign.cpp
     src/storage/aws_s3.cpp
@@ -291,7 +320,6 @@ set(MIROBODY_CORE_SOURCES
     src/fhir/fhir.cpp
     src/fhir/resource.cpp
     src/fhir/store.cpp
-    src/fhir/rest.cpp
     src/indicator/normalize.cpp
     src/indicator/word.cpp
     src/indicator/lexicon.cpp
@@ -331,12 +359,40 @@ set(MIROBODY_CORE_SOURCES
     src/llm/openai_chat.cpp
     src/llm/openai_responses.cpp
     src/llm/gemini.cpp
-    src/llm/gemini_live.cpp
-    src/llm/openai_realtime.cpp
     src/llm/embedding.cpp
     src/config/fernet.cpp
     ${_MIROBODY_DB_SOURCE}
 )
+
+# Sources that need the HTTP front door (see MIROBODY_MOBILE above).
+# Each either includes <libwebsockets.h> directly or pulls it in transitively
+# through server/router.hpp -- which every *service.hpp that registers routes
+# does. Keep this list in sync when adding a route-registering service.
+set(MIROBODY_HTTP_SOURCES
+    src/server/server.cpp
+    src/server/router.cpp
+    src/chat/service.cpp
+    src/chat/transport/sse.cpp
+    src/chat/transport/ws.cpp
+    src/chat/transport/mqtt.cpp
+    src/circle/service.cpp
+    src/mcp/service.cpp
+    src/oauth/service.cpp
+    src/user/service.cpp
+    src/user/tanka.cpp
+    src/health/vendor_service.cpp
+    src/health/werun.cpp
+    src/health/ehr_connect.cpp
+    src/fhir/rest.cpp
+    # Realtime / voice LLM lanes: WebSocket upstreams via client/websocket_client.
+    src/client/websocket_client.cpp
+    src/llm/gemini_live.cpp
+    src/llm/openai_realtime.cpp
+)
+
+if(NOT MIROBODY_MOBILE)
+    list(APPEND MIROBODY_CORE_SOURCES ${MIROBODY_HTTP_SOURCES})
+endif()
 
 add_library(mirobody_core STATIC ${MIROBODY_CORE_SOURCES})
 target_include_directories(mirobody_core PUBLIC src)
@@ -504,16 +560,22 @@ if(MIROBODY_ENABLE_XLS)
     target_compile_definitions(mirobody_core PRIVATE MIROBODY_ENABLE_XLS=1)
 endif()
 
-if(libwebsockets_FOUND)
-    if(TARGET websockets_shared)
-        target_link_libraries(mirobody_core PUBLIC websockets_shared)
-    elseif(TARGET websockets)
-        target_link_libraries(mirobody_core PUBLIC websockets)
-    else()
-        message(FATAL_ERROR "libwebsockets CONFIG found but no known target (websockets/websockets_shared)")
-    endif()
+# PUBLIC so the res/* OBJECT libraries see it too: they link mirobody_core
+# PRIVATE, which still applies its INTERFACE definitions when compiling them.
+if(MIROBODY_MOBILE)
+    target_compile_definitions(mirobody_core PUBLIC MIROBODY_MOBILE=1)
 else()
-    target_link_libraries(mirobody_core PUBLIC PkgConfig::LIBWEBSOCKETS)
+    if(libwebsockets_FOUND)
+        if(TARGET websockets_shared)
+            target_link_libraries(mirobody_core PUBLIC websockets_shared)
+        elseif(TARGET websockets)
+            target_link_libraries(mirobody_core PUBLIC websockets)
+        else()
+            message(FATAL_ERROR "libwebsockets CONFIG found but no known target (websockets/websockets_shared)")
+        endif()
+    else()
+        target_link_libraries(mirobody_core PUBLIC PkgConfig::LIBWEBSOCKETS)
+    endif()
 endif()
 
 if(yaml-cpp_FOUND)
@@ -633,6 +695,11 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
         PUBLIC_HEADER src/mirobody.h
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
     )
+elseif(MIROBODY_MOBILE)
+    # src/main.cpp *is* the HTTP server's entry point, so there is nothing to
+    # build without the front door. The library targets above still produce a
+    # usable core for C ABI hosts.
+    message(STATUS "skipping the mirobody executable (MIROBODY_MOBILE=ON)")
 else()
     # Desktop / embedded Linux target: build a standalone executable.
     add_executable(mirobody src/main.cpp
@@ -643,10 +710,14 @@ else()
 
     # Crash reporting lives only in the desktop entry point (src/main.cpp), so
     # sentry-native is linked here and the build-time git SHA (the release
-    # fallback) is exposed to it.
-    target_link_libraries(mirobody PRIVATE sentry::sentry)
+    # fallback) is exposed to it. Optional: without the package MIROBODY_HAS_SENTRY
+    # stays 0 and src/sentry.hpp compiles to no-ops.
     target_compile_definitions(mirobody PRIVATE
         MIROBODY_GIT_SHA="${MIROBODY_GIT_SHA}")
+    if(TARGET sentry::sentry)
+        target_link_libraries(mirobody PRIVATE sentry::sentry)
+        target_compile_definitions(mirobody PRIVATE MIROBODY_HAS_SENTRY=1)
+    endif()
 
     # The crashpad backend launches a separate crashpad_handler process during
     # sentry_init; the SDK does not auto-discover it, so src/main.cpp points
@@ -753,8 +824,12 @@ if(MIROBODY_BUILD_JNI AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" 
     target_include_directories(mirobody_jni PRIVATE ${JNI_INCLUDE_DIRS})
 endif()
 
+# The CLIs and tests assume the full core: gemini_live / openai_realtime drive
+# the WebSocket LLM lanes and the suite covers the router, so both are skipped
+# when the front door is off. That build exists to produce a library for an
+# embedded host, not to be developed against.
 option(MIROBODY_BUILD_TOOLS "Build debug CLIs under cli/" ON)
-if(MIROBODY_BUILD_TOOLS AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
+if(MIROBODY_BUILD_TOOLS AND NOT MIROBODY_MOBILE AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
     foreach(_tool mirothinker openai_chat openai_responses gemini gemini_live openai_realtime google_jwt firebase_jwt jwt_keygen fernet mcp agent aws_s3 aliyun_oss azure_blob vendor image document fhir indicator file_parser file_rekey)
         add_executable(${_tool} cli/${_tool}.cpp)
         target_link_libraries(${_tool} PRIVATE mirobody_core)
@@ -765,11 +840,14 @@ if(MIROBODY_BUILD_TOOLS AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS
     # self-registering res/* objects linked in directly -- same reasoning as the
     # app and test targets (see the OBJECT libraries above).
     target_sources(mcp   PRIVATE $<TARGET_OBJECTS:mcp_tools> $<TARGET_OBJECTS:mcp_resources>)
-    target_sources(agent PRIVATE $<TARGET_OBJECTS:agent_impls>)
+    # The agent CLI also needs mcp_tools: an agent's clients are built with
+    # mcp::registry().functions_json(), so without them it would run every turn
+    # with an empty tool list -- not the configuration it is meant to reproduce.
+    target_sources(agent PRIVATE $<TARGET_OBJECTS:agent_impls> $<TARGET_OBJECTS:mcp_tools>)
 endif()
 
 option(MIROBODY_BUILD_TESTS "Build unit tests" ON)
-if(MIROBODY_BUILD_TESTS AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
+if(MIROBODY_BUILD_TESTS AND NOT MIROBODY_MOBILE AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
     enable_testing()
     add_subdirectory(tests)
 endif()

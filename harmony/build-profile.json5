@@ -1,0 +1,48 @@
+{
+  "app": {
+    // Empty by design in the repo: each developer generates a local debug signature via
+    // DevEco (Project Structure → Signing Configs → Automatically generate signature). The
+    // material lives under ~/.ohos and must never be committed to this open-source repo.
+    //
+    // Keep your local signature out of git. After DevEco fills in `signingConfigs` below, run:
+    //   git update-index --skip-worktree harmony/build-profile.json5
+    // Verify with `git ls-files -v harmony/build-profile.json5` — it must print `S`, not `H`.
+    // Use `--no-skip-worktree` only when you intend to change this committed baseline.
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        "compatibleSdkVersion": "5.0.0(12)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true
+          }
+        },
+        "targetSdkVersion": "6.0.1(21)"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

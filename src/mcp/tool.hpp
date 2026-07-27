@@ -204,7 +204,13 @@ public:
     // LLM function-call descriptor variants, JSON-encoded. `style` is "openai"
     // (Chat Completions nested {type,function}) or "gemini" ({name,description,
     // parameters}); any other value falls back to the OpenAI simplified shape.
-    std::string functions_json(const char* style) const;
+    //
+    // `include_auth` false drops the auth-flagged tools from the descriptor: a
+    // context whose turns run unauthenticated (the embedded mobile build today,
+    // user_id 0) must not advertise tools that are guaranteed to answer
+    // "Authentication required" -- the model calls them, burns a round trip,
+    // and has to recover.
+    std::string functions_json(const char* style, bool include_auth = true) const;
 
     // Dispatch a `tools/call`. `arguments` is the JSON-RPC params.arguments
     // value (may be a non-object, in which case the handler sees defaults).

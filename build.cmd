@@ -10,6 +10,7 @@ set "PROJECT_DIR=%~dp0"
 set "_ARCH="
 set "_DB_BACKEND="
 set "_CLEAN="
+set "_MOBILE="
 
 :parse
 if "%~1"=="" goto :parsed
@@ -19,6 +20,7 @@ if /I "%_T%"=="-h"      goto :usage
 if /I "%_T%"=="--help"  goto :usage
 if /I "%_T%"=="help"    goto :usage
 if /I "%_T%"=="clean"   ( set "_CLEAN=1"          & shift & goto :parse )
+if /I "%_T%"=="mobile"  ( set "_MOBILE=1"         & shift & goto :parse )
 if /I "%_T%"=="amd64"   ( set "_ARCH=amd64"       & shift & goto :parse )
 if /I "%_T%"=="x86_64"  ( set "_ARCH=amd64"       & shift & goto :parse )
 if /I "%_T%"=="x64"     ( set "_ARCH=amd64"       & shift & goto :parse )
@@ -63,6 +65,18 @@ set "_ARCH_SUFFIX="
 if /I not "%VS_ARCH%"=="%HOST_ARCH%" set "_ARCH_SUFFIX=-%VS_ARCH%"
 set "_TAG_SUFFIX="
 if defined _DB_TAG set "_TAG_SUFFIX=-%_DB_TAG%"
+
+:: `mobile` builds the shape HarmonyOS/Android/iOS ship: no HTTP front door (so
+:: no libwebsockets) and the BYOK provider menu. Verifying it on a desktop host
+:: catches profile-specific breakage without a device. It gets its own build dir
+:: so it never clobbers the normal one, and yields libraries only -- no
+:: executable, CLIs or tests.
+set "_PROFILE_ARG="
+if defined _MOBILE (
+    set "_PROFILE_ARG=-DMIROBODY_MOBILE=ON"
+    set "_TAG_SUFFIX=%_TAG_SUFFIX%-mobile"
+)
+
 set "BUILD_DIR=%PROJECT_DIR%build%_ARCH_SUFFIX%%_TAG_SUFFIX%"
 set "_DB_BACKEND_ARG=-DMIROBODY_DATABASE_BACKEND=%_DB_BACKEND%"
 
@@ -88,7 +102,7 @@ if not exist "%BUILD_DIR%\build.ninja" (
         -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
         -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% ^
         -DVCPKG_INSTALLED_DIR="%PROJECT_DIR%vcpkg_installed" ^
-        %_DB_BACKEND_ARG%
+        %_DB_BACKEND_ARG% %_PROFILE_ARG%
     if errorlevel 1 exit /b 1
 )
 
@@ -96,7 +110,7 @@ cmake --build "%BUILD_DIR%" --config Release
 goto :eof
 
 :usage
-echo Usage: build.cmd [arch] [backend] [clean]      (tokens in any order)
+echo Usage: build.cmd [arch] [backend] [mobile] [clean]      (tokens in any order)
 echo.
 echo   With no arguments: build the host arch with the POSTGRESQL default
 echo   (into "build"). Pass help / -h / --help / /? to show this help.
@@ -104,6 +118,9 @@ echo.
 echo   Arch      amd64 (or x86_64), arm64, x86       default: host arch
 echo   Backend   pg / postgresql, legacy / pg_legacy, mysql, sqlite, ck / clickhouse, duckdb
 echo             (omit for the POSTGRESQL default)
+echo   mobile    build the profile HarmonyOS/Android/iOS ship: no HTTP front door
+echo             (no libwebsockets) and the BYOK provider menu (a provider with
+echo             no key is not listed). Libraries only -- no exe, CLIs or tests.
 echo   clean     clear CMake's cache (keep the dir's vcpkg_installed) and
 echo             reconfigure -- use after changing options or moving the repo
 echo   help / -h / --help / /?   show this help

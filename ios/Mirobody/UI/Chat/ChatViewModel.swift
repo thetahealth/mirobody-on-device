@@ -17,6 +17,8 @@ final class ChatViewModel: ObservableObject {
     /// Per-model download/ready state, keyed by OnDeviceModelSpec.id — drives the model
     /// manager and which on-device models appear in the picker.
     @Published private(set) var onDeviceStatuses: [String: OnDeviceModelStatus] = [:]
+    /// User-imported on-device models (picked from the Files app, live outside the sandbox).
+    @Published private(set) var onDeviceImported: [OnDeviceModelSpec] = []
     /// Privacy mode: entering swaps the session for a fresh ephemeral one; while on,
     /// turns aren't persisted and each request carries `incognito:true`. Mirrors web.
     @Published private(set) var incognito = false
@@ -46,10 +48,15 @@ final class ChatViewModel: ObservableObject {
         self.modelManager = modelManager
         self.language = settings.language
         self.onDeviceStatuses = modelManager.statuses
+        self.onDeviceImported = modelManager.imported
         settings.$language.sink { [weak self] lang in self?.language = lang }.store(in: &cancellables)
         modelManager.$statuses.sink { [weak self] st in
             self?.onDeviceStatuses = st
             self?.rebuildProviders(statuses: st)
+        }.store(in: &cancellables)
+        modelManager.$imported.sink { [weak self] imported in
+            self?.onDeviceImported = imported
+            self?.rebuildProviders()
         }.store(in: &cancellables)
         loadProviders()
     }
@@ -60,6 +67,14 @@ final class ChatViewModel: ObservableObject {
     func pauseOnDeviceModel(_ spec: OnDeviceModelSpec) { modelManager.pauseDownload(spec) }
     /// Remove a downloaded model to reclaim storage.
     func deleteOnDeviceModel(_ spec: OnDeviceModelSpec) { modelManager.delete(spec) }
+    /// Import a model file the user picked from the Files app (lives outside the sandbox).
+    func importOnDeviceModel(_ url: URL) {
+        if modelManager.importModel(from: url) == nil {
+            error = "Could not import model file"
+        }
+    }
+    /// Forget an imported model (its file is kept — it's the user's own).
+    func deleteImportedOnDeviceModel(_ spec: OnDeviceModelSpec) { modelManager.deleteImported(spec) }
 
     func loadProviders() {
         Task {
@@ -88,7 +103,8 @@ final class ChatViewModel: ObservableObject {
         let downloaded = OnDeviceModel.catalog
             .filter { st[$0.id]?.isReady == true }
             .map { ProviderInfo.forModel($0) }
-        let list = remoteProviders + downloaded + [ProviderInfo.manage]
+        let importedEntries = onDeviceImported.map { ProviderInfo.forModel($0) }
+        let list = remoteProviders + downloaded + importedEntries + [ProviderInfo.manage]
         providers = list
         selected = selected.flatMap { s in list.first { $0.key == s.key } }
             ?? list.first { $0.key == savedProviderKey }

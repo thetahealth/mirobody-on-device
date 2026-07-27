@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<!-- Offscreen render host: MathJax (LaTeX -> SVG text) and ECharts (option ->
+     PNG data URL). Loaded into ONE invisible Web component
+     (core/RenderHost.ets); never shown. ArkTS calls window.renderTex /
+     window.renderChart via runJavaScript, gets a JSON string back, writes the
+     payload to a sandbox file, and the chat UI draws a native Image — the
+     message list itself never hosts a webview. -->
+<head>
+  <meta charset="utf-8">
+  <script>
+    window.MathJax = {
+      startup: { typeset: false },
+      svg: { fontCache: 'local' }
+    };
+  </script>
+  <script src="tex-svg.js" async></script>
+  <script src="echarts.min.js"></script>
+  <script>
+    // 1ex -> px at the SVG's default 16px math font. The ArkTS side scales the
+    // result by the user's font-scale setting.
+    var EX_PX = 8.0;
+
+    // tex -> {ok, svg, w, h} (JSON string). display=true for $$ blocks. SVG
+    // travels as TEXT (file:// is dependable everywhere, svg data URIs less so).
+    window.renderTex = function (tex, display) {
+      try {
+        var node = MathJax.tex2svg(tex, { display: !!display });
+        var svg = node.querySelector('svg');
+        if (!svg) { return JSON.stringify({ ok: false }); }
+        var w = Math.ceil(parseFloat(svg.getAttribute('width')) * EX_PX);
+        var h = Math.ceil(parseFloat(svg.getAttribute('height')) * EX_PX);
+        var xml = new XMLSerializer().serializeToString(svg);
+        // MathJax accumulates a per-document font cache; reset so one bad
+        // formula can't poison later ones.
+        MathJax.startup.document.clear();
+        return JSON.stringify({ ok: true, svg: xml, w: w, h: h });
+      } catch (e) {
+        return JSON.stringify({ ok: false, err: String(e).substring(0, 120) });
+      }
+    };
+
+    // ECharts option JSON -> {ok, png (base64, no prefix), w, h}. A fixed
+    // logical canvas at 2x pixel ratio: the UI letterboxes to the bubble width,
+    // so exact size only affects sharpness, and 2x covers phone densities.
+    var CHART_W = 640, CHART_H = 400;
+
+    window.renderChart = function (optionJson) {
+      var el = document.createElement('div');
+      document.body.appendChild(el);
+      var chart = null;
+      try {
+        var option = JSON.parse(optionJson);
+        option.animation = false;   // a static image cannot animate
+        chart = echarts.init(el, null,
+          { width: CHART_W, height: CHART_H, devicePixelRatio: 2 });
+        chart.setOption(option);
+        var url = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        return JSON.stringify({
+          ok: true,
+          png: url.substring('data:image/png;base64,'.length),
+          w: CHART_W,
+          h: CHART_H
+        });
+      } catch (e) {
+        return JSON.stringify({ ok: false, err: String(e).substring(0, 120) });
+      } finally {
+        if (chart) { chart.dispose(); }
+        document.body.removeChild(el);
+      }
+    };
+  </script>
+</head>
+<body></body>
+</html>

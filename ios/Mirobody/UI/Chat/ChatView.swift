@@ -70,9 +70,12 @@ struct ChatView: View {
             sheetEnv {
                 OnDeviceModelView(
                     statuses: vm.onDeviceStatuses,
+                    imported: vm.onDeviceImported,
                     onDownload: vm.downloadOnDeviceModel,
                     onPause: vm.pauseOnDeviceModel,
-                    onDelete: vm.deleteOnDeviceModel
+                    onDelete: vm.deleteOnDeviceModel,
+                    onImport: vm.importOnDeviceModel,
+                    onDeleteImported: vm.deleteImportedOnDeviceModel
                 )
             }
         }

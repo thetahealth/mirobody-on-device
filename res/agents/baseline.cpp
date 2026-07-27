@@ -265,18 +265,54 @@ std::string run_tool_for_user(const std::string& name, const std::string& args_j
     return mirobody::mcp::run_mcp_tool(name, args_json, user, ctx);
 }
 
+//------------------------------------------------------------------------------
+// Provider menu policy
+//------------------------------------------------------------------------------
+
+#ifndef MIROBODY_MOBILE
+#  define MIROBODY_MOBILE 0
+#endif
+
+// Does a provider with no credentials still appear in the selector?
+//
+// Desktop / server, including the Qt and Electron frontends -- NO, keep it: the
+// operator owns the config, so an entry that errors "no API key" is the quickest
+// way to discover what is missing.
+//
+// Mobile (HarmonyOS / Android / iOS) -- YES, hide it: keys are BYOK, pasted in by
+// the end user. mirobody_get_providers() IS the app's model picker, so a provider
+// they cannot call is not a diagnostic, just a dead row that errors on tap.
+//
+// Set from the build target, not from config -- see MIROBODY_MOBILE in CMakeLists.txt.
+const bool kRequireCredentials = (MIROBODY_MOBILE != 0);
+
+// Register `client` under `key`, unless credentials are required and `credential`
+// is empty. `credential` is whatever makes the provider callable -- an API key for
+// the hosted ones, a base URL for a local server that needs none.
+void offer(ClientMap& clients, const char* key, const std::string& credential,
+           std::shared_ptr<mirobody::llm::Client> client) {
+    if (kRequireCredentials && credential.empty()) {
+        mirobody::platform::log_debug("agent: '%s' not offered (no credential)", key);
+        return;
+    }
+    clients[key] = client;
+}
+
 // Build BaselineAgent's provider clients from config. Each provider is keyed by the
-// model name the /api/providers selector shows ("Baseline/<provider>"). Keys / URLs
+// model name the /api/providers selector shows ("Baseline/<provider>") -- always
+// slash-free, because agent/provider routing splits the token on "/". Keys / URLs
 // are read from the typed Config fields where present, otherwise the shared
 // key-value store (which also falls back to environment variables), matching
-// the keys the debug CLIs use. All three are registered unconditionally so they
-// appear in the selector; a provider whose credentials are unset simply errors
-// at call time.
+// the keys the debug CLIs use. Whether an unconfigured provider is listed at all
+// is the kRequireCredentials decision above.
 ClientMap load_clients(const mirobody::Config& cfg) {
     ClientMap clients;
 
     // The function-call descriptors + executor handed to the OpenAI / Gemini
-    // clients so the model can invoke the registered MCP tools locally.
+    // clients so the model can invoke the registered MCP tools locally. All
+    // tools, auth-scoped included, on every profile: the embedded mobile build
+    // runs its turns as the device owner (user_id 1 -- see run_chat_turn in
+    // src/platform/c_api.cpp), so the auth tools genuinely work there too.
     const std::string openai_tools = mirobody::mcp::registry().functions_json("openai");
     const std::string gemini_tools = mirobody::mcp::registry().functions_json("gemini");
 
@@ -295,19 +331,95 @@ ClientMap load_clients(const mirobody::Config& cfg) {
         opt.output_price   = 0.40;   // USD / 1M output tokens
         opt.tools_json     = openai_tools;
         opt.tool_executor  = &run_tool_for_user;
-        clients["gpt-5-nano"] = mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt);
+        offer(clients, "gpt-5-nano", opt.api_key,
+              mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt));
     }
 
-    // gemini-2.5-flash -- Google AI Studio.
+    // NVIDIA NIM (build.nvidia.com), OpenAI-compatible, all on the free developer
+    // tier so list prices are zero. Every API model id carries a vendor slash
+    // while the selector key stays slash-free -- agent/provider routing splits the
+    // token on "/". Model ids below were read from GET /v1/models and each was
+    // confirmed callable (2026-07-27); the free tier is heavily oversubscribed, so
+    // a transient 503 "Worker local total request limit reached" is normal and a
+    // retry usually lands.
+    {
+        struct NvidiaModel {
+            const char* key;     // slash-free selector key
+            const char* model;   // NIM API model id
+            const char* extra;   // extra_body_json, or "" for none
+        };
+        // NOT offered: NVIDIA's DeepSeek V4 (deepseek-ai/deepseek-v4-flash and
+        // -pro). Two strikes, verified 2026-07-27. (1) Reliability: pro never
+        // completed a single call all day (40s/120s hangs, 500, 504) and flash
+        // intermittently returns an empty turn; the free tier is oversubscribed
+        // on exactly these weights. (2) A quirk we would carry forever: both are
+        // reasoning models that stream ONLY reasoning_content -- an empty answer
+        // -- unless the request carries
+        //     {"chat_template_kwargs":{"thinking":false}}
+        // (that is what OpenAIChatOptions::extra_body_json exists for, should
+        // they come back).
+        const NvidiaModel kModels[] = {
+            { "glm-5.2",           "z-ai/glm-5.2",                  "" },
+            { "gemma-4-31b-it",    "google/gemma-4-31b-it",         "" },
+            // A reasoning model too, but a well-behaved one: it streams
+            // reasoning_content first and then content, which the client already
+            // maps to Thinking then Reply. It does spend a large slice of the
+            // token budget thinking before answering.
+            { "gpt-oss-120b",      "openai/gpt-oss-120b",           "" },
+        };
+        for (std::size_t i = 0; i < sizeof(kModels) / sizeof(kModels[0]); ++i) {
+            mirobody::llm::OpenAIChatOptions opt;
+            opt.api_key         = cfg.nvidia.api_key;
+            opt.base_url        = cfg.nvidia.base_url + "/v1";   // client appends /chat/completions
+            opt.model           = kModels[i].model;
+            opt.input_price     = 0.0;    // free developer tier
+            opt.output_price    = 0.0;
+            opt.tools_json      = openai_tools;
+            opt.tool_executor   = &run_tool_for_user;
+            opt.extra_body_json = kModels[i].extra;
+            offer(clients, kModels[i].key, opt.api_key,
+                  mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt));
+        }
+    }
+
+    // glm-4.7-flash -- Zhipu GLM (open.bigmodel.cn), OpenAI-compatible. Permanently
+    // free with no total cap; the recommended long-term free domestic option.
+    // base_url already includes the /api/paas/v4 root, so no "/v1" is appended.
+    {
+        mirobody::llm::OpenAIChatOptions opt;
+        opt.api_key       = cfg.zhipu.api_key;
+        opt.base_url      = cfg.zhipu.base_url;   // /api/paas/v4 root; client appends /chat/completions
+        opt.model         = "glm-4.7-flash";
+        opt.input_price   = 0.0;    // permanently free
+        opt.output_price  = 0.0;
+        opt.tools_json    = openai_tools;
+        opt.tool_executor = &run_tool_for_user;
+        offer(clients, "glm-4.7-flash", opt.api_key,
+              mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt));
+    }
+
+    // Gemini -- Google AI Studio. The model differs by target, and the two are
+    // mutually exclusive rather than additive:
+    //
+    //   mobile  -> gemini-3.6-flash. gemini-2.5-flash returns 404 on this path in
+    //              practice, so listing it would be a dead row.
+    //   desktop -> gemini-2.5-flash. The HIPAA deployment goes through Vertex AI,
+    //              and Vertex has no gemini-3.6-flash node in North America.
     {
         mirobody::llm::GeminiOptions opt;
         opt.api_key = cfg.store.get_str("GOOGLE_API_KEY", cfg.gemini.api_key);
-        opt.model   = "gemini-2.5-flash";
+#if MIROBODY_MOBILE
+        const char* const kGeminiModel = "gemini-3.6-flash";
+#else
+        const char* const kGeminiModel = "gemini-2.5-flash";
+#endif
+        opt.model         = kGeminiModel;
         opt.input_price   = 0.30;   // USD / 1M input tokens
         opt.output_price  = 2.50;   // USD / 1M output tokens (incl. thinking tokens)
         opt.tools_json    = gemini_tools;
         opt.tool_executor = &run_tool_for_user;
-        clients["gemini-2.5-flash"] = mirobody::llm::make_client<mirobody::llm::GeminiClient>(opt);
+        offer(clients, kGeminiModel, opt.api_key,
+              mirobody::llm::make_client<mirobody::llm::GeminiClient>(opt));
     }
 
     // mirothinker-1.7 -- MiroMind OpenAI-compatible endpoint (provider-native
@@ -320,7 +432,8 @@ ClientMap load_clients(const mirobody::Config& cfg) {
         if (!base.empty()) opt.base_url = base;
         const std::string model = cfg.store.get_str("MIROTHINKER_MODEL");
         if (!model.empty()) opt.model = model;
-        clients["mirothinker-1.7"] = mirobody::llm::make_client<mirobody::llm::MiroThinkerClient>(opt);
+        offer(clients, "mirothinker-1.7", opt.api_key,
+              mirobody::llm::make_client<mirobody::llm::MiroThinkerClient>(opt));
     }
 
     // gemma-4-e2b -- the same model the native apps run on-device (Gemma 4 E2B),
@@ -328,7 +441,8 @@ ClientMap load_clients(const mirobody::Config& cfg) {
     // vLLM). Lets the mobile clients chat with a server-hosted copy -- handy for
     // checking the model's behaviour without the ~2.5 GB on-device download.
     // Registered only when a base URL is configured, so it never shows as a broken
-    // provider by default (the built-ins above are always-on and error at call).
+    // provider by default. Its credential is that base URL, not a key -- a local
+    // server usually wants none -- so that is what gates it on every target.
     {
         const std::string base = cfg.store.get_str("GEMMA_CHAT_BASE_URL",
                                      cfg.store.get_str("OLLAMA_BASE_URL", ""));
@@ -341,7 +455,8 @@ ClientMap load_clients(const mirobody::Config& cfg) {
             opt.output_price  = 0.0;
             opt.tools_json    = openai_tools;     // tool use depends on the serving stack
             opt.tool_executor = &run_tool_for_user;
-            clients["gemma-4-e2b"] = mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt);
+            offer(clients, "gemma-4-e2b", base,
+                  mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt));
         }
     }
 
