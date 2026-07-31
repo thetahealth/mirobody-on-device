@@ -7,6 +7,11 @@
 .cxx
 # Cross-compiled C++ dependencies for the embedded core (build-prebuilt.cmd/.sh)
 /prebuilt
+# llama.cpp cross-build tree for the on-device engine (build-llama.cmd). Cached and
+# reused across runs, hence kept in-tree rather than in a temp dir; ~24 MB of objects.
+# `**/build` above does not catch it — the name neither equals nor starts with "build".
+# The assembled SDK it copies out to lives outside the repo (D:\opt\llama-sdk-ohos-*).
+/.llama-build
 /.clangd
 /.clang-format
 /.clang-tidy

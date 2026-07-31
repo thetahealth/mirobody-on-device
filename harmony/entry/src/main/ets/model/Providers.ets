@@ -1,9 +1,10 @@
 /**
  * BYOK provider registry — the cloud lane's provider contract.
  *
- * Mirrors docs/byok-providers.md: each provider is fully described by a record; the app
- * ships a built-in list and lets the user pick one + paste a key. `baseUrl` and `model`
- * stay editable so power users can point at any OpenAI-compatible endpoint.
+ * Mirrors docs/privacy-tiers.md (cloud lanes — provider contract): each provider is fully
+ * described by a record; the app ships a built-in list and lets the user pick one + paste
+ * a key. `baseUrl` and `model` stay editable so power users can point at any
+ * OpenAI-compatible endpoint.
  *
  * Nothing here is hard-coded at a call site — the transport reads these records only.
  */
@@ -25,7 +26,7 @@ export interface ProviderRecord {
 
 /**
  * 2026-07 snapshot. Free-tier limits and free model ids rotate fast — verify against each
- * provider's live console before shipping (see docs/byok-providers.md line 40).
+ * provider's live console before shipping (docs/privacy-tiers.md, "Providers").
  */
 export const BUILTIN_PROVIDERS: ProviderRecord[] = [
   {

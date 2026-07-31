@@ -252,4 +252,62 @@ export class NativeCore {
       }
     });
   }
+
+  /**
+   * Run one turn on the ON-DEVICE model. Same contract as chat() above — blocking
+   * native call on a worker thread, events marshalled back in order, one terminal
+   * event — so the caller cannot tell the lanes apart.
+   *
+   * `modelPath` is an absolute path the app has been granted (see
+   * core/LocalModelStore.ets); the engine mmaps it, and it stays resident between
+   * turns unless the path changes.
+   */
+  static localChat(
+    modelPath: string,
+    messages: ChatMessage[],
+    cb: StreamCallbacks,
+    canceler?: Canceler
+  ): Promise<void> {
+    const wire: WireMessage[] = [];
+    for (const m of messages) {
+      wire.push({ role: m.role, content: m.content });
+    }
+
+    return new Promise<void>((resolve) => {
+      if (canceler !== undefined && canceler.stopped) {
+        cb.onDone();
+        resolve();
+        return;
+      }
+
+      let errored = false;
+      const turnId = mirobody.nativeLocalChat(modelPath, JSON.stringify(wire),
+        (type: string, content: string) => {
+          if (type === 'reply') {
+            cb.onDelta(content);
+          } else if (type === 'thinking') {
+            if (cb.onThinking !== undefined) {
+              cb.onThinking(content);
+            }
+          } else if (type === 'error') {
+            errored = true;
+            cb.onError(0, content);
+          } else if (type === 'stats') {
+            // Timings for the probe/diagnostics only; not part of the reply.
+            console.info('mirobody local stats ' + content);
+          } else if (type === 'end' || type === 'aborted') {
+            if (!errored) {
+              cb.onDone();
+            }
+            resolve();
+          }
+        });
+
+      if (canceler !== undefined) {
+        canceler.cancel = () => {
+          mirobody.nativeChatCancel(turnId);
+        };
+      }
+    });
+  }
 }

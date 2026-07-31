@@ -273,26 +273,21 @@ std::string run_tool_for_user(const std::string& name, const std::string& args_j
 #  define MIROBODY_MOBILE 0
 #endif
 
-// Does a provider with no credentials still appear in the selector?
+// A provider with no credentials is never listed, on any target: it cannot answer
+// a single turn, so it is a dead row in the selector that errors on use. This used
+// to be mobile-only (kRequireCredentials, MIROBODY_MOBILE) on the argument that a
+// desktop operator owns the config and a failing entry is the quickest way to see
+// what is missing -- that discovery now comes from the startup log below, at info
+// level so it is visible without lowering the log level, which is where a
+// misconfiguration belongs rather than in the end user's model picker.
 //
-// Desktop / server, including the Qt and Electron frontends -- NO, keep it: the
-// operator owns the config, so an entry that errors "no API key" is the quickest
-// way to discover what is missing.
-//
-// Mobile (HarmonyOS / Android / iOS) -- YES, hide it: keys are BYOK, pasted in by
-// the end user. mirobody_get_providers() IS the app's model picker, so a provider
-// they cannot call is not a diagnostic, just a dead row that errors on tap.
-//
-// Set from the build target, not from config -- see MIROBODY_MOBILE in CMakeLists.txt.
-const bool kRequireCredentials = (MIROBODY_MOBILE != 0);
-
-// Register `client` under `key`, unless credentials are required and `credential`
-// is empty. `credential` is whatever makes the provider callable -- an API key for
-// the hosted ones, a base URL for a local server that needs none.
+// Register `client` under `key` unless `credential` is empty. `credential` is
+// whatever makes the provider callable -- an API key for the hosted ones, a base
+// URL for a local server that needs none.
 void offer(ClientMap& clients, const char* key, const std::string& credential,
            std::shared_ptr<mirobody::llm::Client> client) {
-    if (kRequireCredentials && credential.empty()) {
-        mirobody::platform::log_debug("agent: '%s' not offered (no credential)", key);
+    if (credential.empty()) {
+        mirobody::platform::log_info("agent: '%s' not offered (no credential)", key);
         return;
     }
     clients[key] = client;
@@ -303,8 +298,8 @@ void offer(ClientMap& clients, const char* key, const std::string& credential,
 // slash-free, because agent/provider routing splits the token on "/". Keys / URLs
 // are read from the typed Config fields where present, otherwise the shared
 // key-value store (which also falls back to environment variables), matching
-// the keys the debug CLIs use. Whether an unconfigured provider is listed at all
-// is the kRequireCredentials decision above.
+// the keys the debug CLIs use. An unconfigured provider is skipped by offer()
+// above, so what this returns is exactly what can be called.
 ClientMap load_clients(const mirobody::Config& cfg) {
     ClientMap clients;
 

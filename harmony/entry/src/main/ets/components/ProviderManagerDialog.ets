@@ -155,17 +155,17 @@ export struct ProviderManagerDialog {
           .fontWeight(FontWeight.Medium)
         Text(this.rs($r('app.string.provider_configured_at'), this.formatTime(c.savedAt)))
           .fontSize(12)
-          .fontColor('#9A9A9A')
+          .fontColor($r('app.color.text_tertiary'))
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
       Button({ type: ButtonType.Circle }) {
-        Text('－').fontSize(18).fontColor(Color.White).fontWeight(FontWeight.Bold)
+        Text('－').fontSize(18).fontColor($r('app.color.on_brand')).fontWeight(FontWeight.Bold)
       }
       .width(28)
       .height(28)
-      .backgroundColor('#D24C57')
+      .backgroundColor($r('app.color.danger'))
       .onClick(() => {
         this.onDelete(c.providerId);
       })
@@ -173,7 +173,7 @@ export struct ProviderManagerDialog {
     .width('100%')
     .alignItems(VerticalAlign.Center)
     .padding({ top: 13, bottom: 13 })
-    .border({ width: { bottom: 0.5 }, color: '#EEEEEE' })
+    .border({ width: { bottom: 0.5 }, color: $r('app.color.divider') })
   }
 
   build() {
@@ -185,7 +185,7 @@ export struct ProviderManagerDialog {
           .layoutWeight(1)
         Text('✕')
           .fontSize(20)
-          .fontColor('#8A8A8A')
+          .fontColor($r('app.color.text_tertiary'))
           .padding({ left: 12, top: 2, bottom: 2 })
           .onClick(() => {
             this.controller.close();
@@ -197,14 +197,14 @@ export struct ProviderManagerDialog {
       .alignItems(VerticalAlign.Center)
       Text($r('app.string.provider_intro'))
         .fontSize(12)
-        .fontColor('#8A8A8A')
+        .fontColor($r('app.color.text_tertiary'))
         .width('100%')
         .margin({ bottom: 12 })
 
       // ── Add a key ──────────────────────────────────────────────
       Text($r('app.string.provider_add_key'))
         .fontSize(13)
-        .fontColor('#8A8A8A')
+        .fontColor($r('app.color.text_tertiary'))
         .width('100%')
         .margin({ bottom: 6 })
 
@@ -235,7 +235,7 @@ export struct ProviderManagerDialog {
           })
         Text($r('app.string.provider_register'))
           .fontSize(13)
-          .fontColor('#3F7FC1')
+          .fontColor($r('app.color.brand_text'))
           .onClick(() => {
             this.openRegister(this.selectedProvider().registerUrl);
           })
@@ -250,7 +250,7 @@ export struct ProviderManagerDialog {
       if (this.result.length > 0) {
         Text(this.result)
           .fontSize(12)
-          .fontColor(this.result.startsWith('✗') ? '#D24C57' : '#46A86A')
+          .fontColor(this.result.startsWith('✗') ? $r('app.color.danger') : $r('app.color.success'))
           .width('100%')
           .margin({ top: 6 })
       }
@@ -258,14 +258,14 @@ export struct ProviderManagerDialog {
       // ── Configured keys ────────────────────────────────────────
       Text(this.rs($r('app.string.provider_configured_count'), this.configured.length))
         .fontSize(13)
-        .fontColor('#8A8A8A')
+        .fontColor($r('app.color.text_tertiary'))
         .width('100%')
         .margin({ top: 16, bottom: 4 })
 
       if (this.configured.length === 0) {
         Text($r('app.string.provider_no_keys'))
           .fontSize(13)
-          .fontColor('#B0B0B0')
+          .fontColor($r('app.color.text_disabled'))
           .width('100%')
           .padding({ top: 13, bottom: 13 })
       } else {

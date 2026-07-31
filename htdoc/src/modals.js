@@ -16,6 +16,7 @@ const color  = config.color;
 const state  = config.state;
 const LANGUAGES        = config.LANGUAGES;
 const FONT_TIERS       = config.FONT_TIERS;
+const THEMES           = config.THEMES;
 const BASE_URL_PRESETS = config.BASE_URL_PRESETS;
 
 const widgets = require("./widgets");
@@ -55,7 +56,7 @@ function showLanguageModal(current, onPick) {
             var selected = code === current;
             var item = ui.setText(ui.dom("button", {
                 textAlign: "start", width: "100%", border: "none",
-                background: selected ? color.userBubble : "transparent",
+                background: selected ? color.selectedBg : "transparent",
                 padding: "12px", borderRadius: "10px", cursor: "pointer",
                 font: "inherit", fontSize: "1rem",
                 fontWeight: selected ? "600" : "400",
@@ -68,6 +69,59 @@ function showLanguageModal(current, onPick) {
             item.addEventListener("click", function () { onPick(code); dismiss(); });
             list.appendChild(item);
         })(LANGUAGES[i][0], LANGUAGES[i][1]);
+    }
+    card.appendChild(list);
+
+    backdrop.addEventListener("click", function (evt) {
+        if (evt.target === backdrop) { dismiss(); }
+    });
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+};
+
+//----------------------------------------------------------------------------
+
+// Appearance picker: system / light / dark, the same list dialog as the
+// language picker. Picking one calls onPick(theme) and dismisses.
+function showThemeModal(current, onPick) {
+    var backdrop = ui.dom("div", {
+        position: "fixed", inset: "0", background: "rgba(0, 0, 0, 0.4)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px", zIndex: "1000"
+    });
+
+    var card = ui.dom("div", {
+        background: color.background, borderRadius: "14px", padding: "16px",
+        width: "100%", maxWidth: "360px",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
+        display: "flex", flexDirection: "column"
+    });
+    function dismiss() {
+        if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
+    };
+    var head = widgets.modalHeader(t("appearance"), dismiss);
+    head.style.padding = "4px 8px 12px";
+    card.appendChild(head);
+
+    var list = ui.dom("div", { display: "flex", flexDirection: "column" });
+    for (var i = 0; i < THEMES.length; i ++) {
+        (function (theme, labelKey) {
+            var selected = theme === current;
+            var item = ui.setText(ui.dom("button", {
+                textAlign: "start", width: "100%", border: "none",
+                background: selected ? color.selectedBg : "transparent",
+                padding: "12px", borderRadius: "10px", cursor: "pointer",
+                font: "inherit", fontSize: "1rem",
+                fontWeight: selected ? "600" : "400",
+                color: selected ? color.primary : color.onSurface
+            }, { type: "button" }), t(labelKey));
+            if (!selected) {
+                item.addEventListener("mouseenter", function () { item.style.background = color.surfaceLow; });
+                item.addEventListener("mouseleave", function () { item.style.background = "transparent"; });
+            }
+            item.addEventListener("click", function () { onPick(theme); dismiss(); });
+            list.appendChild(item);
+        })(THEMES[i][0], THEMES[i][1]);
     }
     card.appendChild(list);
 
@@ -107,7 +161,9 @@ function showConfirmModal(title, message, confirmText, danger, onConfirm) {
 
     var cancel = button(t("cancel"), false, { click: dismiss });
     var confirm = button(confirmText, true);
-    if (danger) { ui.setStyle(confirm, { background: color.error }); }
+    // `onError` (not onPrimary): the sheet pairs a deep brick ink with the pale
+    // salmon dark fill -- the primary's navy glyph is a different pairing.
+    if (danger) { ui.setStyle(confirm, { background: color.error, color: color.onError }); }
     confirm.addEventListener("click", function () { dismiss(); onConfirm(); });
 
     var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end", gap: "8px" });
@@ -165,10 +221,16 @@ function showAlertModal(title, message, okText, onOk) {
 
 //----------------------------------------------------------------------------
 
-// Backend base-URL modal: an editable field (with the preset origins as
-// suggestions), validated as an http(s) URL or left blank to use this server.
-// Saving routes all later requests through net.setBaseUrl and reloads the
-// provider list from the new backend. Mirrors the app's BaseUrlDialog.
+// Backend base-URL modal: an editable field plus the preset origins as one-click
+// chips, validated as an http(s) URL or left blank to use this server. Saving
+// routes all later requests through net.setBaseUrl. Mirrors the app's
+// BaseUrlDialog.
+//
+// Actually changing the backend signs every account out first (confirmed), and
+// Save is painted in the danger color to say so before it's pressed: sessions are
+// issued by one server and mean nothing to another, so carrying them across would
+// only produce a 401 on the next request. Re-saving the same URL changes nothing
+// and stays a plain dismiss.
 function showBackendModal() {
     var backdrop = ui.dom("div", {
         position: "fixed", inset: "0", background: "rgba(0, 0, 0, 0.4)",
@@ -187,15 +249,70 @@ function showBackendModal() {
         fontSize: "0.875rem", color: color.onSurfaceVar, lineHeight: "1.4"
     }), t("backendSubtitle")));
 
-    var listId = "mb-backend-presets";
-    var input = field({ type: "text", placeholder: net.appBase() || window.location.origin, list: listId, autocomplete: "off" });
+    var input = field({ type: "text", placeholder: net.appBase() || window.location.origin, autocomplete: "off" });
     input.value = net.getBaseUrl();
-    var datalist = ui.dom("datalist", null, { id: listId });
-    for (var i = 0; i < BASE_URL_PRESETS.length; i ++) {
-        datalist.appendChild(ui.dom("option", null, { value: BASE_URL_PRESETS[i] }));
-    }
     card.appendChild(input);
-    card.appendChild(datalist);
+
+    // The presets used to be a <datalist>, which is a typeahead filter rather than
+    // a menu: with the field pre-filled with the current backend, the browser hid
+    // every preset that didn't start with it, so the list looked like it held only
+    // the current server. Chips instead -- always all of them, one click each.
+    var presetRow = ui.dom("div", {
+        display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center"
+    });
+    presetRow.appendChild(ui.setText(ui.dom("span", {
+        fontSize: "0.75rem", color: color.onSurfaceVar, flex: "0 0 auto"
+    }), t("backendPresets")));
+    // Each chip registers a repaint here; typing in the field re-runs them all so
+    // the "you are here" tint tracks the text, however it was entered.
+    var chipRefreshers = [];
+    function refreshChips() {
+        for (var c = 0; c < chipRefreshers.length; c ++) { chipRefreshers[c](); }
+    };
+    input.addEventListener("input", refreshChips);
+
+    var seen = {};
+    for (var i = 0; i < BASE_URL_PRESETS.length; i ++) {
+        var url = (BASE_URL_PRESETS[i] || "").replace(/\/+$/, "");
+        // The first preset is this server's own origin, so it can coincide with a
+        // hardcoded one when the client is served from it -- one chip, not two.
+        if (!url || seen[url]) { continue; }
+        seen[url] = true;
+        presetRow.appendChild(presetChip(url));
+    }
+    card.appendChild(presetRow);
+
+    // A preset chip: fills the field (it stays editable, so a preset is a starting
+    // point, not a commitment). The one matching the field's current content is
+    // tinted to show where you are.
+    function presetChip(url) {
+        var chip = ui.dom("button", {
+            font: "inherit", fontSize: "0.75rem", padding: "5px 10px",
+            borderRadius: "9px", border: "1px solid " + color.outlineVar,
+            background: "transparent", color: color.onSurface,
+            cursor: "pointer", maxWidth: "100%", overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap"
+        }, { type: "button", title: url });
+        // The full URL, scheme included: it is exactly what the field will hold, and
+        // two presets can differ by nothing else.
+        ui.setText(chip, url);
+        function refresh() {
+            var on = input.value.trim().replace(/\/+$/, "") === url;
+            ui.setStyle(chip, {
+                background: on ? color.selectedBg : "transparent",
+                borderColor: on ? color.primary : color.outlineVar,
+                color: on ? color.primary : color.onSurface
+            });
+        };
+        chip.addEventListener("click", function () {
+            input.value = url;
+            ui.setStyle(error, { display: "none" });
+            refreshChips();
+        });
+        chipRefreshers.push(refresh);
+        refresh();
+        return chip;
+    };
 
     var error = ui.dom("div", {
         fontSize: "0.8rem", color: color.error, minHeight: "1em", display: "none"
@@ -209,8 +326,22 @@ function showBackendModal() {
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     };
 
+    // Point the client at `url` ("" = this server). `signOut` drops every stored
+    // session on the way, which also re-renders and re-fetches the provider list,
+    // so that branch must not do it twice.
+    function apply(url, signOut) {
+        net.setBaseUrl(url);
+        dismiss();
+        state.providers = [];
+        if (signOut) { app.signOutAll(); return; }
+        if (!state.streaming) { app.render(); }
+        app.loadProviders();
+    };
+
     var cancel = button(t("cancel"), false, { click: dismiss });
+    // Danger-colored: pressing this ends the session (see the header comment).
     var save = button(t("save"), true);
+    ui.setStyle(save, { background: color.error, color: color.onError });
     save.addEventListener("click", function () {
         var v = input.value.trim().replace(/\/+$/, "");
         if (v && !/^https?:\/\/\S+$/i.test(v)) {
@@ -218,13 +349,15 @@ function showBackendModal() {
             ui.setStyle(error, { display: "block" });
             return;
         }
-        net.setBaseUrl(v);
-        dismiss();
-        // Re-fetch providers from the new backend; the existing session token
-        // rides along and, if the new backend rejects it, a 401 signs out.
-        state.providers = [];
-        if (!state.streaming) { app.render(); }
-        app.loadProviders();
+        // Compare what the two sides RESOLVE to, not the raw strings: blank means
+        // "this server", so clearing the field when nothing was stored is not a
+        // change, and neither is re-picking the origin we're already served from.
+        if ((v || net.appBase()) === net.getBaseUrl()) { dismiss(); return; }
+        // Signed out already (the settings menu is reachable from the login view),
+        // so there's no session to end and nothing to confirm.
+        if (!net.getToken()) { apply(v); return; }
+        showConfirmModal(t("backendSwitch"), t("backendSwitchConfirm"),
+                         t("backendSwitchAction"), true, function () { apply(v, true); });
     });
 
     var actions = ui.dom("div", { display: "flex", justifyContent: "flex-end", gap: "8px" });
@@ -418,7 +551,7 @@ function showManageCircleModal() {
     function badge(text, strong) {
         return ui.setText(ui.dom("span", {
             fontSize: "0.72rem", padding: "2px 8px", borderRadius: "10px", flex: "0 0 auto",
-            background: strong ? color.userBubble : color.surfaceLow,
+            background: strong ? color.selectedBg : color.surfaceLow,
             color: strong ? color.primary : color.onSurfaceVar, whiteSpace: "nowrap"
         }), text);
     }
@@ -437,7 +570,7 @@ function showManageCircleModal() {
     function smallBtn(label, primary, onClick, danger) {
         var b = button(label, primary, { click: onClick });
         ui.setStyle(b, { padding: "6px 12px", fontSize: "0.8rem", flex: "0 0 auto" });
-        if (danger) { ui.setStyle(b, { background: color.error, color: "#fff", border: "none" }); }
+        if (danger) { ui.setStyle(b, { background: color.error, color: color.onError, border: "none" }); }
         return b;
     }
 
@@ -626,7 +759,7 @@ function showManageCircleModal() {
                     net.post("/api/circle/delete", { care_circle_id: c.circle_id }, function () { reload(); }, function () {});
                 });
             } });
-            ui.setStyle(del, { flex: "0 0 auto", background: color.error, color: "#fff", border: "none" });
+            ui.setStyle(del, { flex: "0 0 auto", background: color.error, color: color.onError, border: "none" });
             del.addEventListener("click", function (e) { e.stopPropagation(); });
             head.appendChild(del);
         } else {
@@ -870,6 +1003,7 @@ function showShareModal(conversationId) {
 exports.showManageCircleModal = showManageCircleModal;
 exports.showShareModal    = showShareModal;
 exports.showLanguageModal = showLanguageModal;
+exports.showThemeModal    = showThemeModal;
 exports.showConfirmModal  = showConfirmModal;
 exports.showAlertModal    = showAlertModal;
 exports.showBackendModal  = showBackendModal;

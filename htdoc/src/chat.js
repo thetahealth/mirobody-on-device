@@ -268,7 +268,14 @@ function toggleIncognito() {
 // overlay (appearance:none hides the native arrow). Shared by the composer's
 // model picker and the subject picker so both dropdowns read identically.
 // `maxWidth` caps the control; returns { wrap, select }.
-function caretSelect(maxWidth) {
+//
+// `surface` is the color of whatever the control sits on. It looks like a no-op
+// (the same color as the parent, so the control still reads as borderless), but
+// the option list is not ours to style: the browser paints the popup from the
+// select's own background-color, and a transparent one leaves it the light
+// default -- in dark mode that is our pale text on a pale popup. Passing the
+// real surface keeps the popup in the theme. Defaults to the composer bar.
+function caretSelect(maxWidth, surface) {
     var select = ui.dom("select", {
         appearance       : "none",
         WebkitAppearance : "none",
@@ -282,7 +289,7 @@ function caretSelect(maxWidth) {
         fontSize         : "0.875rem",
         fontWeight       : "500",
         color            : color.onSurface,
-        background       : "transparent",
+        background       : surface || color.surfaceLow,
         outline          : "none",
         cursor           : "pointer",
         maxWidth         : maxWidth,
@@ -413,17 +420,18 @@ function buildChat() {
     // picker so each registered model shows as its own "<name> · On-device" option.
     refreshOnDeviceModels();
 
-    // Right slot: the settings gear (language / font / backend / about), the same
-    // menu the login screen shows -- so app settings live in one consistent place
-    // across both screens. Session-scoped items (history, health connections,
-    // account, incognito) live in the left nav drawer (the hamburger) instead.
-    app.slots.topRight = require("./topbar").buildSettingsMenu();
+    // The top bar has no right-hand slot: app settings (language / font / appearance
+    // / backend) sit in the left nav drawer alongside the session-scoped items
+    // (history, health connections, account, incognito), so one hamburger opens
+    // everything -- see history.js.
 
     //----------------------------------------------------
 
     // Readable centered column: messages are capped to THREAD_MAX and centered so
-    // they don't sprawl edge-to-edge on wide screens. The composer is aligned to
-    // the same width below.
+    // they don't sprawl edge-to-edge on wide screens. The composer and its
+    // attachment-chip row take the same cap, so the input sits exactly under the
+    // conversation it belongs to -- one column down the middle of the page, not a
+    // wide bar under a narrow thread.
     var THREAD_MAX = "760px";
 
     var log = ui.dom("div", {
@@ -494,7 +502,7 @@ function buildChat() {
                 fontSize     : "1rem",
                 lineHeight   : "1.75",
                 maxWidth     : isMobile() ? "85%" : "320px",
-                background   : "#1E3A6B",
+                background   : color.brand,
                 color        : color.onPrimary,
                 margin       : "32px 0 0 0"
             }), text);
@@ -549,7 +557,7 @@ function buildChat() {
             background     : "transparent",
             padding        : "0",
             cursor         : "pointer",
-            color          : "#757575",
+            color          : color.onSurfaceVar,
             display        : "flex",
             alignItems     : "center",
             justifyContent : "center",
@@ -572,7 +580,7 @@ function buildChat() {
             alignItems : "center",
             fontSize   : "0.7rem",
             fontWeight : "400",
-            color      : "#757575"
+            color      : color.onSurfaceVar
         }), providerLabel || "");
 
         var actions = ui.dom("div", {
@@ -1006,8 +1014,9 @@ function buildChat() {
     attach.style.height = "40px";
     attach.addEventListener("click", function () { fileInput.click(); });
 
-    // Circular navy send button with an up-arrow (Theta Health style); toggled
-    // disabled while a reply streams (see submit()).
+    // Circular navy send button with an up-arrow (Theta Health style). While a
+    // reply streams it flips to a STOP control -- spinner ring around a ■, same
+    // interaction as the harmony client -- that interrupts the in-flight turn.
     var send = ui.dom("button", {
         flex: "0 0 auto", width: "40px", height: "40px", padding: "0",
         borderRadius: "50%", border: "none",
@@ -1015,6 +1024,39 @@ function buildChat() {
         display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer"
     }, { type: "button", title: t("send") });
     ui.setHTML(send, SEND_ARROW_SVG);
+
+    // Kill switch for the in-flight turn; submit() arms it, finish() clears it.
+    var activeStop = null;
+    send.addEventListener("click", function () {
+        if (state.streaming && activeStop) { activeStop(); }
+    });
+
+    // busy: spinner + ■ acting as stop; idle: the up-arrow acting as send. The
+    // busy button must not re-submit the form, so its type flips with it.
+    function setSendBusy(busy) {
+        send.setAttribute("type", busy ? "button" : "submit");
+        send.title = busy ? t("stop") : t("send");
+        if (!busy) {
+            ui.setHTML(send, SEND_ARROW_SVG);
+            return;
+        }
+        ui.clear(send);
+        var wrap = ui.dom("span", {
+            position: "relative", display: "inline-flex", width: "20px", height: "20px",
+            alignItems: "center", justifyContent: "center"
+        });
+        // mb-spin keyframes live in index.css -- the CSP blocks injected <style>.
+        wrap.appendChild(ui.dom("span", {
+            position: "absolute", top: "0", left: "0", right: "0", bottom: "0",
+            border: "2px solid transparent",
+            borderTopColor: color.onPrimary, borderRadius: "50%",
+            animation: "mb-spin 0.8s linear infinite"
+        }));
+        var square = ui.dom("span", { fontSize: "9px", lineHeight: "1" });
+        ui.setText(square, "■");
+        wrap.appendChild(square);
+        send.appendChild(wrap);
+    };
 
     // Subject selector — picking a care-circle member sends `subject` so the AI's
     // family_health tool defaults to that member ("how is Mom doing?"). Shown only
@@ -1026,7 +1068,10 @@ function buildChat() {
     // breakpoint (isMobile) is re-read on each render, and index.js re-renders when
     // it's crossed, so the placement follows a resize/rotation.
     var isNarrow = isMobile();
-    var _subject = caretSelect(isNarrow ? "44vw" : "320px");
+    // Narrow puts this picker in the top bar (page background), wide leaves it in
+    // the composer bar -- so its popup surface differs by placement.
+    var _subject = caretSelect(isNarrow ? "44vw" : "320px",
+                               isNarrow ? color.background : color.surfaceLow);
     var subjectSelect = _subject.select;
     subjectSelect.addEventListener("change", function () { state.currentSubjectId = subjectSelect.value; });
     var subjectInner = ui.dom("div", {
@@ -1051,12 +1096,14 @@ function buildChat() {
     }
     function toggleSubject(shown) {
         subjectInner.style.display = shown ? "flex" : "none";
-        // When the subject sits in the top bar's center slot (narrow), it's mutually
-        // exclusive with the "Mirobody" wordmark beside the logo: show the wordmark
-        // only when the dropdown isn't. Wide keeps the wordmark always (the subject
-        // is in the composer, not the top bar).
-        if (isNarrow && app.slots.setBrandVisible) {
-            app.slots.setBrandVisible(!shown);
+        // Narrow only: the picker and the top bar's wordmark are alternatives for the
+        // same row, so whichever is off duty gives way. This runs from an async
+        // /api/circle callback, by which time the bar exists (app.js builds the body
+        // first, the bar second, and both are synchronous) -- but the guard keeps it
+        // honest if that order ever changes. Wide leaves the wordmark alone: the picker
+        // sits in the composer there, not in the bar.
+        if (isNarrow && app.slots.wordmark) {
+            app.slots.wordmark.style.display = shown ? "none" : "block";
         }
     }
     function loadSubjects() {
@@ -1153,16 +1200,33 @@ function buildChat() {
         }
     });
 
+    // No rule above the composer: the bar's own rounded outline already separates it
+    // from the thread, and a second line just below the scroll edge read as clutter.
     var form = ui.dom("form", {
         flex          : "0 0 auto",
         display       : "flex",
         flexDirection : "column",
-        padding       : "12px 16px 16px",
-        borderTop     : "1px solid " + color.outlineVar
+        padding       : "12px 16px 16px"
     });
+    // The "AI can be wrong" caption, under the input like every other chat client.
+    // It lives inside the form so a read-only shared conversation -- which drops the
+    // whole composer -- drops this with it: there's nothing to double-check when you
+    // can't ask anything. Same column as the bar above it, so it wraps in step.
+    var disclaimer = ui.setText(ui.dom("div", {
+        width        : "100%",
+        maxWidth     : THREAD_MAX,
+        marginInline : "auto",
+        marginTop    : "8px",
+        fontSize     : "0.7rem",
+        lineHeight   : "1.35",
+        color        : color.onSurfaceVar,
+        textAlign    : "center"
+    }), t("aiDisclaimer"));
+
     send.setAttribute("type", "submit");
     form.appendChild(previews);
     form.appendChild(bar);   // narrow "currently for" is in the top bar; wide is inline in the bar
+    form.appendChild(disclaimer);
     form.appendChild(fileInput);
 
     //----------------------------------------------------
@@ -1195,7 +1259,7 @@ function buildChat() {
         clearAttachments();   // chips are client-only; reset once the turn is sent
 
         state.streaming = true;
-        send.disabled = true;
+        setSendBusy(true);
 
         var assistantTs = Date.now();
         var turnProvider = state.provider;   // provider used for this turn (label + persisted)
@@ -1206,7 +1270,8 @@ function buildChat() {
 
         function finish(assistantText) {
             state.streaming = false;
-            send.disabled = false;
+            setSendBusy(false);
+            activeStop = null;
             bubble.style.animation = "";
             input.focus();
             if (ui.isString(assistantText)) {
@@ -1241,27 +1306,77 @@ function buildChat() {
             // finish exactly once.
             var handled = false;
 
-            // Reasoning ("thinking") streams before the answer. Render it in a
-            // dim block above the reply, created lazily on the first token.
+            // Reasoning ("thinking") streams before the answer, in a collapsible
+            // block above the reply (same interaction as harmony's RichMessage):
+            // while the model is still thinking the thought stream shows expanded,
+            // live; once the answer starts it folds to a one-line handle the user
+            // can reopen. A manual toggle always wins over the automatic rule.
             var thinkAcc = "";
-            var thinkBubble = null;
+            var thinkBox = null;      // header + body container
+            var thinkEmoji = null;    // 🤔 while thinking, 💭 once answered
+            var thinkArrow = null;    // ▾ open / ▸ folded
+            var thinkBody = null;     // the thought text
+            var thinkToggled = false; // user clicked: manual state wins from then on
+            var thinkManual = false;
+            function thinkingLive() { return !handled && !acc; }
+            function thinkingExpanded() { return thinkToggled ? thinkManual : thinkingLive(); }
+            function syncThinking() {
+                if (!thinkBox) { return; }
+                ui.setText(thinkEmoji, thinkingLive() ? "🤔" : "💭");
+                ui.setText(thinkArrow, thinkingExpanded() ? "▾" : "▸");
+                thinkBody.style.display = thinkingExpanded() ? "" : "none";
+            };
             function appendThinking(text) {
                 thinkAcc += text;
-                if (!thinkBubble) {
+                if (!thinkBox) {
                     var trow = ui.dom("div", { display: "flex", justifyContent: "flex-start" });
-                    thinkBubble = ui.dom("div", {
+                    thinkBox = ui.dom("div", {
+                        width        : "100%",
+                        padding      : "6px 8px",
+                        background   : color.overlay,
+                        borderRadius : "8px"
+                    });
+                    thinkEmoji = ui.dom("span", { fontSize: "0.75rem" });
+                    var label = ui.dom("span", {
+                        fontSize : "0.75rem",
+                        color    : color.onSurfaceVar
+                    });
+                    ui.setText(label, t("thinking"));
+                    thinkArrow = ui.dom("span", {
+                        fontSize : "0.75rem",
+                        color    : color.onSurfaceVar
+                    });
+                    var head = ui.dom("div", {
+                        display    : "flex",
+                        alignItems : "center",
+                        gap        : "6px",
+                        cursor     : "pointer",
+                        userSelect : "none"
+                    });
+                    head.appendChild(thinkEmoji);
+                    head.appendChild(label);
+                    head.appendChild(thinkArrow);
+                    head.addEventListener("click", function () {
+                        thinkManual = !thinkingExpanded();
+                        thinkToggled = true;
+                        syncThinking();
+                    });
+                    thinkBody = ui.dom("div", {
                         whiteSpace : "pre-wrap",
                         wordWrap   : "break-word",
                         fontSize   : "0.85rem",
                         lineHeight : "1.5",
                         fontStyle  : "italic",
-                        width      : "100%",
+                        marginTop  : "4px",
                         color      : color.onSurfaceVar
                     });
-                    trow.appendChild(thinkBubble);
+                    thinkBox.appendChild(head);
+                    thinkBox.appendChild(thinkBody);
+                    trow.appendChild(thinkBox);
                     thread.insertBefore(trow, bubble.parentNode); // above the reply row
                 }
-                ui.setText(thinkBubble, thinkAcc);
+                ui.setText(thinkBody, thinkAcc);
+                syncThinking();
                 followBottom();
             };
 
@@ -1381,8 +1496,21 @@ function buildChat() {
                 ensureECharts().then(function (echarts) {
                     if (!echarts) { return; }
                     try {
-                        var chart = echarts.init(holder, null, { renderer: "canvas" });
-                        chart.setOption(option);
+                        // Shared theme: the validated series palette plus the app's own
+                        // ink/hairline colors as chart chrome; mbPrepare() strips any
+                        // model-supplied colors so the theme actually applies (and adds
+                        // a legend when several series must be told apart). Guarded --
+                        // if chart-theme.js didn't load, fall back to stock ECharts.
+                        // Both mode + chrome are read at render time, so a chart picks
+                        // up the theme in effect when it arrives (older canvases keep
+                        // theirs until a re-render drops them, like a reload does).
+                        var theme = window.mbChartTheme ? window.mbChartTheme(config.isDarkTheme(), {
+                            ink: color.onSurface, inkDim: color.onSurfaceVar,
+                            axis: color.outline, grid: color.outlineVar,
+                            surface: "transparent"
+                        }) : null;
+                        var chart = echarts.init(holder, theme, { renderer: "canvas" });
+                        chart.setOption(window.mbPrepare ? window.mbPrepare(option) : option);
                         window.addEventListener("resize", function () { chart.resize(); });
                     } catch (e) { /* bad option: leave an empty holder rather than crash */ }
                     followBottom();
@@ -1566,9 +1694,11 @@ function buildChat() {
                     return;
                 }
                 if (ui.isString(ev.reply)) {
+                    var firstReply = !acc;
                     acc += ev.reply;
                     streamRender(bubble, acc);
                     bubble.style.animation = ""; // stop the cursor blink once text streams
+                    if (firstReply) { syncThinking(); } // answer started: fold the thinking block
                     followBottom();
                 } else if (ui.isString(ev.thinking)) {
                     appendThinking(ev.thinking);
@@ -1589,6 +1719,7 @@ function buildChat() {
                     handled = true;
                     settleUploads();
                     settleTools();
+                    syncThinking();
                     onStreamError(bubble, "Error: " + ev.error, finish);
                 }
             };
@@ -1597,6 +1728,7 @@ function buildChat() {
                 handled = true;
                 settleUploads();
                 settleTools();
+                syncThinking();
                 addFooter();
                 finish(acc);
             };
@@ -1605,10 +1737,37 @@ function buildChat() {
                 handled = true;
                 settleUploads();
                 settleTools();
+                syncThinking();
                 // A 401 on the stream bounces to login centrally (see net.js),
                 // so this path only handles genuine stream/transport errors.
                 onStreamError(bubble, acc || ("Error: " + (ui.isString(reason) ? reason : "request failed")), finish);
             };
+
+            // Stop (the send button while streaming): kill the transport, then
+            // finalize locally -- an aborted stream fires no callbacks on purpose
+            // (net.stream swallows AbortError; the ondevice bridge unregisters the
+            // turn), so this is a stopped turn's only completion path. A partial
+            // answer is kept, like harmony's onStop; a turn stopped before any
+            // reply drops its empty bubble but keeps the user message (unlike
+            // onStreamError, where popping it enables a clean retry).
+            var streamCancel = null;   // kills the transport; set when the stream starts
+            function stopTurn() {
+                if (handled) { return; }
+                handled = true;
+                if (streamCancel) { try { streamCancel(); } catch (e) { /* already gone */ } }
+                settleUploads();
+                settleTools();
+                syncThinking();
+                if (acc) {
+                    addFooter();
+                    finish(acc);       // keep what streamed before the stop
+                } else {
+                    var row = bubble.parentNode;
+                    if (row && row.parentNode) { row.parentNode.removeChild(row); }
+                    finish(null);      // nothing arrived: no empty assistant message
+                }
+            };
+            activeStop = stopTurn;
 
             // On-device (desktop): drive the local engine instead of the server SSE.
             // It emits the same {type:"reply"} chunk strings, so the handlers above
@@ -1621,18 +1780,21 @@ function buildChat() {
                 }
                 var odModel = modelFromProvider(turnProvider);
                 onDeviceBridge().isReady(odModel).then(function (ready) {
+                    if (handled) { return; }   // stopped while isReady was in flight
                     if (!ready) {
                         handled = true;
                         onStreamError(bubble, "Error: on-device model not downloaded.", finish);
                         showOnDeviceManager();
                         return;
                     }
-                    onDeviceBridge().generate(odModel, history, streamOnMessage, streamOnComplete, streamOnError);
+                    var gen = onDeviceBridge().generate(odModel, history, streamOnMessage, streamOnComplete, streamOnError);
+                    streamCancel = function () { gen.cancel(); };
                 });
                 return;
             }
 
-            net.stream("/api/chat", agentBody, streamOnMessage, streamOnComplete, streamOnError);
+            var ctl = net.stream("/api/chat", agentBody, streamOnMessage, streamOnComplete, streamOnError);
+            streamCancel = function () { ctl.abort(); };
             return;
         }
 
@@ -1682,17 +1844,25 @@ function buildChat() {
 // ECharts is a doc-root static asset (static/echarts.min.js ~1 MB), loaded lazily
 // the first time a chart event arrives so users who never see a chart don't pay
 // for it up front. Mirrors the qrcode/tanka-signer lazy loads (see tanka.js).
+// chart-theme.js (the shared mirobody chart theme, another static/ copy) rides
+// along best-effort: if it fails to load, charts degrade to stock ECharts
+// instead of never appearing.
 var echartsPromise = null;
 function ensureECharts() {
     if (echartsPromise) { return echartsPromise; }
-    echartsPromise = new Promise(function (resolve, reject) {
-        if (window.echarts) { return resolve(window.echarts); }
-        var s = document.createElement("script");
-        s.src = net.appBase() + "/echarts.min.js";
-        s.onload = function () { resolve(window.echarts); };
-        s.onerror = reject;
-        document.head.appendChild(s);
-    });
+    function load(src, required) {
+        return new Promise(function (resolve, reject) {
+            var s = document.createElement("script");
+            s.src = net.appBase() + src;
+            s.onload = function () { resolve(); };
+            s.onerror = required ? reject : function () { resolve(); };
+            document.head.appendChild(s);
+        });
+    }
+    echartsPromise = window.echarts
+        ? Promise.resolve(window.echarts)
+        : Promise.all([load("/echarts.min.js", true), load("/chart-theme.js", false)])
+            .then(function () { return window.echarts; });
     return echartsPromise;
 };
 

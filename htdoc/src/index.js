@@ -47,10 +47,11 @@ const auth = require("./auth");
 // topbar, modals, history, auth) -- this file just wires up startup.
 //----------------------------------------------------------------------------
 
-// Localize the UI, apply the saved font scale, and set the text direction
-// before the first render.
+// Localize the UI, apply the saved font scale / theme, and set the text
+// direction before the first render.
 i18n.setLang(state.language);
 config.applyFontScale(state.fontOffset);
+config.applyTheme();
 config.applyDirection(state.language);
 
 // A care-circle invite link (?circle_token=...): stash the token and clean the
@@ -103,5 +104,19 @@ if (window.matchMedia) {
         mq.addEventListener("change", onBreakpoint);
     } else if (mq.addListener) {
         mq.addListener(onBreakpoint); // older browsers
+    }
+
+    // Follow the OS light/dark switch while the theme setting is "system".
+    // Same mid-stream guard as the breakpoint (a flip mid-stream applies at the
+    // next render -- render() re-resolves the theme first).
+    var scheme = window.matchMedia("(prefers-color-scheme: dark)");
+    var onScheme = function () {
+        if (state.theme !== "system" || state.streaming) { return; }
+        app.render();
+    };
+    if (scheme.addEventListener) {
+        scheme.addEventListener("change", onScheme);
+    } else if (scheme.addListener) {
+        scheme.addListener(onScheme);
     }
 }

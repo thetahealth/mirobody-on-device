@@ -120,7 +120,7 @@ function buildTankaPanel(onBack) {
         position     : "relative",
         width        : "232px",
         height       : "232px",
-        background   : "#ffffff",
+        background   : color.surfaceLow,
         borderRadius : "20px",
         display      : "flex",
         alignItems   : "center",

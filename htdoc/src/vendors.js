@@ -101,8 +101,8 @@ function rowButton(label, danger, onClick) {
     b.style.fontSize = "0.8rem";
     b.style.flexShrink = "0";
     if (danger) {
-        b.style.background = "#dc362e";
-        b.style.color = "#fff";
+        b.style.background = color.error;
+        b.style.color = color.onError;
         b.style.border = "none";
     }
     return b;

@@ -83,14 +83,25 @@ export class RenderHost {
   /**
    * Cached formula render, or undefined (then queued; watch 'renderEpoch').
    * `display` distinguishes $$ blocks from inline math — different layout.
+   *
+   * The color mode is part of the key, not a re-render trigger: the ink is baked
+   * into the SVG/PNG, so light and dark are two different images. Keying on the
+   * mode means flipping the theme misses the cache, queues a re-render, and the
+   * other mode's image stays cached for the flip back.
    */
-  static lookupMath(tex: string, display: boolean): RenderedImage | undefined {
-    return RenderHost.lookup((display ? 'D:' : 'I:') + tex);
+  static lookupMath(tex: string, display: boolean, dark: boolean): RenderedImage | undefined {
+    return RenderHost.lookup(RenderHost.keyOf(display ? 'D' : 'I', dark) + tex);
   }
 
   /** Cached chart render for an ECharts option JSON, or undefined (queued). */
-  static lookupChart(optionJson: string): RenderedImage | undefined {
-    return RenderHost.lookup('C:' + optionJson);
+  static lookupChart(optionJson: string, dark: boolean): RenderedImage | undefined {
+    return RenderHost.lookup(RenderHost.keyOf('C', dark) + optionJson);
+  }
+
+  // 3-char prefix: kind, mode, ':'. hashOf() covers the whole key, so the two
+  // modes also land in different cache files.
+  private static keyOf(kind: string, dark: boolean): string {
+    return kind + (dark ? '1' : '0') + ':';
   }
 
   private static lookup(key: string): RenderedImage | undefined {
@@ -117,13 +128,14 @@ export class RenderHost {
     }
     RenderHost.rendering = true;
 
-    const payload = key.substring(2);
+    const payload = key.substring(3);
+    const dark = key.charAt(1) === '1' ? 'true' : 'false';
     let script: string;
-    if (key.startsWith('C:')) {
-      script = 'window.renderChart(' + JSON.stringify(payload) + ')';
+    if (key.charAt(0) === 'C') {
+      script = 'window.renderChart(' + JSON.stringify(payload) + ',' + dark + ')';
     } else {
       script = 'window.renderTex(' + JSON.stringify(payload) + ',' +
-               (key.startsWith('D:') ? 'true' : 'false') + ')';
+               (key.charAt(0) === 'D' ? 'true' : 'false') + ',' + dark + ')';
     }
 
     RenderHost.controller.runJavaScript(script)

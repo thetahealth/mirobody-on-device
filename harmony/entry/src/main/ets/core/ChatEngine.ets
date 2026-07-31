@@ -5,10 +5,10 @@
  *
  * Cloud turns pick between two transports on the user's key: the embedded C++ core
  * (NativeCore, when it serves the selected model) and the BYOK direct SSE client
- * (everything else). Local turns are a STUB on HarmonyOS today (no on-device model wired
- * yet) — they emit a clear notice and, when a cloud key exists, the UI can offer to
- * escalate. Everything downstream of the router is identical regardless of lane, so
- * swapping in a real local runtime later is a drop-in.
+ * (everything else). Local turns run llama.cpp on a GGUF the user supplied, in-process
+ * through the same NAPI bridge; only when no local model is configured do they fall back
+ * to the explanatory stub. Everything downstream of the router is identical regardless
+ * of lane — the UI cannot tell which one answered.
  */
 import { common } from '@kit.AbilityKit';
 import { ChatMessage, StreamCallbacks, RouteInput, RouteDecision, Lane, Canceler } from '../model/Chat';
@@ -29,16 +29,26 @@ export interface TurnContext {
   model: string;          // model id this turn runs on
   userForcedLane: string; // 'local' | 'cloud' | ''
   offline: boolean;
-}
-
-export interface TurnResult {
-  decision: RouteDecision;
+  /**
+   * Absolute path of the on-device model this turn should run, or '' for none.
+   * Snapshotted by the caller rather than resolved here for the same reason
+   * providerId/model are: the selection can change mid-turn.
+   */
+  localModelPath: string;
+  /**
+   * Fired the moment the lane is chosen and BEFORE any bytes leave the device. The cloud
+   * notice ("this message left the device, on your key") is a heads-up, not a receipt —
+   * returning the decision only after the stream finished showed it once the data was
+   * already gone. This is the single channel for the decision; there is no return value to
+   * read it from twice.
+   */
+  onDecision: (decision: RouteDecision) => void;
 }
 
 export class ChatEngine {
   /**
-   * Run one turn. Streams assistant text through `cb`. Returns the routing decision so the
-   * UI can show the escalation notice (docs/tiered-inference.md escalation UX).
+   * Run one turn. Streams assistant text through `cb`; the routing decision goes to
+   * `turn.onDecision` the moment it's made (docs/privacy-tiers.md escalation UX).
    */
   static async send(
     ctx: common.UIAbilityContext,
@@ -46,7 +56,7 @@ export class ChatEngine {
     turn: TurnContext,
     cb: StreamCallbacks,
     canceler?: Canceler
-  ): Promise<TurnResult> {
+  ): Promise<void> {
     const provider: ProviderRecord | undefined = findProvider(turn.providerId);
     const apiKey: string = provider !== undefined ? await SecureKeyStore.getKey(provider.id) : '';
 
@@ -64,25 +74,33 @@ export class ChatEngine {
     };
 
     const decision: RouteDecision = selectLane(input);
+    const cloudProvider: ProviderRecord | undefined =
+      decision.lane === Lane.CLOUD ? provider : undefined;
+    if (cloudProvider !== undefined) {
+      decision.providerId = cloudProvider.id;
+    }
+    // Announce the lane here — before offerFor()'s awaits and before either transport can
+    // put a byte on the wire, so the cloud notice warns rather than reports.
+    turn.onDecision(decision);
 
-    if (decision.lane === Lane.CLOUD && provider !== undefined) {
-      decision.providerId = provider.id;
+    if (cloudProvider !== undefined) {
       // Two transports for the same lane. The embedded C++ core is preferred
       // when it serves this model (its provider's key has been injected): same
       // upstream call, but with the core's agent pipeline (tools; charts later).
       // Everything else — providers the core doesn't know, models it doesn't
       // offer — stays on the BYOK direct SSE client.
-      if (await NativeCore.offerFor(ctx, provider.id, turn.model)) {
+      if (await NativeCore.offerFor(ctx, cloudProvider.id, turn.model)) {
         await NativeCore.chat(turn.model, messages, cb, canceler);
       } else {
-        await streamChat(provider, turn.model, apiKey, messages, cb, canceler);
+        await streamChat(cloudProvider, turn.model, apiKey, messages, cb, canceler);
       }
+    } else if (turn.localModelPath.length > 0) {
+      // On-device: llama.cpp + a GGUF inside libmirobody.so (src/llm/local.cpp).
+      await NativeCore.localChat(turn.localModelPath, messages, cb, canceler);
     } else {
-      // Local lane stub — on-device model not wired on HarmonyOS yet.
+      // Local lane with nothing to run it on.
       ChatEngine.emitLocalStub(ctx, cb, input.byokConfigured);
     }
-
-    return { decision };
   }
 
   private static emitLocalStub(ctx: common.UIAbilityContext, cb: StreamCallbacks, byokConfigured: boolean): void {

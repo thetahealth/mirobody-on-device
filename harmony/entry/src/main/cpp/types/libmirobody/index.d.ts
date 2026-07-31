@@ -51,6 +51,105 @@ export const nativeChat: (
 /**
  * Request cancellation of an in-flight turn. Takes effect on the turn's next
  * event; the stream then finishes with 'aborted'. Unknown/finished ids are a
- * no-op.
+ * no-op. Cancels either lane — local turns share the same turn-id table.
  */
 export const nativeChatCancel: (turnId: number) => void;
+
+/**
+ * Can NATIVE code open and mmap this path from inside the app sandbox?
+ * Returns JSON `{ok, err, size, mmapOk}`.
+ *
+ * llama.cpp loads a model by path and mmaps it, so an ArkTS-readable URI or fd
+ * is not enough — this is the gate on letting a GGUF live outside app-private
+ * storage (which it must, to survive an uninstall).
+ */
+export const nativeProbePath: (path: string) => string;
+
+/**
+ * Neural Network Runtime devices visible to THIS app, as JSON
+ * `{available, err, devices: [{name, type, id}]}`.
+ *
+ * The gate on the NPU question, answerable without converting a model: NNRt is
+ * the only route to the Kirin NPU (MindSpore Lite delegates through it; HMS
+ * `hiai_foundation`/`CANNKit` expose single-op execution only, not model
+ * loading), so if no device here reports `type: 3`
+ * (`OH_AI_NNRTDEVICE_ACCELERATOR`) the NPU is not reachable from a third-party
+ * app and the whole path is closed. `type` 1 = CPU, 2 = GPU, 0 = other.
+ *
+ * `available: false` means libmindspore_lite_ndk.so could not be loaded — it is
+ * dlopen'd rather than linked so that its absence degrades to this instead of
+ * breaking the app's native module.
+ */
+export const nativeNnrtDevices: () => string;
+
+/**
+ * Sequential DRAM read bandwidth this device actually delivers, as JSON
+ * `{mb, threads, oneThreadGbs, allThreadGbs}`.
+ *
+ * A hard ceiling on decode that no accelerator can lift: autoregressive decode
+ * reads essentially every weight per token, so `tok/s <= bandwidth /
+ * model_bytes`, and an NPU or GPU shares the same LPDDR controller as the CPU.
+ * Compare `allThreadGbs` against what the current decode rate already consumes
+ * (model size x tok/s). If they are close, decode is at the memory wall and
+ * moving it to another compute unit cannot help — which is exactly why the
+ * Vulkan backend lost on a Kirin 9020.
+ *
+ * Uses the thread count set by nativeLocalSetThreads (default 6) because one
+ * thread cannot saturate a modern memory controller.
+ */
+export const nativeMemBandwidth: () => string;
+
+/**
+ * On-device lane status as JSON:
+ * `{ available, backend, loaded, modelPath, has, built }`.
+ *
+ * `has` is what the SILICON supports, read from AT_HWCAP —
+ * `{fp16, dotprod, i8mm, bf16, sve, sve2, sme}`. `built` is what THIS binary was
+ * compiled to emit — `{neon, fma, fp16, dotprod, i8mm, sve, sme}`. Reported apart
+ * because conflating them is a trap: ggml's own `ggml_cpu_has_*()` are compile-time
+ * `__ARM_FEATURE_*` checks despite the name, so reading them as device capability
+ * gives the wrong answer. `has && !built` is unrealized performance — exactly what a
+ * cross build with no -march flags produces. Do not infer either from a SoC name; a
+ * Kirin 9020 turned out to have i8mm and SVE. /proc/cpuinfo is unreadable to an app
+ * on HarmonyOS, so this is the only way to see any of it.
+ *
+ * `available` is false when the .so was built without llama.cpp (no
+ * LLAMA_CPP_DIR) — the app still runs, on-device chat just reports itself
+ * unavailable. `loaded` is true once a model is resident, i.e. after one turn.
+ */
+export const nativeLocalStatus: () => string;
+
+/**
+ * Threads for on-device turns; 0 or negative means hardware_concurrency(). Applies
+ * from the next turn without reloading the model. Worth setting rather than
+ * defaulting: on a big.LITTLE SoC the little cores can cost a matmul more than they
+ * add, since the batch waits on the slowest thread.
+ */
+export const nativeLocalSetThreads: (n: number) => void;
+
+/**
+ * Run one chat turn on the on-device model, streaming events back exactly like
+ * nativeChat: 'reply' deltas, then a 'stats' event carrying
+ * `{loadMs, prefillMs, decodeMs, promptTokens, decodedTokens, threads, nCtx, ctxMs,
+ * droppedMsgs, utf8Splits, backend}`, then
+ * one terminal 'end' or 'aborted'. A failure emits 'error' first.
+ *
+ * The model stays loaded between turns and is only reloaded when `modelPath`
+ * changes — a multi-GB reload per turn would be unusable.
+ *
+ * The stats worth acting on: `nCtx` is the context this turn actually got (chosen by
+ * walking a ladder down from a ceiling until the buffer allocates, so it varies by
+ * model and device) and `ctxMs` is what building it cost, since a fresh context is
+ * created per turn. `droppedMsgs` > 0 means history was trimmed to fit, which is why
+ * an older turn may seem forgotten. `utf8Splits` counts tokens that ended
+ * mid-character — proof the byte-level-BPE carry buffer is doing real work.
+ *
+ * @param modelPath    absolute path to a .gguf the app can read.
+ * @param messagesJson conversation as JSON: [{role, content}, ...].
+ * @returns a turn id for nativeChatCancel.
+ */
+export const nativeLocalChat: (
+  modelPath: string,
+  messagesJson: string,
+  onEvent: (type: string, content: string) => void
+) => number;

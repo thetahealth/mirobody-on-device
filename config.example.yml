@@ -979,7 +979,7 @@ DEFAULT_AGENT: 'Baseline'
 #
 # NVIDIA NIM (build.nvidia.com) API key. Registers the `deepseek-v4-pro`
 # provider (DeepSeek V4 Pro, hosted OpenAI-compatible on NVIDIA's free
-# developer tier) - the cloud "complex" tier in docs/tiered-inference.md.
+# developer tier) - a cloud escalation lane in docs/privacy-tiers.md.
 #
 # Genuinely free for individual use, gated by rate not a hard usage cap:
 #   1. Sign in at https://build.nvidia.com with any email; join the (free)

@@ -187,8 +187,53 @@ TEST_CASE("BaselineAgent self-registers", "[agent]") {
     REQUIRE(base->factory);
 }
 
-TEST_CASE("BaselineAgent loads its three providers", "[agent]") {
-    mirobody::Config cfg;   // empty config: clients build but cannot call out
+TEST_CASE("a provider is offered exactly when it has a credential", "[agent]") {
+    // The rule from res/agents/baseline.cpp offer(): an unconfigured provider is
+    // never listed, because it cannot answer a single turn and would be a dead row
+    // in the model picker that errors the moment it is used.
+    //
+    // Asserted as an EQUIVALENCE against the credential each provider actually
+    // resolves, rather than by pinning the credentials first. That matters because
+    // ConfigStore::get_str reads the ENVIRONMENT before its YAML and an empty YAML
+    // scalar cannot override it — so a machine exporting GOOGLE_API_KEY genuinely
+    // does have that credential. Testing "offered == has credential" holds on such a
+    // machine and on a bare CI box alike; asserting "empty config => nothing offered"
+    // would pass on one and fail on the other.
+    mirobody::Config cfg;
+    agent_registry().load_clients(cfg);
+
+    struct Expect {
+        const char* model;
+        std::string credential;   // resolved the same way baseline.cpp resolves it
+    };
+    const Expect expected[] = {
+        {"gpt-5-nano",       cfg.openai.api_key},
+        {"gemini-2.5-flash", cfg.store.get_str("GOOGLE_API_KEY", cfg.gemini.api_key)},
+        {"mirothinker-1.7",  cfg.store.get_str("MIROTHINKER_API_KEY")},
+    };
+
+    const std::vector<std::string> names = agent_registry().provider_names(true);
+    for (const Expect& e : expected) {
+        const bool has_credential = !e.credential.empty();
+        CAPTURE(e.model, has_credential);
+        CHECK((agent_registry().client("Baseline", e.model) != nullptr) == has_credential);
+        CHECK((std::find(names.begin(), names.end(), e.model) != names.end()) == has_credential);
+    }
+}
+
+TEST_CASE("BaselineAgent loads its three providers once they have credentials", "[agent]") {
+    mirobody::Config cfg;
+    // One credential per provider — whatever makes it callable. The values are
+    // nonsense on purpose: offer() only checks presence, and no request is made.
+    // gemini and mirothinker read theirs through ConfigStore, where the environment
+    // outranks YAML — so this works either way: on CI the YAML supplies them, on a
+    // machine that exports the real keys the environment does.
+    cfg.openai.api_key = "sk-test";
+    REQUIRE(cfg.store.load_yaml_string(
+        "GOOGLE_API_KEY: gm-test\n"
+        "MIROTHINKER_API_KEY: mt-test\n"
+        "MCP_PUBLIC_URL: http://127.0.0.1/mcp\n"));
+
     agent_registry().load_clients(cfg);
 
     REQUIRE(agent_registry().client("Baseline", "gpt-5-nano")       != nullptr);

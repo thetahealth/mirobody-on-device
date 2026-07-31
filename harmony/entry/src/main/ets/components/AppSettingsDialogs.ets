@@ -4,12 +4,18 @@
  * per-provider base_url lives in 配置云服务).
  */
 import { i18n } from '@kit.LocalizationKit';
-import { bundleManager } from '@kit.AbilityKit';
+import { bundleManager, common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
+import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 
 interface LangOpt {
   label: string;
   tag: string;
+}
+
+interface ThemeOpt {
+  label: ResourceStr;
+  mode: number; // ConfigurationConstant.ColorMode
 }
 
 @Builder
@@ -21,7 +27,7 @@ function dialogHeader(title: ResourceStr, close: () => void) {
       .layoutWeight(1)
     Text('✕')
       .fontSize(20)
-      .fontColor('#8A8A8A')
+      .fontColor($r('app.color.text_tertiary'))
       .padding({ left: 12, top: 2, bottom: 2 })
       .onClick(close)
   }
@@ -63,11 +69,64 @@ export struct LanguageDialog {
         }
         .width('100%')
         .padding({ top: 13, bottom: 13 })
-        .border({ width: { bottom: 0.5 }, color: '#EEEEEE' })
+        .border({ width: { bottom: 0.5 }, color: $r('app.color.divider') })
         .onClick(() => {
           this.apply(o.tag);
         })
       }, (o: LangOpt) => o.tag)
+    }
+    .width('100%')
+    .padding(24)
+    .backgroundColor(Color.Transparent)
+    .borderRadius(16)
+  }
+}
+
+/**
+ * Theme override: follow the system, or pin light/dark. The stored value IS the ColorMode
+ * enum value, so there is no mapping table. Colors swap through resources/dark automatically;
+ * the offscreen render host follows via the 'darkMode' flag EntryAbility publishes when the
+ * configuration update lands.
+ */
+@CustomDialog
+export struct ThemeDialog {
+  controller: CustomDialogController;
+  // Persisted in EntryAbility; writing through @StorageLink survives the next launch.
+  @StorageLink('colorModePref') pref: number = ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET;
+
+  private opts: ThemeOpt[] = [
+    { label: $r('app.string.theme_system'), mode: ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET },
+    { label: $r('app.string.theme_light'), mode: ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT },
+    { label: $r('app.string.theme_dark'), mode: ConfigurationConstant.ColorMode.COLOR_MODE_DARK }
+  ];
+
+  private apply(mode: number): void {
+    const ctx = getContext(this) as common.UIAbilityContext;
+    ctx.getApplicationContext().setColorMode(mode as ConfigurationConstant.ColorMode);
+    this.pref = mode;
+    this.controller.close();
+  }
+
+  build() {
+    Column() {
+      dialogHeader($r('app.string.settings_theme'), () => {
+        this.controller.close();
+      })
+      ForEach(this.opts, (o: ThemeOpt) => {
+        Row() {
+          Text(o.label).fontSize(16).layoutWeight(1)
+          if (this.pref === o.mode) {
+            Text('✓').fontSize(16).fontColor($r('app.color.brand_text'))
+          }
+        }
+        .width('100%')
+        .padding({ top: 13, bottom: 13 })
+        .alignItems(VerticalAlign.Center)
+        .border({ width: { bottom: 0.5 }, color: $r('app.color.divider') })
+        .onClick(() => {
+          this.apply(o.mode);
+        })
+      }, (o: ThemeOpt) => o.mode.toString())
     }
     .width('100%')
     .padding(24)
@@ -113,15 +172,15 @@ export struct FontSizeDialog {
       // Live preview — reflects the current scale as you drag.
       Text($r('app.string.font_preview'))
         .fontSize(16 * this.fontScale)
-        .fontColor('#1A1A1A')
+        .fontColor($r('app.color.text_primary'))
         .width('100%')
         .textAlign(TextAlign.Center)
         .padding({ top: 4, bottom: 4 })
 
       Slider({ value: this.idx, min: 0, max: 4, step: 1, style: SliderStyle.OutSet })
         .width('100%')
-        .blockColor('#FFFFFF')
-        .selectedColor('#3F7FC1')
+        .blockColor($r('app.color.on_brand'))
+        .selectedColor($r('app.color.brand'))
         .trackThickness(4)
         .showSteps(true)
         .onChange((value: number) => {
@@ -136,7 +195,7 @@ export struct FontSizeDialog {
         ForEach(this.labels, (lab: ResourceStr, i: number) => {
           Text(lab)
             .fontSize(12)
-            .fontColor(i === this.idx ? '#3F7FC1' : '#9A9A9A')
+            .fontColor(i === this.idx ? $r('app.color.brand_text') : $r('app.color.text_tertiary'))
         }, (lab: ResourceStr, i: number) => i.toString())
       }
       .width('100%')
@@ -179,11 +238,11 @@ export struct AboutDialog {
         .width('100%')
       Text(this.rs($r('app.string.about_version'), this.version.length > 0 ? this.version : '—'))
         .fontSize(14)
-        .fontColor('#8A8A8A')
+        .fontColor($r('app.color.text_tertiary'))
         .width('100%')
       Text($r('app.string.about_desc'))
         .fontSize(13)
-        .fontColor('#9A9A9A')
+        .fontColor($r('app.color.text_tertiary'))
         .width('100%')
         .margin({ top: 4 })
     }

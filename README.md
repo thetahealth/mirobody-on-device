@@ -157,6 +157,11 @@ and how it compares to Gemini Nano / Apple Foundation Models — is in the slide
 [docs/on-device-llm.md](docs/on-device-llm.md) (a Marp deck; open in a Marp viewer or
 export to PDF).
 
+On-device is one of four lanes a turn can take. When it runs locally vs on a self-hosted
+home server (a 32B-class model on the family's own box) vs a cloud provider on the user's
+own API key — and where the user's data lives in each case — is in
+[docs/privacy-tiers.md](docs/privacy-tiers.md).
+
 ## Quick start
 
 The default desktop database backend is `POSTGRESQL`, so these install
@@ -755,6 +760,11 @@ That architecture is the foundation for deploying in a HIPAA- or GDPR-compatible
 way — the software gives you the controls, while the deployer remains the covered
 entity / data controller responsible for the final compliance posture.
 
+The tier model behind that claim — every configuration of *where the model runs* ×
+*where the data lives*, what exactly leaves the device in each, and the guarantees the
+code holds itself to — is documented in
+**[docs/privacy-tiers.md](docs/privacy-tiers.md)**.
+
 - **Keep PHI in-house.** On the phone (SQLite, offline) or self-hosted
   (PostgreSQL + local or regional object storage), no health record is sent to a
   third party unless you turn on an outbound integration. Care-circle sharing is
@@ -823,7 +833,7 @@ miniapp/                # native WeChat Mini Program client
 htdoc/                  # web client source (webpack -> res/htdoc)
 python/                 # Python package wrapper + wheel README
 bindings/               # Java / Go / C# / Node / Rust FFI bindings + examples
-docs/                   # diagrams (images/) + the full build guide (BUILDING.md)
+docs/                   # design docs (privacy-tiers, on-device-llm) + diagrams (images/) + build guide (BUILDING.md)
 ```
 
 ## License

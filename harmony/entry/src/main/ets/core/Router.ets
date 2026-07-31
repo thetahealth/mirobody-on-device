@@ -1,13 +1,13 @@
 /**
  * Router stage — the single replaceable stage that picks local vs cloud per turn
- * (docs/tiered-inference.md). Strategy: Manual + Heuristic fallback.
+ * (docs/privacy-tiers.md). Strategy: Manual + Heuristic fallback.
  *
  * Default lane is local. Escalate to cloud on a clear "hard" signal: over-long input,
  * a code block, attachments, or the user's deep-thinking toggle. Guard rails always win.
  */
 import { RouteInput, RouteDecision, Lane } from '../model/Chat';
 
-// Heuristic threshold — tune on real data (docs/tiered-inference.md open questions).
+// Heuristic threshold — tune on real data (docs/privacy-tiers.md open questions).
 const LONG_INPUT_TOKENS = 1200;
 
 function lastUserText(input: RouteInput): string {

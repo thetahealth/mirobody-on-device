@@ -11,7 +11,8 @@ const i18n = require("./i18n");
 const config = require("./config");
 const color  = config.color;
 
-const CLOSE_SVG = require("./icons").CLOSE_SVG;
+const icons = require("./icons");
+const CLOSE_SVG = icons.CLOSE_SVG;
 
 //----------------------------------------------------------------------------
 
@@ -36,6 +37,23 @@ function streamRender(bubble, text) {
 
 //----------------------------------------------------------------------------
 
+// The logo mark in a square `size` box, its upper glyph tinted with the live
+// `wordmark` token so it doesn't sink into the dark page (the lower glyph carries
+// its own fixed blue). An inline SVG rather than an <img>, because a referenced
+// image can't inherit a color. Every logo in the client comes from here so both
+// modes are decided in one place.
+function brandMark(size, styles) {
+    var box = ui.dom("span", {
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: size, height: size, flex: "0 0 auto", color: color.wordmark
+    });
+    ui.setHTML(box, icons.MIROBODY_SVG);   // trusted: our own markup
+    if (styles) { ui.setStyle(box, styles); }
+    return box;
+};
+
+//----------------------------------------------------------------------------
+
 // M3 filled (primary) / outlined (secondary) button. labelLarge type: 14px/500.
 function button(text, primary, events) {
     var styles = {
@@ -54,6 +72,17 @@ function button(text, primary, events) {
         cursor       : "pointer"
     };
     return ui.setText(ui.dom("button", styles, { type: "button" }, events), text);
+};
+
+// Disable/enable a control together with its look. The browser only greys out
+// controls it colors itself, and ours carry explicit color/background, so a
+// plain `el.disabled = true` would still read as clickable -- dim it and drop
+// the pointer cursor.
+function setDisabled(el, disabled) {
+    el.disabled = !!disabled;
+    el.style.opacity = disabled ? "0.45" : "1";
+    el.style.cursor  = disabled ? "not-allowed"
+                     : (el.tagName === "INPUT" ? "text" : "pointer");
 };
 
 // Outlined text field; the border tracks focus (outlineVariant -> primary), as
@@ -107,6 +136,8 @@ function modalHeader(titleText, onDismiss) {
 
 exports.renderInto   = renderInto;
 exports.streamRender = streamRender;
+exports.brandMark    = brandMark;
 exports.button       = button;
 exports.field        = field;
+exports.setDisabled  = setDisabled;
 exports.modalHeader  = modalHeader;

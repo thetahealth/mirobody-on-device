@@ -3,13 +3,16 @@ import { promptAction, display, router } from '@kit.ArkUI';
 import { ChatMessage, MessagePart, StreamCallbacks, Lane, RouteDecision, Canceler } from '../model/Chat';
 import { RichMessage } from '../components/RichMessage';
 import { RenderHost } from '../core/RenderHost';
-import { ChatEngine, TurnContext, TurnResult } from '../core/ChatEngine';
+import { ChatEngine, TurnContext } from '../core/ChatEngine';
 import { findProvider, BUILTIN_PROVIDERS } from '../model/Providers';
 import { SecureKeyStore } from '../core/SecureKeyStore';
 import { ConfigStore, ActiveSelection, AddedModel } from '../core/ConfigStore';
 import { ProviderManagerDialog } from '../components/ProviderManagerDialog';
 import { AddModelDialog } from '../components/AddModelDialog';
-import { LanguageDialog, FontSizeDialog, AboutDialog } from '../components/AppSettingsDialogs';
+import { LanguageDialog, FontSizeDialog, ThemeDialog, AboutDialog } from '../components/AppSettingsDialogs';
+import { LocalModelStore, LocalModel, LOCAL_PROVIDER_ID } from '../core/LocalModelStore';
+import { HistoryDrawer } from '../components/HistoryDrawer';
+import { SessionStore, SessionMeta } from '../core/SessionStore';
 
 // User-added models grouped under one provider header in the dropdown.
 interface ProviderGroup {
@@ -36,15 +39,43 @@ struct Index {
   // Whether ANY cloud service (provider key) is configured — gates the "配置模型" menu entry,
   // which is meaningless with no key behind it (you'd only see the "add a key first" screen).
   @State private hasAnyKey: boolean = false;
-  // The models the user added via the "add model" dialog — the only ones shown in the picker.
+  // Everything the picker offers: cloud models the user added, plus on-device models
+  // from LocalModelStore under the LOCAL_PROVIDER_ID sentinel. Carrying local models
+  // in the same AddedModel shape is what keeps groups()/selectModel()/pickerLabel()
+  // free of lane special-cases.
   @State private addedModels: AddedModel[] = [];
+  // Local model id -> absolute path, so a turn can snapshot the path it will mmap.
+  private localPaths: Map<string, string> = new Map();
   // Snapshot of added-model keys taken when the add dialog opens, so on close we can detect
   // what was newly added this session and auto-select the last one.
   private addedSnapshot: Set<string> = new Set<string>();
   @State private showPicker: boolean = false;
+
+  // Left drawer (components/HistoryDrawer.ets). `sessionId` is the row the on-screen
+  // conversation belongs to; it is minted on first send rather than at startup so an
+  // app that is opened and closed without a message leaves nothing behind.
+  @State private showDrawer: boolean = false;
+  @State private sessions: SessionMeta[] = [];
+  @State private sessionId: string = '';
+  /**
+   * Incognito, following htdoc's toggleIncognito: it SWAPS the session rather than
+   * merely suppressing writes. Entering stashes the real conversation and starts a
+   * blank ephemeral one; leaving restores the stash and discards the ephemeral turns.
+   * A plain "don't save" flag would be worse -- the private turns would stay mixed into
+   * the visible transcript, so the next non-private message would save them too.
+   */
+  @State private incognito: boolean = false;
+  private stashHistory: ChatMessage[] = [];
+  private stashSessionId: string = '';
   // Picker list cap — computed from screen height so it only scrolls when it truly won't fit.
   @State private pickerMaxHeight: number = 320;
   private scroller: Scroller = new Scroller();
+  /**
+   * Sticky-bottom streaming: follow new tokens while the view is at the bottom, and
+   * stop the moment the user scrolls away so reading back never fights the stream.
+   * Re-arms by itself when they return to the bottom.
+   */
+  @State private stickToBottom: boolean = true;
   // Cancel handle for the in-flight turn (lets the user stop a slow/stuck response).
   private canceler: Canceler = { cancel: () => {}, stopped: false };
   // Monotonic turn counter. Every stream callback captures the id of the turn that created it
@@ -73,6 +104,15 @@ struct Index {
     width: '90%'
   });
 
+  private themeController: CustomDialogController = new CustomDialogController({
+    builder: ThemeDialog(),
+    autoCancel: true,
+    alignment: DialogAlignment.Center,
+    backgroundBlurStyle: BlurStyle.COMPONENT_ULTRA_THICK,
+    cornerRadius: 16,
+    width: '90%'
+  });
+
   private aboutController: CustomDialogController = new CustomDialogController({
     builder: AboutDialog(),
     autoCancel: true,
@@ -86,6 +126,7 @@ struct Index {
     return [
       { value: $r('app.string.settings_language'), action: () => { this.langController.open(); } },
       { value: $r('app.string.settings_font_size'), action: () => { this.fontController.open(); } },
+      { value: $r('app.string.settings_theme'), action: () => { this.themeController.open(); } },
       { value: $r('app.string.settings_about'), action: () => { this.aboutController.open(); } },
       // Temporary: step-0 native bridge probe. Remove with pages/NativeProbe.ets
       // once the real native chat lane is wired.
@@ -159,17 +200,40 @@ struct Index {
 
   // Reload the added-model list + active selection. Called on open and after either dialog.
   private async refresh(): Promise<void> {
-    this.addedModels = await ConfigStore.getAddedModels(this.ctx());
+    const cloud: AddedModel[] = await ConfigStore.getAddedModels(this.ctx());
+    const locals: LocalModel[] = await LocalModelStore.list(this.ctx());
+
+    const paths: Map<string, string> = new Map();
+    const merged: AddedModel[] = [];
+    for (const a of cloud) { merged.push(a); }
+    for (const m of locals) {
+      paths.set(m.id, m.path);
+      merged.push({ providerId: LOCAL_PROVIDER_ID, id: m.id, displayName: m.displayName });
+    }
+    this.localPaths = paths;
+    this.addedModels = merged;
+
+    // A local model whose file moved is dropped during activation; say so, or it
+    // looks like the app forgot it and there is no hint that re-importing fixes it.
+    const gone: string[] = LocalModelStore.takeDropped();
+    if (gone.length > 0) {
+      promptAction.showToast({
+        message: this.rs($r('app.string.chat_local_model_missing'), gone.join('、')),
+        duration: 4000
+      });
+    }
     this.hasAnyKey = await this.anyKeyConfigured();
+
     const sel: ActiveSelection = await ConfigStore.load(this.ctx());
     this.activeProviderId = sel.providerId;
-    // Keep the selection only if that model is still added AND its provider still has a key
-    // (a model may have been removed via the picker / add-model dialog, or its cloud service
-    // deleted — and legacy data may hold an added model whose key is already gone).
-    const hasKey = await SecureKeyStore.hasKey(sel.providerId);
-    if (hasKey && this.isAddedModel(sel.providerId, sel.model)) {
+    // Keep the selection only if that model is still offered. A cloud model also needs
+    // its provider's key to still be there (it may have been deleted, and legacy data
+    // may hold a model whose key is long gone); a local model needs no key at all.
+    const isLocal = sel.providerId === LOCAL_PROVIDER_ID;
+    const hasKey = isLocal ? false : await SecureKeyStore.hasKey(sel.providerId);
+    if ((isLocal || hasKey) && this.isAddedModel(sel.providerId, sel.model)) {
       this.activeModel = sel.model;
-      this.activeHasKey = true;
+      this.activeHasKey = hasKey;
     } else {
       this.activeModel = '';
       this.activeHasKey = false;
@@ -238,7 +302,9 @@ struct Index {
   private async selectModel(providerId: string, model: string): Promise<void> {
     this.activeProviderId = providerId;
     this.activeModel = model;
-    this.activeHasKey = await SecureKeyStore.hasKey(providerId);
+    this.activeHasKey = providerId === LOCAL_PROVIDER_ID
+      ? false
+      : await SecureKeyStore.hasKey(providerId);
     await ConfigStore.save(this.ctx(), { providerId: providerId, model: model });
   }
 
@@ -246,7 +312,12 @@ struct Index {
   // the active one, clear the selection back to "选择模型".
   private async removeModel(m: AddedModel): Promise<void> {
     const wasActive = this.activeProviderId === m.providerId && this.activeModel === m.id;
-    await ConfigStore.removeAddedModel(this.ctx(), m.providerId, m.id);
+    if (m.providerId === LOCAL_PROVIDER_ID) {
+      // Forgets the reference only — the user's model file is never deleted.
+      await LocalModelStore.remove(this.ctx(), m.id);
+    } else {
+      await ConfigStore.removeAddedModel(this.ctx(), m.providerId, m.id);
+    }
     await this.refresh();
     if (wasActive) {
       this.activeModel = '';
@@ -254,9 +325,33 @@ struct Index {
     promptAction.showToast({ message: this.rs($r('app.string.toast_removed'), m.displayName), duration: 1500 });
   }
 
+  /** Pick a .gguf and make it the active model, so the next turn runs on-device. */
+  private async importLocalModel(): Promise<void> {
+    const m: LocalModel | undefined = await LocalModelStore.importModel(this.ctx());
+    if (m === undefined) {
+      return;   // cancelled, or the file turned out not to be reachable
+    }
+    await this.refresh();
+    await this.selectModel(LOCAL_PROVIDER_ID, m.id);
+    promptAction.showToast({
+      message: this.rs($r('app.string.toast_added'), m.displayName), duration: 1800
+    });
+  }
+
   private pickerLabel(): string {
-    if (this.activeModel.length === 0 || !this.activeHasKey) {
+    // Only activeModel is checked: refresh() already refuses to set it unless the
+    // selection is usable — a cloud model with its key, a local model outright. An
+    // extra activeHasKey test here used to blank the label for every local model,
+    // since activeHasKey is deliberately false for a lane that needs no key.
+    if (this.activeModel.length === 0) {
       return this.rs($r('app.string.chat_pick_model'));
+    }
+    if (this.activeProviderId === LOCAL_PROVIDER_ID) {
+      // No prefix. For a cloud model the prefix names WHICH service, which is real
+      // information; "on-device" is only a category, the picker already groups under
+      // that header, and the .gguf name says it anyway — so it would just be a second
+      // copy of the same word eating the pill's one line of width.
+      return this.activeModel;
     }
     const p = findProvider(this.activeProviderId);
     const label = p !== undefined ? p.label : this.activeProviderId;
@@ -275,6 +370,10 @@ struct Index {
     }
     const out: ProviderGroup[] = [];
     byP.forEach((models: AddedModel[], pid: string) => {
+      if (pid === LOCAL_PROVIDER_ID) {
+        out.push({ providerId: pid, label: this.rs($r('app.string.chat_local_group')), models: models });
+        return;
+      }
       const p = findProvider(pid);
       out.push({ providerId: pid, label: p !== undefined ? p.label : pid, models: models });
     });
@@ -292,7 +391,7 @@ struct Index {
           ForEach(this.groups(), (g: ProviderGroup) => {
             Text(g.label)
               .fontSize(12)
-              .fontColor('#9A9A9A')
+              .fontColor($r('app.color.text_tertiary'))
               .width('100%')
               .padding({ left: 16, right: 16, top: 10, bottom: 4 })
             ForEach(g.models, (m: AddedModel) => {
@@ -307,12 +406,12 @@ struct Index {
                     this.selectModel(m.providerId, m.id);
                   })
                 Button({ type: ButtonType.Circle }) {
-                  Text('－').fontSize(18).fontColor(Color.White).fontWeight(FontWeight.Bold)
+                  Text('－').fontSize(18).fontColor($r('app.color.on_brand')).fontWeight(FontWeight.Bold)
                 }
                 .width(28)
                 .height(28)
                 .margin({ left: 12 })
-                .backgroundColor('#D24C57')
+                .backgroundColor($r('app.color.danger'))
                 .onClick(() => {
                   this.removeModel(m);
                 })
@@ -323,7 +422,7 @@ struct Index {
 
               Divider()
                 .strokeWidth(0.5)
-                .color('#F0F0F0')
+                .color($r('app.color.divider'))
                 .margin({ left: 12, right: 12 })
             }, (m: AddedModel) => m.providerId + '::' + m.id)
             // Key includes the group's model ids so removing one re-renders this group
@@ -338,11 +437,11 @@ struct Index {
 
       Divider()
         .strokeWidth(0.5)
-        .color('#E0E0E0')
+        .color($r('app.color.border'))
         .margin({ top: 6, bottom: 2 })
       if (this.hasAnyKey) {
         Row() {
-          Text($r('app.string.chat_menu_config_model')).fontSize(15).fontColor('#3F7FC1')
+          Text($r('app.string.chat_menu_config_model')).fontSize(15).fontColor($r('app.color.brand_text'))
         }
         .width('100%')
         .padding(16)
@@ -353,7 +452,7 @@ struct Index {
         })
       }
       Row() {
-        Text($r('app.string.chat_menu_config_cloud')).fontSize(15).fontColor('#3F7FC1')
+        Text($r('app.string.chat_menu_config_cloud')).fontSize(15).fontColor($r('app.color.brand_text'))
       }
       .width('100%')
       .padding(16)
@@ -361,22 +460,176 @@ struct Index {
         this.showPicker = false;
         this.mgrController.open();
       })
+      // No key needed for this one, so it is never gated.
+      Row() {
+        Text($r('app.string.chat_menu_import_local')).fontSize(15).fontColor($r('app.color.brand_text'))
+      }
+      .width('100%')
+      .padding(16)
+      .onClick(() => {
+        this.showPicker = false;
+        this.importLocalModel();
+      })
     }
     .width('90%')
     .padding({ top: 8, bottom: 8, left: 6, right: 6 })
   }
 
+  // Called on every delta. A no-op unless the view is still following the stream —
+  // and harmless when the content does not overflow, since scrollEdge does nothing.
   private scrollToEnd(): void {
+    if (!this.stickToBottom) {
+      return;
+    }
     this.scroller.scrollEdge(Edge.Bottom);
+  }
+
+  /**
+   * Re-evaluate whether to keep following, after a USER-driven scroll.
+   *
+   * isAtEnd() is the judge rather than the scroll delta's sign: it needs no guess
+   * about which direction is "up", and it gets the edge cases right for free — an
+   * overscroll bounce settles back at the end and stays stuck, while a drag that
+   * lands anywhere else unsticks.
+   */
+  private syncStick(): void {
+    this.stickToBottom = this.scroller.isAtEnd();
   }
 
   // The finished turn as a history message. `content` carries ONLY the answer
   // text (it goes back to the model as context — replaying chain-of-thought
   // would bloat and skew later turns); the thinking survives in parts, for
   // display alone.
+  //--------------------------------------------------------------------------
+  // Left drawer / session history
+  //--------------------------------------------------------------------------
+
+  /**
+   * Write the on-screen conversation to its session row. Called after every change to
+   * `history` (user turn appended, assistant turn finished, partial kept on stop) rather
+   * than only at the end of a turn, so killing the app mid-reply still leaves the
+   * question saved.
+   *
+   * Minting the id here, on the first save, is what keeps an opened-and-abandoned app
+   * from creating an empty row.
+   */
+  private persist(): void {
+    // The whole point of incognito: nothing reaches disk, including the index row.
+    if (this.incognito || this.history.length === 0) {
+      return;
+    }
+    if (this.sessionId.length === 0) {
+      this.sessionId = SessionStore.newId();
+    }
+    // Deliberately not awaited: a turn must not wait on disk. A failed write costs the
+    // history row, not the conversation on screen.
+    SessionStore.save(this.ctx(), this.sessionId, this.history);
+  }
+
+  private async openDrawer(): Promise<void> {
+    this.sessions = await SessionStore.list(this.ctx());
+    this.showDrawer = true;
+  }
+
+  /**
+   * Start a fresh conversation. The outgoing one is already persisted (every turn saves),
+   * so this only has to clear the view -- and must drop `sessionId`, or the next message
+   * would overwrite the conversation the user just left.
+   */
+  /**
+   * Enter or leave incognito. Inert while a turn streams (the drawer greys the control
+   * out too): swapping the conversation mid-reply would let that turn's callbacks append
+   * onto a session no longer on screen.
+   */
+  private toggleIncognito(): void {
+    if (this.busy) {
+      return;
+    }
+    if (!this.incognito) {
+      this.stashHistory = this.history;
+      this.stashSessionId = this.sessionId;
+      this.history = [];
+      this.sessionId = '';
+      this.incognito = true;
+    } else {
+      this.history = this.stashHistory;
+      this.sessionId = this.stashSessionId;
+      this.stashHistory = [];
+      this.stashSessionId = '';
+      this.incognito = false;
+    }
+    this.streaming = '';
+    this.streamingThinking = '';
+    this.laneNotice = '';
+    this.showDrawer = false;
+    this.stickToBottom = true;
+    this.scrollToEnd();
+  }
+
+  // Note this deliberately does NOT clear `incognito`: starting another chat while
+  // private must not silently resume recording. Leaving is always an explicit tap.
+  private newChat(): void {
+    if (this.busy) {
+      this.onStop();
+    }
+    this.history = [];
+    this.streaming = '';
+    this.streamingThinking = '';
+    this.laneNotice = '';
+    this.sessionId = '';
+    this.showDrawer = false;
+    this.stickToBottom = true;
+  }
+
+  private async pickSession(id: string): Promise<void> {
+    if (id === this.sessionId) {
+      this.showDrawer = false;
+      return;
+    }
+    // Stop any in-flight turn FIRST: its callbacks would otherwise append their reply
+    // onto the conversation we are about to load. onStop bumps turnSeq, which retires
+    // them permanently.
+    if (this.busy) {
+      this.onStop();
+    }
+    const msgs = await SessionStore.messages(this.ctx(), id);
+    this.history = msgs;
+    this.streaming = '';
+    this.streamingThinking = '';
+    this.laneNotice = '';
+    this.sessionId = id;
+    this.showDrawer = false;
+    this.stickToBottom = true;
+    this.scrollToEnd();
+  }
+
+  /** Per-row delete. Confirmed first — there is no undo. */
+  private async confirmDelete(id: string): Promise<void> {
+    const answer = await promptAction.showDialog({
+      title: this.rs($r('app.string.drawer_delete_title')),
+      message: this.rs($r('app.string.drawer_delete_msg')),
+      // Colors come from the palette, never literals -- ArkTS in this app holds no
+      // hardcoded hex, which is what let the whole recolor happen in color.json alone.
+      buttons: [
+        { text: this.rs($r('app.string.drawer_cancel')), color: $r('app.color.text_secondary') },
+        { text: this.rs($r('app.string.drawer_delete_ok')), color: $r('app.color.danger_text') }
+      ]
+    });
+    if (answer.index !== 1) {
+      return;
+    }
+    await SessionStore.remove(this.ctx(), id);
+    this.sessions = await SessionStore.list(this.ctx());
+    // Deleting the conversation on screen leaves it displayed but unowned; clearing the
+    // id means the next message starts a new row instead of resurrecting the deleted one.
+    if (id === this.sessionId) {
+      this.sessionId = '';
+    }
+  }
+
   private assembleAssistant(): ChatMessage {
     const parts: MessagePart[] = [];
-    if (this.streamingThinking.length > 0) {
+    if (this.streamingThinking.trim().length > 0) {
       parts.push({ kind: 'thinking', content: this.streamingThinking });
     }
     if (this.streaming.length > 0) {
@@ -395,8 +648,9 @@ struct Index {
     this.turnSeq++;
     this.canceler.stopped = true;
     this.canceler.cancel(); // best-effort: stop the network request
-    if (this.streaming.length > 0 || this.streamingThinking.length > 0) {
+    if (this.streaming.length > 0 || this.streamingThinking.trim().length > 0) {
       this.history = this.history.concat(this.assembleAssistant());
+      this.persist();
     }
     this.streaming = '';
     this.streamingThinking = '';
@@ -415,12 +669,15 @@ struct Index {
     }
     const userMsg: ChatMessage = { role: 'user', content: text };
     this.history = this.history.concat(userMsg);
+    this.persist();
     this.draft = '';
     this.streaming = '';
     this.streamingThinking = '';
     this.laneNotice = '';
     this.busy = true;
     this.canceler = { cancel: () => {}, stopped: false };
+    // Sending is an explicit "show me": re-arm even if they had scrolled up to read.
+    this.stickToBottom = true;
     this.scrollToEnd();
 
     // This turn's identity: the callbacks below are live only while turnSeq still matches.
@@ -431,11 +688,25 @@ struct Index {
     const turnProviderId = this.activeProviderId;
     const turnModel = this.activeModel;
 
+    const isLocalTurn = turnProviderId === LOCAL_PROVIDER_ID;
+    const turnLocalPath = isLocalTurn
+      ? (this.localPaths.get(turnModel) ?? '')
+      : '';
+
     const turn: TurnContext = {
       providerId: turnProviderId,
       model: turnModel,
-      userForcedLane: this.activeHasKey ? Lane.CLOUD : '',
-      offline: false
+      // An explicit lane either way: a local pick must not be routed by the
+      // heuristics, and a cloud pick already was forced before local existed.
+      userForcedLane: isLocalTurn ? Lane.LOCAL : (this.activeHasKey ? Lane.CLOUD : ''),
+      offline: false,
+      localModelPath: turnLocalPath,
+      onDecision: (decision: RouteDecision) => {
+        if (turnId !== this.turnSeq) {
+          return;
+        }
+        this.noticeFor(decision);
+      }
     };
 
     let gotContent = false;
@@ -459,8 +730,9 @@ struct Index {
         if (turnId !== this.turnSeq) {
           return; // onStop already finalized this turn, or a newer one owns the UI
         }
-        if (this.streaming.length > 0 || this.streamingThinking.length > 0) {
+        if (this.streaming.length > 0 || this.streamingThinking.trim().length > 0) {
           this.history = this.history.concat(this.assembleAssistant());
+          this.persist();
         }
         this.streaming = '';
         this.streamingThinking = '';
@@ -492,11 +764,9 @@ struct Index {
     };
 
     try {
-      const result: TurnResult = await ChatEngine.send(this.ctx(), this.history, turn, cb, this.canceler);
-      if (turnId !== this.turnSeq) {
-        return;
-      }
-      this.noticeFor(result.decision);
+      // The lane notice is delivered through turn.onDecision, not from here — by the time
+      // this await resolves the whole turn is already over.
+      await ChatEngine.send(this.ctx(), this.history, turn, cb, this.canceler);
     } catch (err) {
       if (turnId !== this.turnSeq) {
         return;
@@ -580,8 +850,8 @@ struct Index {
       if (msg.role === 'user') {
         Text(msg.content)
           .fontSize(16 * this.fontScale)
-          .fontColor(Color.White)
-          .backgroundColor('#3F7FC1')
+          .fontColor($r('app.color.on_brand'))
+          .backgroundColor($r('app.color.brand'))
           .borderRadius(14)
           .padding({ left: 14, right: 14, top: 10, bottom: 10 })
           .constraintSize({ maxWidth: '90%' })
@@ -598,7 +868,7 @@ struct Index {
             fontScale: this.fontScale
           })
         }
-        .backgroundColor('#F1F1F3')
+        .backgroundColor($r('app.color.bg_bubble'))
         .borderRadius(14)
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .width('100%')
@@ -622,7 +892,7 @@ struct Index {
           fontScale: this.fontScale
         })
       }
-      .backgroundColor('#F1F1F3')
+      .backgroundColor($r('app.color.bg_bubble'))
       .borderRadius(14)
       .padding({ left: 14, right: 14, top: 10, bottom: 10 })
       .width('100%')
@@ -652,24 +922,47 @@ struct Index {
     Column() {
       // Top bar
       Row() {
+        SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+          .fontSize(24)
+          .fontColor([$r('app.color.text_primary')])
+          .margin({ right: 14 })
+          .onClick(() => {
+            this.openDrawer();
+          })
         Text($r('app.string.app_name'))
           .fontSize(20)
           .fontWeight(FontWeight.Bold)
           .layoutWeight(1)
         SymbolGlyph($r('sys.symbol.gearshape'))
           .fontSize(24)
-          .fontColor(['#333333'])
+          .fontColor([$r('app.color.text_primary')])
           .bindMenu(this.settingsMenu())
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 14, bottom: 14 })
-      .border({ width: { bottom: 0.5 }, color: '#E5E5E5' })
+      .border({ width: { bottom: 0.5 }, color: $r('app.color.border') })
+
+      if (this.incognito) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.eye_slash'))
+            .fontSize(14)
+            .fontColor([$r('app.color.notice_fg')])
+          Text($r('app.string.incognito_note'))
+            .fontSize(12)
+            .fontColor($r('app.color.notice_fg'))
+            .margin({ left: 8 })
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .backgroundColor($r('app.color.notice_bg'))
+        .padding({ left: 20, right: 20, top: 8, bottom: 8 })
+      }
 
       if (this.laneNotice.length > 0) {
         Text(this.laneNotice)
           .fontSize(12)
-          .fontColor('#9A6B1E')
-          .backgroundColor('#FBEEDD')
+          .fontColor($r('app.color.notice_fg'))
+          .backgroundColor($r('app.color.notice_bg'))
           .width('100%')
           .padding({ left: 20, right: 20, top: 8, bottom: 8 })
       }
@@ -682,7 +975,7 @@ struct Index {
           }
         }, (msg: ChatMessage, index: number) => index.toString() + msg.role)
 
-        if (this.streaming.length > 0 || this.streamingThinking.length > 0) {
+        if (this.streaming.length > 0 || this.streamingThinking.trim().length > 0) {
           ListItem() {
             this.streamingBubble()
           }
@@ -692,6 +985,19 @@ struct Index {
       .width('100%')
       .listDirection(Axis.Vertical)
       .edgeEffect(EdgeEffect.Spring)
+      // ScrollState.Idle is what a CONTROLLER-driven scroll reports, i.e. our own
+      // scrollEdge() — acting on it would immediately undo the stick it just honored.
+      // Only a finger (Scroll) or its inertia (Fling) may change the decision.
+      .onDidScroll((offset: number, state: ScrollState) => {
+        if (state !== ScrollState.Idle) {
+          this.syncStick();
+        }
+      })
+      // A fling can settle a frame after its last onDidScroll; re-check once it rests
+      // so stopping exactly at the bottom reliably resumes following.
+      .onScrollStop(() => {
+        this.syncStick();
+      })
 
       // Composer — rounded pill: input on top, control row (model picker · send) below.
       Column() {
@@ -714,12 +1020,12 @@ struct Index {
             Row() {
               Text(this.pickerLabel())
                 .fontSize(14 * this.fontScale)
-                .fontColor('#333333')
+                .fontColor($r('app.color.text_primary'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
               Text(' ▾')
                 .fontSize(12)
-                .fontColor('#8A8A8A')
+                .fontColor($r('app.color.text_tertiary'))
             }
             .layoutWeight(1)
             .padding({ left: 10, right: 10, top: 8, bottom: 8 })
@@ -731,16 +1037,16 @@ struct Index {
             Button({ type: ButtonType.Circle }) {
               if (this.busy) {
                 Stack({ alignContent: Alignment.Center }) {
-                  LoadingProgress().width(30).height(30).color('#FFFFFF')
-                  Text('■').fontSize(12).fontColor(Color.White)
+                  LoadingProgress().width(30).height(30).color($r('app.color.on_brand'))
+                  Text('■').fontSize(12).fontColor($r('app.color.on_brand'))
                 }
               } else {
-                Text('↑').fontSize(20).fontColor(Color.White)
+                Text('↑').fontSize(20).fontColor($r('app.color.on_brand'))
               }
             }
             .width(40)
             .height(40)
-            .backgroundColor('#3F7FC1')
+            .backgroundColor($r('app.color.brand'))
             .enabled(this.busy || this.draft.trim().length > 0)
             .onClick(() => {
               if (this.busy) {
@@ -756,15 +1062,15 @@ struct Index {
         .width('100%')
         .padding({ left: 12, right: 12, top: 10, bottom: 10 })
         .borderRadius(24)
-        .border({ width: 1, color: '#E0E0E0' })
-        .backgroundColor('#FAFAFA')
+        .border({ width: 1, color: $r('app.color.border') })
+        .backgroundColor($r('app.color.bg_surface'))
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 10, bottom: 16 })
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(Color.White)
+    .backgroundColor($r('app.color.bg_page'))
 
     // Model picker overlay — an in-tree Stack layer (not bindPopup), so it re-renders
     // reactively when the added-model list changes (e.g. right after a delete).
@@ -772,7 +1078,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor('#33000000')
+        .backgroundColor($r('app.color.scrim'))
         .onClick(() => {
           this.showPicker = false;
         })
@@ -782,8 +1088,27 @@ struct Index {
       .borderRadius(12)
       .clip(true)
       .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THICK)
-      .shadow({ radius: 16, color: '#26000000', offsetX: 0, offsetY: 2 })
+      .shadow({ radius: 16, color: $r('app.color.shadow'), offsetX: 0, offsetY: 2 })
       .margin({ bottom: 84 })
+    }
+
+    // Left navigation drawer -- an in-tree layer for the same reason as the picker
+    // above. Declared AFTER it so a drawer opened while the picker is up paints over it.
+    if (this.showDrawer) {
+      // No separate scrim layer: the drawer's own root carries the dim AND the
+      // tap-to-dismiss. A sibling scrim under a full-width drawer root never receives
+      // the tap, which is how blank-area dismissal was broken to begin with.
+      HistoryDrawer({
+        sessions: this.sessions,
+        activeId: this.sessionId,
+        incognito: this.incognito,
+        busy: this.busy,
+        onNewChat: () => { this.newChat(); },
+        onIncognito: () => { this.toggleIncognito(); },
+        onPick: (id: string) => { this.pickSession(id); },
+        onDelete: (id: string) => { this.confirmDelete(id); },
+        onClose: () => { this.showDrawer = false; }
+      })
     }
     }
     .width('100%')

@@ -20,7 +20,10 @@
       "name": "perm_internet_reason",
       "value": "Send chat requests to your chosen cloud LLM provider (BYOK)"
     },
-
+    {
+      "name": "perm_file_persist_reason",
+      "value": "Keep the model file you picked readable across restarts (the file stays in your own folder)"
+    },
     {
       "name": "chat_pick_model",
       "value": "Select model"
@@ -32,6 +35,18 @@
     {
       "name": "chat_menu_config_cloud",
       "value": "＋ Configure cloud service"
+    },
+    {
+      "name": "chat_local_group",
+      "value": "On-device (offline)"
+    },
+    {
+      "name": "chat_local_model_missing",
+      "value": "The file for \"%s\" moved or was deleted, so it was removed from the list. Import it again."
+    },
+    {
+      "name": "chat_menu_import_local",
+      "value": "＋ Import a local model"
     },
     {
       "name": "chat_input_hint",
@@ -85,14 +100,33 @@
       "name": "toast_added",
       "value": "Added %s"
     },
-
     {
       "name": "model_dialog_title",
       "value": "Configure models"
     },
     {
       "name": "model_fetch_failed",
-      "value": "Failed to fetch models, please retry"
+      "value": "Couldn't load the model list"
+    },
+    {
+      "name": "model_fetch_offline",
+      "value": "Can't reach this service. Check your connection and retry."
+    },
+    {
+      "name": "model_fetch_partial",
+      "value": "Live catalog unavailable — showing built-in models only."
+    },
+    {
+      "name": "model_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "model_empty",
+      "value": "This service lists no models right now."
+    },
+    {
+      "name": "model_no_match",
+      "value": "No models match your search."
     },
     {
       "name": "model_calls",
@@ -118,7 +152,6 @@
       "name": "model_loading",
       "value": "Fetching the model list live…"
     },
-
     {
       "name": "provider_dialog_title",
       "value": "Configure cloud service"
@@ -199,7 +232,6 @@
       "name": "provider_no_keys",
       "value": "No keys configured yet"
     },
-
     {
       "name": "settings_language",
       "value": "Language"
@@ -207,6 +239,22 @@
     {
       "name": "settings_font_size",
       "value": "Font size"
+    },
+    {
+      "name": "settings_theme",
+      "value": "Theme"
+    },
+    {
+      "name": "theme_system",
+      "value": "Follow system"
+    },
+    {
+      "name": "theme_light",
+      "value": "Light"
+    },
+    {
+      "name": "theme_dark",
+      "value": "Dark"
     },
     {
       "name": "settings_about",
@@ -256,7 +304,6 @@
       "name": "about_desc",
       "value": "A privacy-first health chat app. Cloud inference runs on your own API key (BYOK); keys stay on this device only."
     },
-
     {
       "name": "engine_local_stub_byok",
       "value": "On-device models aren't wired up on HarmonyOS yet. Turn on \"Deep thinking\" to handle this message via the cloud (BYOK)."
@@ -265,7 +312,6 @@
       "name": "engine_local_stub_nokey",
       "value": "On-device models aren't wired up on HarmonyOS yet, and no cloud key is configured. Go to Settings, choose a provider, and paste a key."
     },
-
     {
       "name": "chat_thinking_label",
       "value": "Deep thinking"
@@ -281,6 +327,70 @@
     {
       "name": "chat_math_placeholder",
       "value": "formula (rendering coming soon)"
+    },
+    {
+      "name": "drawer_new_chat",
+      "value": "New chat"
+    },
+    {
+      "name": "drawer_empty",
+      "value": "No conversations yet"
+    },
+    {
+      "name": "drawer_local_only",
+      "value": "History stays on this device"
+    },
+    {
+      "name": "drawer_untitled",
+      "value": "(empty conversation)"
+    },
+    {
+      "name": "drawer_msg_count",
+      "value": "%d messages"
+    },
+    {
+      "name": "drawer_just_now",
+      "value": "just now"
+    },
+    {
+      "name": "drawer_mins_ago",
+      "value": "%d min ago"
+    },
+    {
+      "name": "drawer_hours_ago",
+      "value": "%d h ago"
+    },
+    {
+      "name": "drawer_days_ago",
+      "value": "%d d ago"
+    },
+    {
+      "name": "drawer_date",
+      "value": "%d/%d"
+    },
+    {
+      "name": "drawer_delete_title",
+      "value": "Delete this conversation?"
+    },
+    {
+      "name": "drawer_delete_msg",
+      "value": "This cannot be undone."
+    },
+    {
+      "name": "drawer_delete_ok",
+      "value": "Delete"
+    },
+    {
+      "name": "drawer_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "drawer_incognito",
+      "value": "Incognito"
+    },
+    {
+      "name": "incognito_note",
+      "value": "Incognito — this conversation will not be saved"
     }
   ]
 }

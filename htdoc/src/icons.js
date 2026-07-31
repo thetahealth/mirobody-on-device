@@ -19,12 +19,22 @@ var SETTINGS_SVG =
 var CARET_SVG =
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">' +
     '<path d="M7 10l5 5 5-5z"/></svg>';
-// Person glyph: the fallback inside the top-left account avatar when there's no
-// email to draw an initial from. The avatar (a filled circle opening the personal
-// drawer) reads as "you / account", distinct from the settings gear on the right.
-var PERSON_SVG =
-    '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">' +
-    '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+// Plus: the leading glyph on the drawer's "Switch account" row, which sits under the
+// list of already-signed-in accounts. Those rows are plain labels, so the plus is what
+// marks this one as "add another" rather than one more account to switch to. Sized
+// down to 16 to sit with the 0.85rem account rows.
+var PLUS_SVG =
+    '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">' +
+    '<path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>';
+// Hamburger: the top-left button that opens the nav drawer. A nav glyph rather than
+// a person glyph because the drawer's primary content is the conversation list (its
+// only scrolling band) -- account is one pinned row at the bottom. Same plain
+// currentColor treatment and size as the settings gear, so the two bar actions read
+// as a matched pair. android/ios still use their person icon; harmony already uses
+// this one (sys.symbol.line_3_horizontal).
+var MENU_SVG =
+    '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">' +
+    '<path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>';
 // History drawer icons: back arrow (close) and a delete/trash glyph.
 var BACK_SVG =
     '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">' +
@@ -32,6 +42,19 @@ var BACK_SVG =
 var TRASH_SVG =
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
     '<path d="M6 7h12v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm2 2v9h2V9H8zm4 0v9h2V9h-2zM9 4h6l1 1h4v2H4V5h4l1-1z"/></svg>';
+// The Mirobody logo mark (assets/mirobody.svg, which stays the favicon). Inlined
+// here so the upper glyph can follow the theme: it is drawn in currentColor --
+// the caller tints it with `wordmark` (near-black / white), exactly as android's
+// theme-aware `brand_logo_mark` does. The lower glyph keeps the fixed brand blue
+// in both modes (docs/colors-and-fonts.md §5); it clears 3:1 on the dark page.
+// Sized by the box it's placed in (widgets.brandMark), not by width/height here.
+var MIROBODY_SVG =
+    '<svg viewBox="0 0 23 24" width="100%" height="100%" fill="none" aria-hidden="true">' +
+    '<path fill="currentColor" d="M22.8429 6.84462C22.8429 3.0773 19.9346 0.0197148 16.3398 0H0V10.3126H16.3398' +
+    'C17.9718 10.3216 19.4609 10.9579 20.6013 12.0009C21.9741 10.7464 22.8429 8.90213 22.8429 6.84462Z"/>' +
+    '<path fill="#005CF5" d="M20.6013 12.0018C19.4609 13.0449 17.9718 13.6811 16.3398 13.6883H0V24.0009H16.3398' +
+    'C19.9346 23.9812 22.8429 20.9236 22.8429 17.1563C22.8429 15.0988 21.9741 13.2546 20.6013 12V12.0018Z"/></svg>';
+
 // Google "G" mark (official four-color), used on the sign-in button.
 var GOOGLE_SVG =
     '<svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">' +
@@ -161,9 +184,11 @@ var SEND_ARROW_SVG =
 
 exports.SETTINGS_SVG = SETTINGS_SVG;
 exports.CARET_SVG    = CARET_SVG;
-exports.PERSON_SVG   = PERSON_SVG;
+exports.PLUS_SVG     = PLUS_SVG;
+exports.MENU_SVG     = MENU_SVG;
 exports.BACK_SVG     = BACK_SVG;
 exports.TRASH_SVG    = TRASH_SVG;
+exports.MIROBODY_SVG = MIROBODY_SVG;
 exports.GOOGLE_SVG   = GOOGLE_SVG;
 exports.APPLE_SVG    = APPLE_SVG;
 exports.WECHAT_SVG   = WECHAT_SVG;

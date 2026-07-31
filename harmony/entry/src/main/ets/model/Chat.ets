@@ -1,7 +1,7 @@
 /**
  * Shared chat + routing types. Both execution lanes (local, cloud/BYOK) expose the same
  * OpenAI Chat/SSE contract, so everything above the router is lane-agnostic
- * (see docs/tiered-inference.md).
+ * (see docs/privacy-tiers.md).
  */
 
 /**

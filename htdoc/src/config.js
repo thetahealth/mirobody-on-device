@@ -102,21 +102,81 @@ var BASE_URL_PRESETS = [
     "https://test.mirobody.ai"
 ];
 
-// "Theta Health" light scheme: navy primary on warm cream surfaces, black serif
-// brand. A deliberate departure from the app's M3 slate-blue/off-white so the web
-// client reads as the Theta Health brand (see the login design).
-var color = {
+// "Theta Health" scheme: navy primary on warm cream surfaces, black serif brand
+// (a deliberate departure from the app's M3 slate-blue/off-white so the web
+// client reads as the Theta Health brand). Two palettes, per the unified token
+// sheet (docs/colors-and-fonts.md §2); `color` is the LIVE one -- applyTheme()
+// copies the picked palette into it in place, so every module's `color`
+// reference follows, and a re-render repaints the built DOM.
+var LIGHT_COLOR = {
     primary      : "#1e3a6b",                  // deep navy: primary buttons, links, logo
     onPrimary    : "#ffffff",
-    brand        : "#1e3a6b",                  // used as the user-bubble tint
+    brand        : "#1e3a6b",                  // solid user-bubble fill + brand accents
     background   : "#f2efe9",                  // warm cream page background
     surfaceLow   : "#faf7f1",                  // field / card fill (slightly lighter than bg)
     onSurface    : "#1a1c1e",                  // near-black text + serif brand title
     onSurfaceVar : "#52565c",                  // secondary text (subtitle, hints)
     outline      : "#74787c",
     outlineVar   : "#ddd6c9",                  // warm hairlines / idle field borders
-    userBubble   : "rgba(30, 58, 107, 0.10)",  // navy @ 10%
-    error        : "#ba1a1a"
+    selectedBg   : "rgba(30, 58, 107, 0.10)",  // navy @ 10%: selected / emphasized row tint
+    overlay      : "rgba(0, 0, 0, 0.04)",      // subtle wash: thinking chip bg (bg_overlay)
+    error        : "#ba1a1a",
+    onError      : "#ffffff",                  // text on error fills
+    wordmark     : "#0f1115"                   // serif brand-title black (matches the logo mark)
+};
+// Dark: near-black cool surfaces, slate-blue brand (keep hue, raise lightness).
+var DARK_COLOR = {
+    primary      : "#a0cde5",                  // brand fill/link, brighter sibling of the navy
+    onPrimary    : "#0a1b3d",                  // dark navy glyph on the pale fill
+    brand        : "#a0cde5",
+    background   : "#101315",
+    surfaceLow   : "#181b1d",
+    onSurface    : "#e2e2e5",
+    onSurfaceVar : "#c4c7cb",
+    outline      : "#8e9194",
+    outlineVar   : "#44474a",
+    selectedBg   : "rgba(160, 205, 229, 0.16)", // slate @ 16%: navy @ 10% vanishes on dark
+    overlay      : "rgba(255, 255, 255, 0.08)",
+    error        : "#ffb4ab",
+    onError      : "#5c0a06",                   // white on the pale salmon fails; deep brick passes
+    wordmark     : "#ffffff"                    // as the android night brand_logo_mark
+};
+var color = {};
+for (var ck in LIGHT_COLOR) { color[ck] = LIGHT_COLOR[ck]; }
+
+// Theme setting: "system" follows prefers-color-scheme, "light"/"dark" pin it.
+var THEME_KEY = "mirobody-theme";
+var THEMES = [
+    ["system", "themeSystem"],
+    ["light",  "themeLight"],
+    ["dark",   "themeDark"]
+];
+
+function themeLabel(theme) {
+    for (var i = 0; i < THEMES.length; i ++) {
+        if (THEMES[i][0] === theme) { return THEMES[i][1]; }
+    }
+    return "themeSystem";
+};
+
+function isDarkTheme() {
+    var theme = state.theme;
+    if (theme === "dark")  { return true; }
+    if (theme === "light") { return false; }
+    return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+};
+
+// Swap the live palette + the root class (index.css keys its dark overrides --
+// body, markdown block, scrollbars, placeholder -- off html.mb-dark) + the
+// browser-chrome color. Inline-styled DOM built before the call keeps the old
+// values: the caller re-renders (app.render()), exactly like a language change.
+function applyTheme() {
+    var dark = isDarkTheme();
+    var src = dark ? DARK_COLOR : LIGHT_COLOR;
+    for (var k in src) { color[k] = src[k]; }
+    document.documentElement.classList.toggle("mb-dark", dark);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) { meta.setAttribute("content", dark ? DARK_COLOR.background : LIGHT_COLOR.primary); }
 };
 
 // Serif stack for the brand title (system fonts only — a strict font-src 'self'
@@ -131,6 +191,7 @@ var state = {
     providers : [],    // [{code, name}] from /api/providers; name is "Agent/provider"
     language  : localStorage.getItem(LANGUAGE_KEY) || defaultLanguage(),
     fontOffset : parseInt(localStorage.getItem(FONT_KEY), 10) || 0,
+    theme     : localStorage.getItem(THEME_KEY) || "system",
     provider  : localStorage.getItem(PROVIDER_KEY) || "",  // last selection ("Agent/provider")
     // The server-side conversation (thread) id of the current chat, learned from
     // the chat stream's "conversation" event and echoed back to continue the same
@@ -175,9 +236,11 @@ exports.APP_VERSION      = APP_VERSION;
 exports.PROVIDER_KEY     = PROVIDER_KEY;
 exports.LANGUAGE_KEY     = LANGUAGE_KEY;
 exports.FONT_KEY         = FONT_KEY;
+exports.THEME_KEY        = THEME_KEY;
 exports.LANGUAGES        = LANGUAGES;
 exports.RTL_LANGS        = RTL_LANGS;
 exports.FONT_TIERS       = FONT_TIERS;
+exports.THEMES           = THEMES;
 exports.BASE_URL_PRESETS = BASE_URL_PRESETS;
 exports.color            = color;
 exports.serifFamily      = serifFamily;
@@ -190,5 +253,8 @@ exports.defaultLanguage = defaultLanguage;
 exports.languageLabel  = languageLabel;
 exports.applyFontScale = applyFontScale;
 exports.fontTierLabel  = fontTierLabel;
+exports.themeLabel     = themeLabel;
+exports.isDarkTheme    = isDarkTheme;
+exports.applyTheme     = applyTheme;
 exports.isMobile       = isMobile;
 exports.isAndroid      = isAndroid;

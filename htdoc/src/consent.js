@@ -163,8 +163,8 @@ function buttonStyle(primary) {
         padding      : "10px 16px",
         borderRadius : "8px",
         border       : primary ? "none" : "1px solid rgba(128,128,128,0.4)",
-        background   : primary ? "#2563eb" : "transparent",
-        color        : primary ? "#fff" : "inherit",
+        background   : primary ? color.primary : "transparent",
+        color        : primary ? color.onPrimary : "inherit",
         fontSize     : "15px",
         cursor       : "pointer"
     };

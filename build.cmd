@@ -67,7 +67,7 @@ set "_TAG_SUFFIX="
 if defined _DB_TAG set "_TAG_SUFFIX=-%_DB_TAG%"
 
 :: `mobile` builds the shape HarmonyOS/Android/iOS ship: no HTTP front door (so
-:: no libwebsockets) and the BYOK provider menu. Verifying it on a desktop host
+:: no libwebsockets). Verifying it on a desktop host
 :: catches profile-specific breakage without a device. It gets its own build dir
 :: so it never clobbers the normal one, and yields libraries only -- no
 :: executable, CLIs or tests.
@@ -119,8 +119,7 @@ echo   Arch      amd64 (or x86_64), arm64, x86       default: host arch
 echo   Backend   pg / postgresql, legacy / pg_legacy, mysql, sqlite, ck / clickhouse, duckdb
 echo             (omit for the POSTGRESQL default)
 echo   mobile    build the profile HarmonyOS/Android/iOS ship: no HTTP front door
-echo             (no libwebsockets) and the BYOK provider menu (a provider with
-echo             no key is not listed). Libraries only -- no exe, CLIs or tests.
+echo             (no libwebsockets). Libraries only -- no exe, CLIs or tests.
 echo   clean     clear CMake's cache (keep the dir's vcpkg_installed) and
 echo             reconfigure -- use after changing options or moving the repo
 echo   help / -h / --help / /?   show this help

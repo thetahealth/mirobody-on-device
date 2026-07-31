@@ -1,7 +1,7 @@
 /**
- * Secure key store — HARD RULE (docs/byok-providers.md line 26): keys live on-device only,
- * in the platform secure store, addressed by provider_id. Never sent to any Mirobody
- * server, logged, or put in telemetry.
+ * Secure key store — HARD RULE (docs/privacy-tiers.md, "Guarantees we hold ourselves to"):
+ * user keys live on-device only, in the platform secure store, addressed by provider_id.
+ * Never sent to any Mirobody server, logged, or put in telemetry.
  *
  * Backed by ASSET Kit (device-level encrypted asset store). One asset per provider,
  * ALIAS = "byok.key.<providerId>".

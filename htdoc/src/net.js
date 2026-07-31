@@ -178,6 +178,18 @@ function setBaseUrl(url) {
         localStorage.removeItem(BASE_URL_KEY);
     }
 };
+// Just the host of the active backend, for places that want a compact label
+// rather than the address itself (the settings menu). Scheme, port and mount
+// prefix are dropped: "http://localhost:8080/mirobody" -> "localhost". Anything
+// unparseable is shown as stored, so a hand-edited value is never hidden.
+function baseHost() {
+    var base = getBaseUrl();
+    try {
+        return new URL(base).hostname || base;
+    } catch (e) {
+        return base;
+    }
+};
 function apiUrl(uri) {
     var base = getBaseUrl();
     return base ? base + uri : uri;
@@ -186,6 +198,7 @@ function apiUrl(uri) {
 exports.appBase    = appBase;
 exports.getBaseUrl = getBaseUrl;
 exports.setBaseUrl = setBaseUrl;
+exports.baseHost   = baseHost;
 
 //----------------------------------------------------------------------------
 

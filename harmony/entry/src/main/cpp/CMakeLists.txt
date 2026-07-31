@@ -43,6 +43,19 @@ set(MIROBODY_BUILD_SHARED       OFF    CACHE BOOL   "" FORCE)
 set(MIROBODY_BUILD_PYTHON       OFF    CACHE BOOL   "" FORCE)
 set(MIROBODY_BUILD_JNI          OFF    CACHE BOOL   "" FORCE)
 
+# On-device LLM: llama.cpp cross-compiled for this ABI, linked STATICALLY into
+# libmirobody.so — a HAP has nowhere to put a loose companion .so, and the device
+# refuses to exec a standalone binary anyway (SELinux denies the shell domain
+# execute on data_local_tmp), so in-process is the only way to run a model here.
+#
+# Point at an SDK dir with -DLLAMA_CPP_DIR (include/llama.h + lib/libllama.a +
+# the ggml archives). Absent, the core compiles its stub and the app still builds
+# with on-device chat reporting itself unavailable.
+if(DEFINED LLAMA_CPP_DIR)
+    set(MIROBODY_ONDEVICE_LLM ON CACHE BOOL "" FORCE)
+    message(STATUS "mirobody_napi: on-device LLM from ${LLAMA_CPP_DIR}")
+endif()
+
 add_subdirectory("${MIROBODY_REPO_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/mirobody-core")
 
 # The target is mirobody_napi but the artifact must be libmirobody.so: it has to
@@ -57,12 +70,20 @@ add_subdirectory("${MIROBODY_REPO_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/mirobody-c
 # discard as unreferenced.
 add_library(mirobody_napi SHARED
     napi_init.cpp
+    membw.cpp
     "${MIROBODY_REPO_ROOT}/src/platform/c_api.cpp"
     $<TARGET_OBJECTS:mcp_tools>
     $<TARGET_OBJECTS:mcp_resources>
     $<TARGET_OBJECTS:agent_impls>)
 
 set_target_properties(mirobody_napi PROPERTIES OUTPUT_NAME mirobody)
+
+# The bandwidth probe measures DRAM, and at the Debug default (-O0) an
+# unvectorized read loop measures loop overhead instead -- it reported 8.2 GB/s
+# while llama.cpp's decode was sustaining ~14.3 GB/s, an impossibility that is
+# how the bug was caught. Only this loop needs the optimizer; -O2 stays scoped to
+# the one file so the rest of the bridge still debugs as built.
+set_source_files_properties(membw.cpp PROPERTIES COMPILE_OPTIONS "-O2")
 
 target_include_directories(mirobody_napi PRIVATE "${MIROBODY_REPO_ROOT}/src")
 

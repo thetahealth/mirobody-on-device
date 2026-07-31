@@ -24,7 +24,9 @@ else()
 endif()
 
 # --- Target profile: mobile vs desktop/server ---------------------------------
-# THE build-target axis. One switch, two consequences:
+# THE build-target axis. One switch, one consequence (it used to also decide the
+# provider menu; a provider with no credential is now skipped on every target --
+# see offer() in res/agents/baseline.cpp):
 #
 #   ON  (mobile: HarmonyOS, and Android/iOS once they migrate)
 #       - No HTTP/WebSocket front door. The app embeds the core through the C ABI
@@ -37,13 +39,9 @@ endif()
 #         events and their filters (so render_chart still collapses into a
 #         ChartEvent), the MCP tool registry, the LLM clients that speak HTTP over
 #         libcurl, transcode, storage, memory.
-#       - BYOK provider menu: a provider with no credential is not listed at all,
-#         because mirobody_get_providers() IS the app's model picker. See
-#         kRequireCredentials in res/agents/baseline.cpp.
 #
 #   OFF (desktop / server, including the Qt and Electron frontends)
-#       - Full front door, and every provider listed whether or not it has a key,
-#         so the operator can see what is missing.
+#       - Full front door.
 #
 # Android and iOS default to OFF for now: their entry points ARE the embedded
 # loopback server (src/platform/android_jni.cpp, src/platform/ios_bridge.mm both
@@ -55,13 +53,13 @@ else()
     set(_MIROBODY_MOBILE_DEFAULT OFF)
 endif()
 option(MIROBODY_MOBILE
-       "Build the mobile/embedded profile: no HTTP front door, BYOK provider menu"
+       "Build the mobile/embedded profile: no HTTP front door"
        ${_MIROBODY_MOBILE_DEFAULT})
 
 if(MIROBODY_MOBILE)
-    message(STATUS "target profile: mobile (no front door; providers listed only once configured)")
+    message(STATUS "target profile: mobile (no front door)")
 else()
-    message(STATUS "target profile: desktop/server (front door on; all providers listed)")
+    message(STATUS "target profile: desktop/server (front door on)")
     find_package(libwebsockets CONFIG QUIET)
     if(NOT libwebsockets_FOUND)
         find_package(PkgConfig REQUIRED)
@@ -359,6 +357,7 @@ set(MIROBODY_CORE_SOURCES
     src/llm/openai_chat.cpp
     src/llm/openai_responses.cpp
     src/llm/gemini.cpp
+    src/llm/local.cpp
     src/llm/embedding.cpp
     src/config/fernet.cpp
     ${_MIROBODY_DB_SOURCE}
@@ -396,6 +395,66 @@ endif()
 
 add_library(mirobody_core STATIC ${MIROBODY_CORE_SOURCES})
 target_include_directories(mirobody_core PUBLIC src)
+
+# --- On-device LLM (src/llm/local.cpp: llama.cpp + a GGUF model) --------------
+#
+# One switch for the whole repo: qt/CMakeLists.txt reads the same option, so the
+# frontends can't disagree about whether the engine exists. src/llm/local.cpp
+# compiles a stub when this is OFF, so the default build needs no llama.cpp.
+#
+# LLAMA_CPP_DIR points at an SDK dir: include/llama.h + lib/. Both layouts work —
+# a shared build (one libllama) as the desktops use, and a static build (libllama
+# plus the ggml archives) as the mobile clients need, since there is no separate
+# .so to ship next to a HAP/APK. The ggml libs are optional so a shared SDK
+# doesn't have to fake them.
+option(MIROBODY_ONDEVICE_LLM "Build the on-device LLM engine (llama.cpp + GGUF)" OFF)
+if(MIROBODY_ONDEVICE_LLM)
+    if(NOT DEFINED LLAMA_CPP_DIR)
+        message(FATAL_ERROR
+            "MIROBODY_ONDEVICE_LLM=ON requires -DLLAMA_CPP_DIR=<llama.cpp SDK dir (include/, lib/)>")
+    endif()
+    # find_library caches, so without clearing it a changed LLAMA_CPP_DIR (switching
+    # backend or target ABI) would silently keep linking the previously found libs.
+    foreach(_v LLAMA_LIB GGML_LIB GGML_CPU_LIB GGML_BASE_LIB)
+        unset(${_v} CACHE)
+    endforeach()
+    # NO_CMAKE_FIND_ROOT_PATH is required for the cross builds: the OHOS/Android
+    # toolchains set CMAKE_FIND_ROOT_PATH_MODE_LIBRARY to ONLY, which re-roots
+    # PATHS under the sysroot and makes an absolute SDK dir unfindable.
+    set(_llama_find PATHS "${LLAMA_CPP_DIR}/lib" NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+    find_library(LLAMA_LIB     NAMES llama     ${_llama_find})
+    find_library(GGML_LIB      NAMES ggml      ${_llama_find})
+    find_library(GGML_CPU_LIB  NAMES ggml-cpu  ${_llama_find})
+    find_library(GGML_BASE_LIB NAMES ggml-base ${_llama_find})
+    # Optional: present only in an SDK built with the Vulkan backend. Its presence IS
+    # the switch — no separate option to keep in sync with which SDK is on disk.
+    find_library(GGML_VULKAN_LIB NAMES ggml-vulkan ${_llama_find})
+    if(NOT LLAMA_LIB)
+        message(FATAL_ERROR
+            "llama library not found under ${LLAMA_CPP_DIR}/lib. Check LLAMA_CPP_DIR.")
+    endif()
+    if(NOT EXISTS "${LLAMA_CPP_DIR}/include/llama.h")
+        message(FATAL_ERROR "llama.h not found under ${LLAMA_CPP_DIR}/include.")
+    endif()
+    target_compile_definitions(mirobody_core PUBLIC MIROBODY_ONDEVICE_LLM)
+    target_include_directories(mirobody_core PRIVATE "${LLAMA_CPP_DIR}/include")
+    # llama first: with static archives the linker resolves left to right, and
+    # llama references ggml, not the other way round.
+    target_link_libraries(mirobody_core PUBLIC "${LLAMA_LIB}")
+    if(GGML_VULKAN_LIB)
+        # Before the ggml archives: the backend references their symbols, and a static
+        # link resolves left to right.
+        target_link_libraries(mirobody_core PUBLIC "${GGML_VULKAN_LIB}" vulkan)
+        target_compile_definitions(mirobody_core PUBLIC MIROBODY_ONDEVICE_LLM_VULKAN)
+        message(STATUS "mirobody_core: Vulkan backend -> ${GGML_VULKAN_LIB}")
+    endif()
+    foreach(_lib GGML_LIB GGML_CPU_LIB GGML_BASE_LIB)
+        if(${_lib})
+            target_link_libraries(mirobody_core PUBLIC "${${_lib}}")
+        endif()
+    endforeach()
+    message(STATUS "mirobody_core: on-device LLM ON -> ${LLAMA_LIB}")
+endif()
 
 # Expose the selected backend to C++ as a presence macro so code can switch on
 # the linked backend at compile time, e.g.

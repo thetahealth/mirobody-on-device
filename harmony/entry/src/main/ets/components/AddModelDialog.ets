@@ -12,7 +12,7 @@ import { promptAction } from '@kit.ArkUI';
 import { BUILTIN_PROVIDERS, ProviderRecord } from '../model/Providers';
 import { SecureKeyStore } from '../core/SecureKeyStore';
 import { ConfigStore, AddedModel } from '../core/ConfigStore';
-import { discoverModels, DiscoveredModel } from '../core/Transport';
+import { discoverModels, DiscoveredModel, DiscoveryResult } from '../core/Transport';
 
 @CustomDialog
 export struct AddModelDialog {
@@ -26,6 +26,10 @@ export struct AddModelDialog {
   @State private search: string = '';
   @State private added: AddedModel[] = [];
   @State private onlyFree: boolean = true;
+  // Why the live listing failed, if it did (0 = fine). Kept separate from `models` because a
+  // failure can still leave the provider's curated ids to show — that list is real but partial.
+  @State private errCode: number = 0;
+  @State private errMessage: string = '';
 
   private ctx(): common.UIAbilityContext {
     return getContext(this) as common.UIAbilityContext;
@@ -85,23 +89,39 @@ export struct AddModelDialog {
     }
     this.loading = true;
     this.models = [];
-    try {
-      const key = await SecureKeyStore.getKey(p.id);
-      const found = await discoverModels(p, key);
-      found.sort((a: DiscoveredModel, b: DiscoveredModel) => {
-        if (a.free !== b.free) {
-          return a.free ? -1 : 1; // free first
-        }
-        if (b.popularity !== a.popularity) {
-          return b.popularity - a.popularity;
-        }
-        return a.displayName.localeCompare(b.displayName);
-      });
-      this.models = found;
-    } catch (err) {
-      promptAction.showToast({ message: this.rs($r('app.string.model_fetch_failed')), duration: 2500 });
-    }
+    this.errCode = 0;
+    this.errMessage = '';
+    const key = await SecureKeyStore.getKey(p.id);
+    const res: DiscoveryResult = await discoverModels(p, key);
+    const found = res.models;
+    found.sort((a: DiscoveredModel, b: DiscoveredModel) => {
+      if (a.free !== b.free) {
+        return a.free ? -1 : 1; // free first
+      }
+      if (b.popularity !== a.popularity) {
+        return b.popularity - a.popularity;
+      }
+      return a.displayName.localeCompare(b.displayName);
+    });
+    this.models = found;
+    this.errCode = res.errorCode;
+    this.errMessage = res.errorMessage;
     this.loading = false;
+  }
+
+  // One line explaining errCode. 401/403 reuses the same wording the chat surface uses, so a
+  // dead key reads identically wherever the user hits it.
+  private errText(): string {
+    if (this.errCode === 401 || this.errCode === 403) {
+      return this.rs($r('app.string.chat_err_key'));
+    }
+    if (this.errCode < 0) {
+      return this.rs($r('app.string.model_fetch_offline'));
+    }
+    if (this.errMessage.length > 0) {
+      return this.errMessage;
+    }
+    return this.rs($r('app.string.chat_err_request'), this.errCode);
   }
 
   private isAdded(providerId: string, id: string): boolean {
@@ -191,7 +211,7 @@ export struct AddModelDialog {
     Row() {
       Checkbox()
         .select(this.addedForCurrent(m.id))
-        .selectedColor('#3F7FC1')
+        .selectedColor($r('app.color.brand'))
         .shape(CheckBoxShape.ROUNDED_SQUARE)
         .width(22)
         .height(22)
@@ -208,9 +228,9 @@ export struct AddModelDialog {
           if (this.hasAnyFree() && !this.onlyFree && !m.free) {
             Text('!')
               .fontSize(11)
-              .fontColor(Color.White)
+              .fontColor($r('app.color.on_brand'))
               .fontWeight(FontWeight.Bold)
-              .backgroundColor('#D24C57')
+              .backgroundColor($r('app.color.danger'))
               .borderRadius(9)
               .padding({ left: 6, right: 6, top: 1, bottom: 1 })
           }
@@ -224,12 +244,12 @@ export struct AddModelDialog {
           if (m.popularity > 0) {
             Text(this.rs($r('app.string.model_calls'), this.fmtPop(m.popularity)))
               .fontSize(11)
-              .fontColor('#9A9A9A')
+              .fontColor($r('app.color.text_tertiary'))
           }
           if (m.deprecation.length > 0) {
             Text(this.rs($r('app.string.model_retires'), m.deprecation))
               .fontSize(11)
-              .fontColor('#E8912F')
+              .fontColor($r('app.color.warn'))
           }
         }
       }
@@ -239,7 +259,7 @@ export struct AddModelDialog {
     .width('100%')
     .alignItems(VerticalAlign.Center)
     .padding({ top: 13, bottom: 13, left: 4, right: 24 })
-    .border({ width: { bottom: 0.5 }, color: '#EEEEEE' })
+    .border({ width: { bottom: 0.5 }, color: $r('app.color.divider') })
   }
 
   build() {
@@ -251,7 +271,7 @@ export struct AddModelDialog {
           .layoutWeight(1)
         Text('✕')
           .fontSize(20)
-          .fontColor('#8A8A8A')
+          .fontColor($r('app.color.text_tertiary'))
           .padding({ left: 12, top: 2, bottom: 2 })
           .onClick(() => {
             this.controller.close();
@@ -265,7 +285,7 @@ export struct AddModelDialog {
       if (this.configured.length === 0) {
         Text($r('app.string.model_no_keys'))
           .fontSize(13)
-          .fontColor('#8A8A8A')
+          .fontColor($r('app.color.text_tertiary'))
           .width('100%')
           .padding({ top: 12, bottom: 12 })
       } else {
@@ -292,11 +312,11 @@ export struct AddModelDialog {
             Toggle({ type: ToggleType.Button, isOn: this.onlyFree }) {
               Text($r('app.string.model_free'))
                 .fontSize(16)
-                .fontColor(this.onlyFree ? Color.White : '#888888')
+                .fontColor(this.onlyFree ? $r('app.color.on_brand') : $r('app.color.text_tertiary'))
                 .padding({ left: 16, right: 16 })
             }
             .height(40)
-            .selectedColor('#46A86A')
+            .selectedColor($r('app.color.success'))
             .onChange((on: boolean) => {
               this.onlyFree = on;
             })
@@ -310,15 +330,72 @@ export struct AddModelDialog {
         if (this.loading) {
           Row({ space: 8 }) {
             LoadingProgress().width(22).height(22)
-            Text($r('app.string.model_loading')).fontSize(13).fontColor('#8A8A8A')
+            Text($r('app.string.model_loading')).fontSize(13).fontColor($r('app.color.text_tertiary'))
           }
           .width('100%')
           .height(380)
           .margin({ top: 8 })
           .justifyContent(FlexAlign.Center)
+        } else if (this.errCode !== 0 && this.models.length === 0) {
+          // Total failure — nothing to fall back on. Say why and offer a retry, rather than
+          // rendering an empty box the user can't distinguish from "no models here".
+          Column({ space: 10 }) {
+            Text($r('app.string.model_fetch_failed'))
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.text_primary'))
+            Text(this.errText())
+              .fontSize(13)
+              .fontColor($r('app.color.text_tertiary'))
+              .textAlign(TextAlign.Center)
+            Button($r('app.string.model_retry'))
+              .height(36)
+              .backgroundColor($r('app.color.brand'))
+              .onClick(() => {
+                this.loadModels();
+              })
+          }
+          .width('100%')
+          .height(380)
+          .margin({ top: 8 })
+          .padding({ left: 16, right: 16 })
+          .justifyContent(FlexAlign.Center)
         } else {
+          // Partial failure — the curated fallback is showing, so the list is real but
+          // incomplete. Flag that instead of passing it off as the full catalog.
+          if (this.errCode !== 0) {
+            Row({ space: 8 }) {
+              Text($r('app.string.model_fetch_partial'))
+                .fontSize(12)
+                .fontColor($r('app.color.notice_fg'))
+                .layoutWeight(1)
+              Text($r('app.string.model_retry'))
+                .fontSize(12)
+                .fontColor($r('app.color.brand_text'))
+                .onClick(() => {
+                  this.loadModels();
+                })
+            }
+            .width('100%')
+            .margin({ top: 8 })
+            .padding({ left: 12, right: 12, top: 8, bottom: 8 })
+            .borderRadius(8)
+            .backgroundColor($r('app.color.notice_bg'))
+            .alignItems(VerticalAlign.Center)
+          }
+
           Scroll() {
             Column() {
+              if (this.filtered().length === 0) {
+                Text(this.models.length === 0
+                  ? $r('app.string.model_empty')
+                  : $r('app.string.model_no_match'))
+                  .fontSize(13)
+                  .fontColor($r('app.color.text_tertiary'))
+                  .width('100%')
+                  .textAlign(TextAlign.Center)
+                  .padding({ top: 40, bottom: 40 })
+              }
               ForEach(this.filtered(), (m: DiscoveredModel) => {
                 this.modelRow(m)
               }, (m: DiscoveredModel) => m.id)

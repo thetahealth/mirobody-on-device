@@ -23,8 +23,8 @@ function googleEnabled() {
 };
 
 // Fetch the web config once, lazily, the first time the sign-in panel renders
-// (not at page load, and never for signed-in users). On success (code 0),
-// re-render the login view to reveal the button.
+// (not at page load; that first render can also be the signed-in Switch-account
+// view). On success (code 0), re-render the login view to reveal the button.
 var googleConfigRequested = false;
 function loadGoogleConfig() {
     if (googleConfigRequested) { return; }
@@ -33,7 +33,7 @@ function loadGoogleConfig() {
         "/firebase/verify",
         function (data) {
             firebaseConfig = (data && typeof data === "object") ? data : {};
-            if (!net.getToken()) { app.render(); }
+            if (app.showingLogin()) { app.render(); }
         },
         function () { /* non-zero code / error: leave Google sign-in hidden */ }
     );
@@ -129,7 +129,7 @@ function loadAppleConfig() {
             "/apple/verify",
             function (data) {
                 appleConfig = (data && typeof data === "object") ? data : {};
-                if (!net.getToken()) { app.render(); }
+                if (app.showingLogin()) { app.render(); }
                 resolve(appleConfig);
             },
             function () { appleConfig = null; resolve(null); }
@@ -237,7 +237,7 @@ function loadWeChatConfig() {
         "/wechat/verify",
         function (data) {
             wechatConfig = (data && typeof data === "object") ? data : {};
-            if (!net.getToken()) { app.render(); }
+            if (app.showingLogin()) { app.render(); }
         },
         function () { /* not configured / error: leave WeChat sign-in hidden */ }
     );
@@ -375,7 +375,7 @@ function loadGitHubConfig() {
         "/github/verify",
         function (data) {
             githubConfig = (data && typeof data === "object") ? data : {};
-            if (!net.getToken()) { app.render(); }
+            if (app.showingLogin()) { app.render(); }
         },
         function () { /* not configured / error: leave GitHub sign-in hidden */ }
     );
@@ -506,7 +506,7 @@ function loadTankaConfig() {
         "/tanka/verify",
         function (data) {
             tankaConfig = (data && typeof data === "object") ? data : {};
-            if (!net.getToken()) { app.render(); }
+            if (app.showingLogin()) { app.render(); }
         },
         function () { /* not configured / error: leave Tanka sign-in hidden */ }
     );

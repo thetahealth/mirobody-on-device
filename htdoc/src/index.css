@@ -101,3 +101,48 @@ svg {
 .md th, .md td { border: 1px solid #ddd6c9; padding: 4px 8px; }
 .md th { background: #efe9dd; }
 .md .katex-display { margin: 0.5em 0; overflow-x: auto; overflow-y: hidden; }
+
+/* ---------------------------------------------------------------------------
+   Dark mode. config.applyTheme() stamps html.mb-dark and swaps the JS palette
+   (inline styles repaint on the next app.render()); this block covers the
+   static CSS above. Values come from the unified sheet in
+   docs/colors-and-fonts.md (§2): near-black cool surfaces, slate-blue brand. */
+
+/* Native form controls (select popups, autofill, date pickers) follow this,
+   not our inline styles -- without it they'd stay light inside the dark UI. */
+html         { color-scheme: light; }
+html.mb-dark { color-scheme: dark; }
+
+/* Option rows in a <select> popup: the list's fill comes from the select's own
+   background-color (so each select sets its surface -- see chat.js caretSelect),
+   but the row text can fall back to the platform's default ink rather than
+   inheriting ours, which on the dark fill is black-on-near-black. Pin the ink
+   here. Only `color` -- an author background on <option> would also defeat the
+   native hover/selected highlight, leaving no cue for the active row. */
+html.mb-dark select option,
+html.mb-dark select optgroup { color: #e2e2e5; }        /* text_primary dark */
+html.mb-dark select option:disabled { color: #626973; } /* text_disabled dark */
+
+html.mb-dark body {
+    background: #101315;
+    color: #e2e2e5;
+}
+html.mb-dark input::placeholder,
+html.mb-dark textarea::placeholder {
+    color: #8e9194;                /* text_tertiary dark */
+}
+html.mb-dark * {
+    scrollbar-color: rgba(196, 199, 203, 0.4) transparent;
+}
+html.mb-dark ::-webkit-scrollbar-thumb { background: rgba(196, 199, 203, 0.35); }
+html.mb-dark ::-webkit-scrollbar-thumb:hover { background: rgba(196, 199, 203, 0.55); }
+
+html.mb-dark .md a          { color: #a0cde5; }
+html.mb-dark .md hr         { border-top-color: #44474a; }
+html.mb-dark .md blockquote { border-inline-start-color: #44474a; color: #c4c7cb; }
+/* Inline-code / code-block / table-header fill: 12% white over the dark bubble
+   (bg_inline_code dark from the unified sheet), so it composites on any surface. */
+html.mb-dark .md :not(pre) > code { background: rgba(255, 255, 255, 0.12); }
+html.mb-dark .md pre        { background: rgba(255, 255, 255, 0.12); }
+html.mb-dark .md th, html.mb-dark .md td { border-color: #44474a; }
+html.mb-dark .md th         { background: rgba(255, 255, 255, 0.12); }

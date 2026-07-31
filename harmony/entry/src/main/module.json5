@@ -22,6 +22,20 @@
           ],
           "when": "inuse"
         }
+      },
+      {
+        // Keep a file the user picked reachable across launches. The picker grant
+        // is otherwise session-only, so an imported GGUF would have to be re-picked
+        // on every cold start. system_grant + availableLevel normal, so declaring
+        // it is enough -- no ACL, no runtime prompt.
+        "name": "ohos.permission.FILE_ACCESS_PERSIST",
+        "reason": "$string:perm_file_persist_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "always"
+        }
       }
     ],
     "abilities": [

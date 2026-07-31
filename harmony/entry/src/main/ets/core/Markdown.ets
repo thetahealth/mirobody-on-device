@@ -22,13 +22,18 @@
  *
  * Coverage (phase 1): headings, paragraphs, ordered/unordered lists (with
  * indent nesting), block quotes, fenced code, ```echarts -> chart, $$ -> math,
- * inline `code` / **bold** / *italic* / ***both***. Tables and links render as
- * plain text for now (phase 2).
+ * inline `code` / **bold** / *italic* / ***both***, GFM pipe tables. Links still
+ * render as plain text (phase 2).
  */
 
 export interface InlineSpan {
   kind: string;   // 'text' | 'bold' | 'italic' | 'bolditalic' | 'code' | 'math'
   text: string;   // for 'math': the TeX source (delimiters stripped)
+}
+
+/** One table cell's inline content; alignment lives on the block, per column. */
+export interface TableRow {
+  cells: InlineSpan[][];
 }
 
 export interface ListEntry {
@@ -39,13 +44,15 @@ export interface ListEntry {
 
 export interface RichBlock {
   id: string;            // stable across streaming appends: kind + start offset
-  kind: string;          // 'paragraph' | 'heading' | 'list' | 'quote' | 'code' | 'math' | 'chart'
+  kind: string;          // 'paragraph' | 'heading' | 'list' | 'quote' | 'code' | 'math' | 'chart' | 'table'
   closed: boolean;
   level: number;         // heading depth 1..6 (0 otherwise)
   language: string;      // code fence info string ('' otherwise)
   body: string;          // code / math / chart source text
   spans: InlineSpan[];   // heading / paragraph / quote inline content
   entries: ListEntry[];  // list items
+  rows: TableRow[];      // table rows; rows[0] is the header
+  aligns: string[];      // per column: 'left' | 'center' | 'right'
 }
 
 function makeBlock(kind: string, start: number): RichBlock {
@@ -57,7 +64,9 @@ function makeBlock(kind: string, start: number): RichBlock {
     language: '',
     body: '',
     spans: [],
-    entries: []
+    entries: [],
+    rows: [],
+    aligns: []
   };
 }
 
@@ -66,10 +75,18 @@ function makeBlock(kind: string, start: number): RichBlock {
 //------------------------------------------------------------------------------
 
 /**
- * Is `body` actually TeX? A lone "$100 and $200" must not become math, so a
- * single-dollar span only counts when it looks like a formula: contains a TeX
- * control (backslash), super/subscript, or braces. \( ... \) needs no such
- * guard — nothing else uses that delimiter.
+ * Is the text between two single `$` inline math, or is the `$` a currency sign?
+ *
+ * Requiring a TeX metacharacter (the earlier rule) rejected the single most common
+ * inline formula there is — a bare variable, `$a$` — so models writing
+ * "sides $a$ and $b$" showed the dollars literally. The tests, in order:
+ *
+ *   1. a TeX metacharacter is decisive          -> math
+ *   2. a body opening with a digit is a price   -> not math ("$100 and $200" has
+ *                                                  body "100 and ")
+ *   3. CJK inside means the pair spans prose    -> not math
+ *   4. otherwise short and expression-shaped is math, but an interior space is only
+ *      allowed alongside an operator, so "five or " stays prose while "x + y" is math
  */
 function looksLikeTex(body: string): boolean {
   for (let i = 0; i < body.length; i++) {
@@ -78,7 +95,39 @@ function looksLikeTex(body: string): boolean {
       return true;
     }
   }
-  return false;
+
+  const t = body.trim();
+  if (t.length === 0 || t.length > 48) {
+    return false;
+  }
+  // A price: "$100", "$1,200.50". Math almost never opens a bare `$…$` with a digit.
+  const first = t.charCodeAt(0);
+  if (first >= 0x30 && first <= 0x39) {
+    return false;
+  }
+
+  let hasSpace = false;
+  let hasOperator = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t.charAt(i);
+    const code = t.charCodeAt(i);
+    if (code > 0x2e7f) {
+      return false;             // CJK (and friends): the $ pair spans prose
+    }
+    if (c === ' ') {
+      hasSpace = true;
+    } else if (c === '+' || c === '-' || c === '*' || c === '/' || c === '='
+               || c === '<' || c === '>' || c === '(' || c === ')' || c === ','
+               || c === '.' || c === '|' || c === '!') {
+      hasOperator = true;
+    } else if (!((code >= 0x30 && code <= 0x39) ||
+                 (code >= 0x41 && code <= 0x5a) ||
+                 (code >= 0x61 && code <= 0x7a))) {
+      return false;             // anything else is not expression-shaped
+    }
+  }
+  // Several words with no operator is prose that merely sits between two dollars.
+  return !hasSpace || hasOperator;
 }
 
 /**
@@ -240,6 +289,79 @@ function matchListItem(s: string): ListMatch {
   return none;
 }
 
+/**
+ * Split one table line into raw cells on UNESCAPED pipes, dropping the optional
+ * leading/trailing delimiters GFM allows. `\|` is a literal pipe in a cell.
+ */
+function splitCells(line: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  for (let i = 0; i < line.length; i++) {
+    const c = line.charAt(i);
+    if (c === '\\' && i + 1 < line.length && line.charAt(i + 1) === '|') {
+      cur += '|';
+      i++;
+    } else if (c === '|') {
+      out.push(cur);
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  out.push(cur);
+  // A row written as |a|b| yields an empty first and last cell; those are the
+  // optional outer delimiters, not real columns.
+  if (out.length > 0 && out[0].trim().length === 0) {
+    out.shift();
+  }
+  if (out.length > 0 && out[out.length - 1].trim().length === 0) {
+    out.pop();
+  }
+  return out;
+}
+
+/**
+ * Alignments if `line` is a GFM delimiter row (`|---|:--:|---:|`), else [].
+ *
+ * The delimiter row is what MAKES a table: a header-looking line on its own is
+ * just a paragraph that happens to contain pipes, which also means a table being
+ * streamed only becomes one once its second line lands.
+ */
+function tableAligns(line: string): string[] {
+  const cells = splitCells(line);
+  if (cells.length === 0) {
+    return [];
+  }
+  const out: string[] = [];
+  for (const raw of cells) {
+    const c = raw.trim();
+    const left = c.startsWith(':');
+    const right = c.endsWith(':');
+    const bar = c.substring(left ? 1 : 0, c.length - (right ? 1 : 0));
+    if (bar.length === 0) {
+      return [];
+    }
+    for (let i = 0; i < bar.length; i++) {
+      if (bar.charAt(i) !== '-') {
+        return [];
+      }
+    }
+    out.push(left && right ? 'center' : right ? 'right' : 'left');
+  }
+  return out;
+}
+
+function makeRow(line: string, columns: number): TableRow {
+  const raw = splitCells(line);
+  const cells: InlineSpan[][] = [];
+  for (let i = 0; i < columns; i++) {
+    // Pad short rows and ignore extra cells, so a ragged table still renders as a
+    // grid instead of collapsing.
+    cells.push(parseInline(i < raw.length ? raw[i].trim() : ''));
+  }
+  return { cells: cells };
+}
+
 export function parseBlocks(text: string): RichBlock[] {
   const blocks: RichBlock[] = [];
   const lines = splitLines(text);
@@ -376,6 +498,30 @@ export function parseBlocks(text: string): RichBlock[] {
             depth: Math.floor(ind / 2),
             spans: parseInline(im.rest)
           });
+          i++;
+        }
+        blocks.push(b);
+        continue;
+      }
+    }
+
+    // --- GFM pipe table -----------------------------------------------------
+    // Needs the NEXT line to be a delimiter row; that is what distinguishes a
+    // table from a paragraph containing pipes.
+    if (trimmed.indexOf('|') >= 0 && i + 1 < lines.length) {
+      const aligns = tableAligns(lines[i + 1].text.trim());
+      if (aligns.length > 0) {
+        flushPara();
+        const b = makeBlock('table', line.start);
+        b.aligns = aligns;
+        b.rows.push(makeRow(t, aligns.length));
+        i += 2;                                  // header + delimiter consumed
+        while (i < lines.length) {
+          const rowText = lines[i].text.trim();
+          if (rowText.length === 0 || rowText.indexOf('|') < 0) {
+            break;                               // blank line or non-row ends it
+          }
+          b.rows.push(makeRow(lines[i].text, aligns.length));
           i++;
         }
         blocks.push(b);

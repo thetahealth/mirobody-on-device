@@ -1,14 +1,17 @@
 
 //----------------------------------------------------------------------------
-// Left navigation drawer -- the app's nav home. Top: a "New chat" / "Incognito"
-// button row. Middle (the only scrolling area): past sessions (GET /api/history,
-// each deletable via POST /api/history/delete; tap to resume). Bottom (all
-// PINNED): the Health & data group (care circle / EHR / devices) and the account
-// row (Sign out). Opened from the top-bar hamburger. The build version isn't shown
-// here -- it's in the settings gear's About item. App settings (language / font /
-// backend / about) are
-// NOT here -- they live in the top-bar settings gear, which the login screen shows
-// too, so settings sit in one consistent place across both screens.
+// Left navigation drawer -- the app's only menu, opened from the top-bar hamburger
+// on every screen. Top: a "New chat" / "Incognito" button row. Middle (the only
+// scrolling area): past sessions (GET /api/history, each deletable via POST
+// /api/history/delete; tap to resume). Bottom (all PINNED): the Health & data group
+// (care circle / EHR / devices), the app-settings group (language / font size /
+// appearance / backend), and the account row (switch account / Sign out).
+//
+// There is no top-right settings gear any more: it held only the app settings, and
+// was the sole reason the login screen had a right-hand action at all. Folding it in
+// here leaves one menu affordance instead of two, and lets the login screen open
+// this same drawer showing just the settings group -- everything else is
+// session-scoped and appears once signed in.
 //----------------------------------------------------------------------------
 
 const ui   = require("./ui");
@@ -18,6 +21,16 @@ const i18n = require("./i18n");
 const config = require("./config");
 const color  = config.color;
 const state  = config.state;
+// The app-settings rows below (moved here from the old top-bar gear) need the same
+// persistence keys, value labels and live-apply helpers the gear used.
+const LANGUAGE_KEY   = config.LANGUAGE_KEY;
+const FONT_KEY       = config.FONT_KEY;
+const THEME_KEY      = config.THEME_KEY;
+const languageLabel  = config.languageLabel;
+const fontTierLabel  = config.fontTierLabel;
+const themeLabel     = config.themeLabel;
+const applyDirection = config.applyDirection;
+const applyFontScale = config.applyFontScale;
 
 const button = require("./widgets").button;
 const icons  = require("./icons");
@@ -42,6 +55,10 @@ var MIN_WIDTH  = 240;
 function openHistory() {
     var items = [];
     var rtl = document.documentElement.dir === "rtl";
+    // Signed out (the login screen's drawer) only the app-settings group applies:
+    // history, New chat / Incognito, health connections and the account row are all
+    // session-scoped and are skipped entirely.
+    var signedIn = !!net.getToken();
 
     function maxWidth()    { return Math.round(window.innerWidth * 0.9); }
     function clampWidth(w) { return Math.max(MIN_WIDTH, Math.min(w, maxWidth())); }
@@ -70,8 +87,8 @@ function openHistory() {
         if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
     };
 
-    // Header: back button + title. (The build version isn't shown here -- it's in
-    // the settings gear's About item.)
+    // Header: back button + title. (No build version here, and no About row below it
+    // either -- the version isn't surfaced in the web client's UI at all.)
     var header = ui.dom("div", {
         flex: "0 0 auto", display: "flex", alignItems: "center", gap: "4px",
         height: "56px", padding: "0 8px"
@@ -91,9 +108,10 @@ function openHistory() {
         fontSize: "1rem", fontWeight: "500", color: color.onSurface
     }), t("menuTitle")));
 
+    // History rows live in their own box so the loading / empty / error states clear
+    // just the list, leaving the nav sections appended below it intact. The body as a
+    // whole is only mounted for a signed-in session (see the panel assembly below).
     var body = ui.dom("div", { flex: "1 1 auto", overflowY: "auto", minHeight: "0" });
-    // History rows live in their own box so the loading / empty / error states
-    // clear just the list, leaving the nav sections appended below it intact.
     var historyBox = ui.dom("div", { minHeight: "160px" });
     body.appendChild(historyBox);
 
@@ -179,69 +197,74 @@ function openHistory() {
         });
     };
 
-    // "New chat": drop the current thread for a fresh one. Skipped mid-stream so an
-    // in-flight reply isn't torn down. Leaves incognito state as-is (that's the
-    // top-bar toggle's job); clears the local mirror so a reload doesn't resurrect
-    // the old thread.
-    var newChatBtn = ui.dom("button", {
-        display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-        border: "1px solid " + color.outlineVar, borderRadius: "8px",
-        background: "transparent", cursor: "pointer",
-        font: "inherit", fontSize: "0.95rem", fontWeight: "500",
-        color: color.onSurface, padding: "9px 14px", flex: "1 1 0", minWidth: "0"
-    }, { type: "button" });
-    newChatBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }), t("newChat")));
-    newChatBtn.addEventListener("mouseenter", function () { newChatBtn.style.background = color.surfaceLow; });
-    newChatBtn.addEventListener("mouseleave", function () { newChatBtn.style.background = "transparent"; });
-    newChatBtn.addEventListener("click", function () {
-        if (state.streaming) { return; }
-        state.messages = [];
-        state.currentConversationId = "";
-        state.readOnly = false;
-        if (!state.incognito) {
-            var freshDb = require("./db");
-            freshDb.saveMessages([]);
-            freshDb.saveConversationId("");   // forget the old thread id too
-        }
-        dismiss();
-        require("./app").render();
-    });
+    // The "New chat" / Incognito row only exists for a signed-in session; the login
+    // screen's drawer has no thread to start or hide.
+    var topRow = null;
+    if (signedIn) {
 
-    // Incognito ("privacy mode") toggle, sharing the top row with "New chat" (New
-    // chat on the leading edge, this on the trailing edge). A sibling text button:
-    // ghost icon + an explicit label that states what the tap does ("Turn on /
-    // off incognito"). Solid ghost + navy tint when on, hollow ghost when off;
-    // toggling swaps the whole session (chat.toggleIncognito) then closes the
-    // drawer so the re-rendered chat shows the incognito banner/empty state.
-    var incognitoBtn = ui.dom("button", {
-        display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-        border: "1px solid " + (state.incognito ? color.primary : color.outlineVar),
-        borderRadius: "8px", background: "transparent", cursor: "pointer",
-        font: "inherit", fontSize: "0.95rem", fontWeight: "500",
-        color: state.incognito ? color.primary : color.onSurface,
-        padding: "9px 14px", flex: "1 1 0", minWidth: "0"
-    }, { type: "button", title: t(state.incognito ? "incognitoStop" : "incognitoStart") });
-    incognitoBtn.setAttribute("aria-pressed", state.incognito ? "true" : "false");
-    incognitoBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }),
-        t("incognitoMode")));
-    incognitoBtn.addEventListener("mouseenter", function () { incognitoBtn.style.background = color.surfaceLow; });
-    incognitoBtn.addEventListener("mouseleave", function () { incognitoBtn.style.background = "transparent"; });
-    incognitoBtn.addEventListener("click", function () {
-        if (state.streaming) { return; }
-        dismiss();
-        require("./chat").toggleIncognito();
-    });
+        // "New chat": drop the current thread for a fresh one. Skipped mid-stream so an
+        // in-flight reply isn't torn down. Leaves incognito state as-is (that's the
+        // top-bar toggle's job); clears the local mirror so a reload doesn't resurrect
+        // the old thread.
+        var newChatBtn = ui.dom("button", {
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+            border: "1px solid " + color.outlineVar, borderRadius: "8px",
+            background: "transparent", cursor: "pointer",
+            font: "inherit", fontSize: "0.95rem", fontWeight: "500",
+            color: color.onSurface, padding: "9px 14px", flex: "1 1 0", minWidth: "0"
+        }, { type: "button" });
+        newChatBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }), t("newChat")));
+        newChatBtn.addEventListener("mouseenter", function () { newChatBtn.style.background = color.surfaceLow; });
+        newChatBtn.addEventListener("mouseleave", function () { newChatBtn.style.background = "transparent"; });
+        newChatBtn.addEventListener("click", function () {
+            if (state.streaming) { return; }
+            state.messages = [];
+            state.currentConversationId = "";
+            state.readOnly = false;
+            if (!state.incognito) {
+                var freshDb = require("./db");
+                freshDb.saveMessages([]);
+                freshDb.saveConversationId("");   // forget the old thread id too
+            }
+            dismiss();
+            require("./app").render();
+        });
 
-    // The shared top row: "New chat" (leading) and the incognito toggle (trailing),
-    // each a text button with a leading icon.
-    var topRow = ui.dom("div", {
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        gap: "8px", flex: "0 0 auto", padding: "12px 16px"
-    });
-    topRow.appendChild(newChatBtn);
-    topRow.appendChild(incognitoBtn);
+        // Incognito ("privacy mode") toggle, sharing the top row with "New chat" (New
+        // chat on the leading edge, this on the trailing edge). A sibling text button:
+        // ghost icon + an explicit label that states what the tap does ("Turn on /
+        // off incognito"). Solid ghost + navy tint when on, hollow ghost when off;
+        // toggling swaps the whole session (chat.toggleIncognito) then closes the
+        // drawer so the re-rendered chat shows the incognito banner/empty state.
+        var incognitoBtn = ui.dom("button", {
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+            border: "1px solid " + (state.incognito ? color.primary : color.outlineVar),
+            borderRadius: "8px", background: "transparent", cursor: "pointer",
+            font: "inherit", fontSize: "0.95rem", fontWeight: "500",
+            color: state.incognito ? color.primary : color.onSurface,
+            padding: "9px 14px", flex: "1 1 0", minWidth: "0"
+        }, { type: "button", title: t(state.incognito ? "incognitoStop" : "incognitoStart") });
+        incognitoBtn.setAttribute("aria-pressed", state.incognito ? "true" : "false");
+        incognitoBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }),
+            t("incognitoMode")));
+        incognitoBtn.addEventListener("mouseenter", function () { incognitoBtn.style.background = color.surfaceLow; });
+        incognitoBtn.addEventListener("mouseleave", function () { incognitoBtn.style.background = "transparent"; });
+        incognitoBtn.addEventListener("click", function () {
+            if (state.streaming) { return; }
+            dismiss();
+            require("./chat").toggleIncognito();
+        });
 
-    var signedIn = !!net.getToken();
+        // The shared top row: "New chat" (leading) and the incognito toggle (trailing),
+        // each a text button with a leading icon.
+        topRow = ui.dom("div", {
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: "8px", flex: "0 0 auto", padding: "12px 16px"
+        });
+        topRow.appendChild(newChatBtn);
+        topRow.appendChild(incognitoBtn);
+
+    }   // end signed-in-only top row
 
     // Health & data + Settings + account are all PINNED at the bottom (flex:0), so
     // only the history list above them scrolls. Groups are compact (tight rows) to
@@ -262,9 +285,49 @@ function openHistory() {
         }));
     }
 
-    // App settings (language / font / backend / about) are NOT here -- they live
-    // in the top-bar settings gear, shared with the login screen. This drawer is
-    // just navigation: history, health connections, and the account row below.
+    // App settings -- what the top-right gear used to hold, now the drawer's own
+    // group, and the only group the login screen shows. Each row follows the
+    // convention of the rows above: dismiss the drawer first, then open its modal.
+    // Language and appearance re-render the whole app afterwards so every string /
+    // color picks up the change; mid-stream the render is skipped (it would tear
+    // down the in-flight bubble) and the choice lands on the next one. Font size
+    // needs no render -- applyFontScale rescales the live UI.
+    if (signedIn) { footer.appendChild(drawerDivider()); }
+
+    footer.appendChild(navRow(t("language"), languageLabel(state.language), function () {
+        dismiss();
+        modals.showLanguageModal(state.language, function (code) {
+            state.language = code;
+            localStorage.setItem(LANGUAGE_KEY, code);
+            i18n.setLang(code);
+            applyDirection(code);   // flip <html dir> for Arabic / Hebrew
+            if (!state.streaming) { require("./app").render(); }
+        });
+    }));
+
+    footer.appendChild(navRow(t("fontSize"), t(fontTierLabel(state.fontOffset)), function () {
+        dismiss();
+        modals.showFontSizeModal(state.fontOffset, function (offset) {
+            state.fontOffset = offset;
+            localStorage.setItem(FONT_KEY, String(offset));
+            applyFontScale(offset);   // live: scales the whole UI immediately
+        });
+    }));
+
+    footer.appendChild(navRow(t("appearance"), t(themeLabel(state.theme)), function () {
+        dismiss();
+        modals.showThemeModal(state.theme, function (picked) {
+            state.theme = picked;
+            localStorage.setItem(THEME_KEY, picked);
+            if (!state.streaming) { require("./app").render(); }
+        });
+    }));
+
+    // Hostname only -- the full address (scheme, port, mount prefix) belongs in the
+    // dialog this row opens, not in a one-line hint.
+    footer.appendChild(navRow(t("backend"), net.baseHost(), function () {
+        dismiss(); modals.showBackendModal();
+    }));
 
     // Account: the signed-in email (centered, muted) above a centered Sign out.
     if (signedIn) {
@@ -272,8 +335,9 @@ function openHistory() {
 
         // Account switcher. The current account (email from the JWT `email` claim)
         // is a tappable row that expands a list of the other signed-in accounts
-        // (tap to switch) plus "Add account" (sign in another without dropping the
-        // current ones). Several accounts can live in one browser -- see net.js.
+        // (tap to switch) plus "Switch account" (opens the full login view to sign
+        // in another account without dropping the current ones). Several accounts
+        // can live in one browser -- see net.js.
         var accounts = net.listAccounts();
         var current = null, others = [];
         accounts.forEach(function (a) { if (a.current) { current = a; } else { others.push(a); } });
@@ -317,8 +381,19 @@ function openHistory() {
             r.addEventListener("click", function () { dismiss(); require("./app").switchAccount(a.sub); });
             switcher.appendChild(r);
         });
+        // "Switch account" carries a leading + : the rows above it are switch targets
+        // styled identically, so without the glyph this last one reads as one more
+        // account rather than the action that adds a new one.
         var addBtn = hoverable(ui.dom("button", acctRowStyle(false), { type: "button" }));
-        ui.setText(addBtn, "＋  " + t("addAccount"));
+        addBtn.style.gap = "8px";
+        var addIcon = ui.dom("span", {
+            display: "inline-flex", alignItems: "center", flex: "0 0 auto",
+            color: color.onSurfaceVar
+        });
+        ui.setHTML(addIcon, icons.PLUS_SVG);
+        addBtn.appendChild(addIcon);
+        addBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }),
+            t("switchAccount")));
         addBtn.addEventListener("click", function () { dismiss(); require("./app").addAccount(); });
         switcher.appendChild(addBtn);
 
@@ -345,8 +420,13 @@ function openHistory() {
     }
 
     panel.appendChild(header);
-    panel.appendChild(topRow);
-    panel.appendChild(body);
+    if (topRow) { panel.appendChild(topRow); }
+    // The scrolling body is the history list's home, so signed out it is left out
+    // altogether rather than added empty: with nothing to scroll, the flex spacer
+    // would only push the settings group to the bottom of a blank drawer. Without it
+    // the group sits right under the header, which is what a five-row menu should
+    // look like.
+    if (signedIn) { panel.appendChild(body); }
     panel.appendChild(footer);
     panel.appendChild(resizer);
     backdrop.appendChild(panel);
@@ -437,7 +517,7 @@ function openHistory() {
         return ui.setText(ui.dom("div", {
             display: "inline-block", fontSize: "0.68rem", padding: "1px 7px",
             borderRadius: "9px", whiteSpace: "nowrap", alignSelf: "flex-start",
-            background: strong ? color.userBubble : color.surfaceLow,
+            background: strong ? color.selectedBg : color.surfaceLow,
             color: strong ? color.primary : color.onSurfaceVar
         }), text);
     };
@@ -448,7 +528,7 @@ function openHistory() {
             paddingBlock: "7px", paddingInlineStart: "20px", paddingInlineEnd: "8px",
             borderTop: "1px solid " + color.outlineVar
         });
-        wrap.style.borderTopColor = "rgba(196, 199, 203, 0.4)";
+        wrap.style.borderTopColor = color.outlineVar;
 
         var texts = ui.dom("div", {
             flex: "1 1 auto", minWidth: "0", cursor: "pointer",
@@ -535,7 +615,7 @@ function openHistory() {
         );
     };
 
-    load();
+    if (signedIn) { load(); }
 };
 
 //----------------------------------------------------------------------------

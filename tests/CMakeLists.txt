@@ -8,6 +8,7 @@ add_executable(mirobody_tests
     utils/fernet_test.cpp
     utils/config_test.cpp
     llm/sse_parser_test.cpp
+    llm/think_splitter_test.cpp
     llm/mirothinker_client_test.cpp
     llm/openai_chat_client_test.cpp
     llm/openai_responses_client_test.cpp

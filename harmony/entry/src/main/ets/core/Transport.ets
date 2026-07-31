@@ -1,6 +1,6 @@
 /**
  * OpenAI-compatible streaming transport. One code path serves every `openai-chat`
- * provider — only baseUrl, model, and the key differ (docs/byok-providers.md, Request
+ * provider — only baseUrl, model, and the key differ (docs/privacy-tiers.md, Request
  * contract). This is the same SSE shape a local Ollama/llama.cpp server exposes, so the
  * local and cloud lanes can share this transport when on-device lands.
  *
@@ -71,6 +71,29 @@ export interface DiscoveredModel {
   popularity: number;  // last-month API invocation count (0 if unknown)
   deprecation: string; // deprecation date string (e.g. "07/27/2026"), '' if none
 }
+
+/**
+ * Outcome of a discovery pass. The live `/v1/models` listing failing is NOT the same as a
+ * provider legitimately listing nothing — the caller must be able to tell them apart, or an
+ * offline device / dead key silently renders as an empty picker with no explanation.
+ * `models` may still be non-empty on failure (the provider's curated ids are the fallback),
+ * in which case the list is real but incomplete.
+ */
+export interface DiscoveryResult {
+  models: DiscoveredModel[];
+  errorCode: number;    // 0 = the live listing succeeded; else HTTP status or transport code
+  errorMessage: string; // provider-supplied detail for errorCode, '' if none
+}
+
+// Same three fields for the raw listing step, before any enrichment.
+interface RawModelsResult {
+  models: DiscoveredModel[];
+  errorCode: number;
+  errorMessage: string;
+}
+
+// Malformed body — distinct from a transport failure, so it gets its own sentinel code.
+const ERR_BAD_BODY = -2;
 
 // Catalog metadata for one model (from the build.nvidia.com page), keyed by normalized name.
 interface CatalogMeta {
@@ -190,7 +213,7 @@ function authHeaders(provider: ProviderRecord, key: string): Record<string, stri
 /**
  * Stream a chat completion. Resolves when the stream ends (or errors are reported via
  * callbacks). Never throws for provider-side failures — those surface through onError so
- * the caller can degrade per docs/byok-providers.md error handling.
+ * the caller can degrade per docs/privacy-tiers.md error handling.
  */
 export async function streamChat(
   provider: ProviderRecord,
@@ -328,13 +351,22 @@ export async function streamChat(
   }
 }
 
+function parseModelList(raw: string): ModelListResponse | undefined {
+  try {
+    return JSON.parse(raw) as ModelListResponse;
+  } catch (err) {
+    return undefined;
+  }
+}
+
 /**
  * Fetch the provider's live model catalog via GET /models (OpenAI-compatible). This is the
  * authoritative list of what's actually deployed on the user's key — so the picker never
- * offers a model that 404/410s. Returns [] on any failure (offline, no /models support,
- * bad key); discoverModels then unions in the provider's curated `models` as the fallback.
+ * offers a model that 404/410s. Reports WHY it failed (offline, no /models support, bad key)
+ * rather than swallowing it; discoverModels unions in the provider's curated `models` as the
+ * fallback but keeps the error so the UI can say the list is incomplete.
  */
-async function rawModels(provider: ProviderRecord, apiKey: string): Promise<DiscoveredModel[]> {
+async function rawModels(provider: ProviderRecord, apiKey: string): Promise<RawModelsResult> {
   const request = http.createHttp();
   try {
     const options: http.HttpRequestOptions = {
@@ -346,9 +378,16 @@ async function rawModels(provider: ProviderRecord, apiKey: string): Promise<Disc
     };
     const resp = await request.request(baseNoSlash(provider) + '/models', options);
     if (resp.responseCode < 200 || resp.responseCode >= 300) {
-      return [];
+      return {
+        models: [],
+        errorCode: resp.responseCode,
+        errorMessage: extractError(resp.result as string)
+      };
     }
-    const parsed = JSON.parse(resp.result as string) as ModelListResponse;
+    const parsed = parseModelList(resp.result as string);
+    if (parsed === undefined) {
+      return { models: [], errorCode: ERR_BAD_BODY, errorMessage: '' };
+    }
     const out: DiscoveredModel[] = [];
     if (parsed.data !== undefined) {
       for (const item of parsed.data) {
@@ -369,9 +408,10 @@ async function rawModels(provider: ProviderRecord, apiKey: string): Promise<Disc
         }
       }
     }
-    return out;
+    return { models: out, errorCode: 0, errorMessage: '' };
   } catch (err) {
-    return [];
+    const e = err as BusinessError;
+    return { models: [], errorCode: e.code > 0 ? e.code : -1, errorMessage: e.message };
   } finally {
     request.destroy();
   }
@@ -514,11 +554,12 @@ async function fetchDeprecations(url: string): Promise<Map<string, string>> {
  * 404, so it exists), then two optional live enrichments — the website catalog
  * (free/popularity/deprecation, via `catalogUrl`) and the official deprecations table
  * (`deprecationsUrl`), which HIDES models already past their shutdown date and annotates
- * upcoming ones. Returns [] only if /v1/models fails AND the provider curates no models; each
- * enrichment degrades independently.
+ * upcoming ones. Each enrichment degrades independently and silently — only the listing step
+ * reports an error, since it alone decides whether the result is trustworthy.
  */
-export async function discoverModels(provider: ProviderRecord, apiKey: string): Promise<DiscoveredModel[]> {
-  let list = await rawModels(provider, apiKey);
+export async function discoverModels(provider: ProviderRecord, apiKey: string): Promise<DiscoveryResult> {
+  const raw = await rawModels(provider, apiKey);
+  let list = raw.models;
 
   // Union in curated ids the live listing didn't return. Marked free:false to stay neutral to
   // the dialog's "only free" filter (which only engages when a provider exposes free flags).
@@ -541,7 +582,7 @@ export async function discoverModels(provider: ProviderRecord, apiKey: string): 
   }
 
   if (list.length === 0) {
-    return list;
+    return { models: list, errorCode: raw.errorCode, errorMessage: raw.errorMessage };
   }
 
   const catUrl = provider.catalogUrl;
@@ -591,7 +632,7 @@ export async function discoverModels(provider: ProviderRecord, apiKey: string): 
     }
   }
 
-  return list;
+  return { models: list, errorCode: raw.errorCode, errorMessage: raw.errorMessage };
 }
 
 /**

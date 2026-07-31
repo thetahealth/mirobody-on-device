@@ -41,14 +41,24 @@ const Tool kRenderChart = {
     "render_chart",
     "Render a chart in the user's chat. Call this with a complete Apache ECharts "
     "`option` object to visualize data (line, bar, pie, scatter, etc.). Use it "
-    "whenever a trend or comparison is clearer as a chart than as text or a table.",
+    "whenever a trend or comparison is clearer as a chart than as text or a table. "
+    "Emit a THEME-NEUTRAL option: never set colors — each client applies its own "
+    "light/dark palette, and any color in the option overrides it and breaks one of "
+    "the two modes.",
     false,                                                    // auth
     {
         Param("option", Type::Object, Required,
               "A complete Apache ECharts option object, e.g. "
               "{\"title\":{\"text\":\"Weight\"},\"xAxis\":{\"type\":\"category\","
               "\"data\":[\"Mon\",\"Tue\"]},\"yAxis\":{\"type\":\"value\"},"
-              "\"series\":[{\"type\":\"line\",\"data\":[70.1,70.4]}]}."),
+              "\"series\":[{\"type\":\"line\",\"data\":[70.1,70.4]}]}. "
+              "Rules: (1) Omit every color key — no top-level `color` palette, no "
+              "`backgroundColor`, no `itemStyle.color` / `lineStyle.color` / "
+              "`textStyle.color`; the client themes the chart. (2) Give every series "
+              "a `name`, and include a `legend` whenever there are 2+ series, so "
+              "series are identifiable without relying on color. (3) One value axis "
+              "only — never two y-scales; for a second measure of a different scale, "
+              "call this tool again for a separate chart."),
         Param("title", Type::String, Optional,
               "Optional short caption shown alongside the chart."),
     },

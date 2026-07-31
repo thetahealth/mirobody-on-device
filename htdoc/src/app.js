@@ -16,14 +16,17 @@ const config = require("./config");
 const state  = config.state;
 
 // Top-bar slots for the current view, filled by buildChat/buildLogin and read by
-// render() to compose the bar -- mirrors the app's CenterAlignedTopAppBar, which
-// hosts the provider picker (center) and the settings menu (right). providerRefill
-// is set by buildChat to the active selector's refill function, so the page-load
-// /api/providers fetch can populate it once the data arrives.
+// render() to compose the bar -- mirrors the app's CenterAlignedTopAppBar, which hosts
+// the provider picker (center). There is no right-hand slot: the settings gear that
+// once filled it moved into the nav drawer, so the bar's only action is the hamburger
+// it builds itself. providerRefill is set by buildChat to the active selector's refill
+// function, so the page-load /api/providers fetch can populate it once the data arrives.
+// wordmark runs the other way: the bar puts its "Mirobody" node here so chat can hide
+// it when the subject picker claims the same space on mobile (see topbar.js).
 var slots = {
-    topCenter     : null,
-    topRight      : null,
-    providerRefill : null
+    topCenter      : null,
+    providerRefill : null,
+    wordmark       : null
 };
 
 // True while "Add account" is showing the login view over an existing session
@@ -34,6 +37,10 @@ var addingAccount = false;
 //----------------------------------------------------------------------------
 
 function render() {
+    // Re-resolve the theme first, so every render paints under the current
+    // effective mode -- this also picks up an OS scheme flip that arrived while
+    // a render was being skipped (mid-stream).
+    config.applyTheme();
     var appEl = ui.clear(document.getElementById("app"));
     ui.setStyle(appEl, {
         display       : "flex",
@@ -54,10 +61,10 @@ function render() {
     var buildTopBar  = require("./topbar").buildTopBar;
     var consent      = require("./consent");
 
-    // Build the body first so it fills the topCenter/topRight slots, then the
-    // bar, then mount bar-above-body.
+    // Build the body first so it fills the topCenter slot, then the bar, then mount
+    // bar-above-body.
     slots.topCenter = null;
-    slots.topRight  = null;
+    slots.wordmark  = null;   // the bar refills this; a stale node would be orphaned
     // An OAuth consent request (?oauth_consent=...) takes over the body once the
     // user is signed in; until then the normal login view runs and we resume
     // here automatically after completeLogin re-renders.
@@ -70,10 +77,11 @@ function render() {
     } else {
         body = showLogin ? buildLogin() : buildChat();
     }
-    // Top-bar left: the account avatar in chat; a back arrow to cancel while
-    // adding an account; nothing on the plain login screen.
-    var leftMode = addingAccount ? "cancelAdd" : (token ? "account" : "none");
-    appEl.appendChild(buildTopBar(slots.topCenter, slots.topRight, leftMode));
+    // Which screen the bar is sitting on: it decides the left affordance (hamburger,
+    // or a back arrow to cancel "Add account") and whether the wordmark appears -- the
+    // login view's own card is already the brand statement, so only chat gets it.
+    var leftMode = addingAccount ? "cancelAdd" : (token ? "chat" : "login");
+    appEl.appendChild(buildTopBar(slots.topCenter, leftMode));
     appEl.appendChild(body);
 };
 
@@ -91,6 +99,29 @@ function signOut() {
     // open overlay here so a 401 mid-modal doesn't leave it floating over login.
     closeOverlays();
     activateSession();
+};
+
+// Sign out EVERY stored account, not just the current one. Used when the backend
+// changes: a token means something only to the server that issued it, and
+// clearToken() falls back to the next stored account -- which would silently
+// activate another old-backend session that 401s on its first request. Each
+// account's local mirror is keyed by its own token, so this walks the accounts,
+// dropping each one's data while that account is still the current one.
+function signOutAll() {
+    function step() {
+        if (!net.getToken()) {
+            closeOverlays();
+            activateSession();
+            return;
+        }
+        // db.clear() swallows its own failures; clearToken() always drops the
+        // current slot, so the walk terminates after one pass per account.
+        db.clear().then(function () {
+            net.clearToken();
+            step();
+        });
+    };
+    step();
 };
 
 // Reset per-session state and load the CURRENT account's data, then render. The
@@ -133,6 +164,15 @@ function addAccount() {
     addingAccount = true;
     closeOverlays();
     render();
+};
+
+// True whenever the login view is the one on screen: signed out, or signed in
+// but showing login for "Switch account". The auth config loaders use this to
+// decide whether a just-arrived provider config should re-render (revealing its
+// button) -- a bare !getToken() check would skip the switch-account login view
+// and leave it missing the social sign-in buttons.
+function showingLogin() {
+    return addingAccount || !net.getToken();
 };
 
 // Back out of "Add account" without signing in, returning to the current account.
@@ -197,8 +237,10 @@ net.setUnauthorizedHandler(signOut);
 exports.slots            = slots;
 exports.render           = render;
 exports.signOut          = signOut;
+exports.signOutAll       = signOutAll;
 exports.completeLogin    = completeLogin;
 exports.loadProviders    = loadProviders;
 exports.switchAccount    = switchAccount;
 exports.addAccount       = addAccount;
+exports.showingLogin     = showingLogin;
 exports.cancelAddAccount = cancelAddAccount;

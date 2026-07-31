@@ -19,6 +19,8 @@ const isMobile = config.isMobile;
 const widgets = require("./widgets");
 const field   = widgets.field;
 const button  = widgets.button;
+const brandMark   = widgets.brandMark;
+const setDisabled = widgets.setDisabled;
 
 const icons = require("./icons");
 const GOOGLE_SVG = icons.GOOGLE_SVG;
@@ -30,19 +32,26 @@ const TANKA_SVG  = icons.TANKA_SVG;
 
 const auth = require("./auth");
 const tanka = require("./tanka");
-const buildSettingsMenu = require("./topbar").buildSettingsMenu;
-
-const logoUrl = require("./assets/mirobody.svg");
 
 var t = i18n.t;
 
-// Providers render as a compact icon row (not a labeled stack) when the screen
-// is narrow (isMobile) OR too short to fit the stack without scrolling. The
-// height case can't be known until the card is laid out, so it's measured after
-// render and latched here; a window resize clears it so a taller window can
-// restore the labels.
+// Height-aware layout tiers, so the login card fits a laptop screen without
+// scrolling. Tier 1 (compactFit): providers render as a compact icon row instead
+// of a labeled stack -- also forced when the screen is narrow (isMobile). Tier 2
+// (shortFit): the icon row alone wasn't enough, so shrink the brand block (logo,
+// title, margins) and tighten the card spacing too. Neither case can be known
+// until the card is laid out, so overflow is measured after render and latched
+// here; a window resize clears both so a taller window can restore the full
+// layout.
 var compactFit   = false;
+var shortFit     = false;
 var resizeHooked = false;
+
+// The address the last verification code was sent to (lowercased); the code
+// field stays locked until it matches the address in the email field.
+// Module-level so mid-login re-renders (the compact reflow, a language switch)
+// don't re-lock a field the user can already fill.
+var codeSentTo = "";
 
 // Draw the APK download QR into `box` once the QR lib has loaded. Mirrors the
 // QR rendering in tanka.js (our own trusted markup).
@@ -60,13 +69,52 @@ function renderApkQr(box, url) {
     box.appendChild(img);
 };
 
+// Small dialog with the APK download QR, opened from the one-line link on the
+// login card -- kept out of the card itself so the QR's height never pushes the
+// login page past a laptop viewport. Same backdrop/card pattern as modals.js;
+// dismisses on the Close button or a backdrop click.
+function showApkQrModal(url) {
+    var backdrop = ui.dom("div", {
+        position: "fixed", inset: "0", background: "rgba(0, 0, 0, 0.4)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "16px", zIndex: "1200"
+    });
+    var card = ui.dom("div", {
+        background: color.background, borderRadius: "14px", padding: "20px 22px",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.25)",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: "14px"
+    });
+    card.appendChild(ui.setText(ui.dom("div", {
+        fontSize: "0.9rem", color: color.onSurface, textAlign: "center"
+    }), t("downloadAndroidQr")));
+    var box = ui.dom("div", {
+        width: "168px", height: "168px", padding: "8px", boxSizing: "border-box",
+        background: "#fff", borderRadius: "8px"
+    });
+    card.appendChild(box);
+    tanka.loadQrLib().then(function () { renderApkQr(box, url); });
+
+    function dismiss() {
+        if (backdrop.parentNode) { backdrop.parentNode.removeChild(backdrop); }
+    };
+    var closeBtn = button(t("close"), true);
+    closeBtn.addEventListener("click", dismiss);
+    card.appendChild(closeBtn);
+
+    backdrop.addEventListener("click", function (evt) {
+        if (evt.target === backdrop) { dismiss(); }
+    });
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+};
+
 //----------------------------------------------------------------------------
 
 function buildLogin() {
     app.slots.topCenter = null;
-    // Settings (language / font / backend / about) stays available before login;
-    // it hides Sign out while signed out (see buildSettingsMenu).
-    app.slots.topRight = buildSettingsMenu();
+    // Settings (language / font / appearance / backend) stay reachable before
+    // login through the top-left hamburger: signed out, the nav drawer narrows to just
+    // that group (see history.js). This screen adds no bar actions of its own.
 
     // Probe which social providers are configured (only the sign-in panel needs
     // it); each loader re-renders the view when its config arrives.
@@ -80,34 +128,41 @@ function buildLogin() {
     // centered card.
     var phone = isMobile();
     // `compact` drives only the provider layout (icon row vs labeled stack); the
-    // card sizing stays purely width-based on `phone`.
+    // card sizing stays purely width-based on `phone`. `shortMode` is the tier-2
+    // height fallback (desktop only -- the phone layout scrolls naturally).
     var compact = phone || compactFit;
+    var shortMode = !phone && shortFit;
     var card = ui.dom("section", {
         width         : "100%",
         maxWidth      : phone ? "100%" : "400px",
         margin        : phone ? "0 auto" : "auto",
-        padding       : phone ? "16px 20px 40px" : "8px 24px 40px",
+        padding       : phone ? "16px 20px 40px" : (shortMode ? "8px 24px 16px" : "8px 24px 40px"),
         display       : "flex",
         flexDirection : "column",
-        gap           : "14px",
+        gap           : shortMode ? "10px" : "14px",
         boxSizing     : "border-box"
     });
 
     // -- centered brand block: logo + serif title + subtitle ----------------
+    // In shortMode everything steps down one size so the whole card can fit a
+    // short laptop viewport: smaller logo, smaller title, tighter margins.
     var brandBlock = ui.dom("div", {
         display: "flex", flexDirection: "column", alignItems: "center",
-        textAlign: "center", gap: "0", margin: "12px 0 28px"
+        textAlign: "center", gap: "0",
+        margin: shortMode ? "4px 0 14px" : "12px 0 28px"
     });
-    brandBlock.appendChild(ui.img(logoUrl, { width: "60px", height: "60px", marginBottom: "16px" }));
+    brandBlock.appendChild(brandMark(shortMode ? "44px" : "60px",
+        { marginBottom: shortMode ? "10px" : "16px" }));
     brandBlock.appendChild(ui.setText(ui.dom("h1", {
         fontFamily: serifFamily, fontWeight: "600",
-        fontSize: "clamp(2.75rem, 10vw, 3.75rem)",   // large display title, like the design
+        // large display title, like the design; one step smaller in shortMode
+        fontSize: shortMode ? "clamp(2rem, 7vw, 2.5rem)" : "clamp(2.75rem, 10vw, 3.75rem)",
         lineHeight: "1.04", letterSpacing: "-0.5px",
-        color: "#0f1115", margin: "0"                // near-pure black
+        color: color.wordmark, margin: "0"           // brand-title ink (white in dark)
     }), "Mirobody"));
     brandBlock.appendChild(ui.setText(ui.dom("p", {
         color: color.onSurfaceVar, fontSize: "1.05rem", lineHeight: "1.4",
-        margin: "14px 0 0"
+        margin: shortMode ? "8px 0 0" : "14px 0 0"
     }), t("loginContinue")));
     card.appendChild(brandBlock);
 
@@ -178,7 +233,7 @@ function buildLogin() {
         // signInWithApple picks the flow by OS: Apple's own popup (native Apple ID
         // token -> /apple/verify) on Apple platforms, else a Firebase popup
         // (apple.com -> /firebase/verify). The result says which.
-        var appleBtn = oauthButton(APPLE_SVG, t("continueWithApple"), "#000000");
+        var appleBtn = oauthButton(APPLE_SVG, t("continueWithApple"), color.onSurface);
         appleBtn.addEventListener("click", function () {
             appleBtn.disabled = true;
             ui.setText(status, "");
@@ -218,7 +273,7 @@ function buildLogin() {
     if (auth.githubEnabled()) {
         // Clicking redirects to GitHub's authorize page; auth.js handles the
         // bounce-back exchange.
-        var githubBtn = oauthButton(GITHUB_SVG, t("continueWithGitHub"), "#000000");
+        var githubBtn = oauthButton(GITHUB_SVG, t("continueWithGitHub"), color.onSurface);
         githubBtn.addEventListener("click", function () {
             githubBtn.disabled = true;
             ui.setText(status, "");
@@ -230,7 +285,7 @@ function buildLogin() {
     if (auth.xEnabled()) {
         // Like Google this opens a Firebase popup; the Firebase ID token is
         // verified by POST /firebase/verify (any provider accepted).
-        var xBtn = oauthButton(X_SVG, t("continueWithX"), "#000000");
+        var xBtn = oauthButton(X_SVG, t("continueWithX"), color.onSurface);
         xBtn.addEventListener("click", function () {
             xBtn.disabled = true;
             ui.setText(status, "");
@@ -292,10 +347,12 @@ function buildLogin() {
     // Email + one-time code.
 
     function emailValid(v) {
-        // Match the server's lenient rule (normalize_email): an '@' with non-empty,
-        // space-free parts on both sides. No dot required, so single-label demo
-        // domains like "user289@demo" are accepted.
-        return /^[^\s@]+@[^\s@]+$/.test((v || "").trim());
+        // Full shape check -- at least *@*.*: an '@' with non-empty, space-free
+        // parts on both sides, and the domain must contain a dot. Stricter than
+        // the server's lenient normalize_email (which would accept single-label
+        // domains like "user289@demo"), so typos die here instead of costing a
+        // sent code.
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v || "").trim());
     };
 
     var emailInput = field({ type: "email", placeholder: t("emailPlaceholder"), autocomplete: "email" });
@@ -330,7 +387,7 @@ function buildLogin() {
     var cooldownTimer = null;
     function startCooldown(seconds) {
         var remaining = seconds;
-        sendBtn.disabled = true;
+        setDisabled(sendBtn, true);
         ui.setText(sendBtn, t("resendIn", remaining));
         if (cooldownTimer) { clearInterval(cooldownTimer); }
         cooldownTimer = setInterval(function () {
@@ -341,42 +398,60 @@ function buildLogin() {
             if (remaining <= 0) {
                 clearInterval(cooldownTimer); cooldownTimer = null;
                 ui.setText(sendBtn, t("resendCode"));
-                refreshSendBtn();
+                refreshEmailGate();
             } else {
                 ui.setText(sendBtn, t("resendIn", remaining));
             }
         }, 1000);
     };
 
-    // Send code is enabled only for a valid-looking email, except while a request
-    // is in flight or the cooldown is running (those states own the button).
-    function refreshSendBtn() {
-        if (sending || cooldownTimer) { return; }
-        sendBtn.disabled = !emailValid(emailInput.value);
+    // Staged flow, each step unlocking the next: 1) a valid-looking address
+    // unlocks "Send code"; 2) a successful send unlocks the code field (editing
+    // the address re-locks it until a code is sent to the new one); 3) all six
+    // digits unlock Sign in (six digits also auto-submit). Send code has two
+    // further states that own the button themselves -- a request in flight, and
+    // the resend cooldown.
+    function codeSent() {
+        return !!codeSentTo && codeSentTo === emailInput.value.trim().toLowerCase();
     };
-    emailInput.addEventListener("input", refreshSendBtn);
-    refreshSendBtn();
+    function refreshEmailGate() {
+        var ok = emailValid(emailInput.value);
+        setDisabled(codeInput, !ok || !codeSent());
+        refreshSignInBtn();
+        if (sending || cooldownTimer) { return; }
+        setDisabled(sendBtn, !ok);
+    };
+    // Sign in needs the whole staircase: a valid address, a code sent to it, and
+    // all six digits.
+    function refreshSignInBtn() {
+        setDisabled(signInBtn, !emailValid(emailInput.value) || !codeSent()
+            || codeInput.value.length !== 6);
+    };
+    emailInput.addEventListener("input", refreshEmailGate);
+    refreshEmailGate();
 
     sendBtn.addEventListener("click", function () {
         var email = emailInput.value.trim();
         if (!emailValid(email)) { ui.setText(status, t("emailRequired")); return; }
 
         sending = true;
-        sendBtn.disabled = true;
+        setDisabled(sendBtn, true);
         ui.setText(status, t("sendingCode"));
 
         net.post("/email/login", { email: email },
             function () {
                 sending = false;
                 state.email = email;
+                codeSentTo = email.toLowerCase();
                 ui.setText(status, t("codeSentTo", email));
                 startCooldown(COOLDOWN_SECONDS);
+                refreshEmailGate();   // unlock the code field before focusing it
                 codeInput.focus();
             },
             function (msg) {
                 sending = false;
                 ui.setText(status, ui.isString(msg) ? msg : t("sendFailed"));
-                refreshSendBtn();
+                refreshEmailGate();
             },
             true);
     });
@@ -409,6 +484,7 @@ function buildLogin() {
     codeInput.addEventListener("input", function () {
         codeInput.value = codeInput.value.replace(/\D/g, "").slice(0, 6);
         codeInput.style.borderColor = color.outlineVar;
+        refreshSignInBtn();
         if (codeInput.value.length === 6) { verify(); }
     });
     // Enter in the email field sends the code; Enter in the code field verifies.
@@ -416,7 +492,7 @@ function buildLogin() {
         if (evt.key === "Enter") { evt.preventDefault(); if (!sendBtn.disabled) { sendBtn.click(); } }
     });
     codeInput.addEventListener("keydown", function (evt) {
-        if (evt.key === "Enter") { evt.preventDefault(); verify(); }
+        if (evt.key === "Enter") { evt.preventDefault(); if (!signInBtn.disabled) { verify(); } }
     });
     signInBtn.addEventListener("click", verify);
 
@@ -427,9 +503,11 @@ function buildLogin() {
 
     // The Android APK — served from the doc root (htdoc/static/mirobody.apk,
     // copied to res/htdoc/ at build). Only the Android app exists, so: on Android,
-    // a tap-to-download link (installs directly); on desktop, a QR code to scan
-    // with a phone; on other mobiles (iPhone etc.) nothing -- an APK can't be
-    // installed there, and you can't scan your own screen.
+    // a tap-to-download link (installs directly); on desktop, a one-line link
+    // that pops the scan-to-download QR in a dialog (inline, the 128px QR pushed
+    // the card past a laptop viewport's height); on other mobiles (iPhone etc.)
+    // nothing -- an APK can't be installed there, and you can't scan your own
+    // screen.
     var apkUrl = net.appBase() + "/mirobody.apk";
     if (config.isAndroid()) {
         var apkLink = ui.dom("a", {
@@ -439,21 +517,17 @@ function buildLogin() {
         ui.setText(apkLink, t("downloadAndroid"));
         card.appendChild(apkLink);
     } else if (!config.isMobile()) {
-        var apkQr = ui.dom("div", {
-            display: "flex", flexDirection: "column", alignItems: "center",
-            marginTop: "20px", gap: "8px"
-        });
-        var apkCaption = ui.setText(ui.dom("div", {
-            fontSize: "0.8rem", color: color.onSurfaceVar, textAlign: "center"
-        }), t("downloadAndroidQr"));
-        var apkBox = ui.dom("div", {
-            width: "128px", height: "128px", padding: "8px", boxSizing: "border-box",
-            background: "#fff", borderRadius: "8px"
-        });
-        apkQr.appendChild(apkCaption);
-        apkQr.appendChild(apkBox);
-        card.appendChild(apkQr);
-        tanka.loadQrLib().then(function () { renderApkQr(apkBox, apkUrl); });
+        var apkQrLink = ui.dom("button", {
+            border: "none", background: "transparent", cursor: "pointer",
+            display: "block", margin: (shortMode ? "12px" : "20px") + " auto 0",
+            padding: "0", font: "inherit", fontSize: "0.8rem",
+            color: color.onSurfaceVar, textDecoration: "underline"
+        }, { type: "button" });
+        ui.setText(apkQrLink, t("downloadAndroid"));
+        apkQrLink.addEventListener("click", function () { showApkQrModal(apkUrl); });
+        card.appendChild(apkQrLink);
+        // Warm the QR lib now so the dialog draws instantly when opened.
+        tanka.loadQrLib();
     }
 
     // Surface a failed WeChat / GitHub callback exchange (flagged by auth.js before
@@ -461,22 +535,23 @@ function buildLogin() {
     if (auth.takeWeChatError()) { ui.setText(status, t("wechatFailed")); }
     if (auth.takeGitHubError()) { ui.setText(status, t("githubFailed")); }
 
-    // Height-aware fallback: once mounted, if the labeled stack overflows the
-    // viewport, latch compact and re-render as an icon row. Only ever flips
-    // labeled -> compact (compact always fits), so it converges without looping.
-    if (!compact) {
+    // Height-aware fallback: once mounted, if the card overflows the viewport,
+    // escalate one tier and re-render -- labeled stack -> compact icon row ->
+    // shortMode (smaller brand block, tighter spacing). Each step only shrinks
+    // and shortMode is the floor (past it the page just scrolls), so the
+    // escalation converges without looping.
+    if (!phone) {
         requestAnimationFrame(function () {
-            if (compactFit) { return; }
-            if (document.documentElement.scrollHeight > window.innerHeight + 1) {
-                compactFit = true;
-                app.render();
-            }
+            if (!app.showingLogin()) { return; }   // view changed before the frame
+            if (document.documentElement.scrollHeight <= window.innerHeight + 1) { return; }
+            if (!compactFit)    { compactFit = true; app.render(); }
+            else if (!shortFit) { shortFit = true;   app.render(); }
         });
     }
 
-    // Re-evaluate on resize: drop the latch so a now-taller window restores the
-    // labels (the check above re-trips it if it still overflows). Debounced, and
-    // only while the login view is up.
+    // Re-evaluate on resize: drop both latches so a now-taller window restores
+    // the full layout (the check above re-trips them tier by tier if it still
+    // overflows). Debounced, and only while the login view is up.
     //
     // Width-only guard: on touch devices, focusing an input pops the soft keyboard,
     // which shrinks the viewport HEIGHT and fires `resize`. Re-rendering here would
@@ -489,13 +564,14 @@ function buildLogin() {
         var pending = null;
         var lastWidth = window.innerWidth;
         window.addEventListener("resize", function () {
-            if (net.getToken()) { return; }   // not on the login view
+            if (!app.showingLogin()) { return; }   // not on the login view
             if (window.innerWidth === lastWidth) { return; }   // height-only (soft keyboard): ignore
             lastWidth = window.innerWidth;
             if (pending) { clearTimeout(pending); }
             pending = setTimeout(function () {
                 pending = null;
                 compactFit = false;
+                shortFit   = false;
                 app.render();
             }, 150);
         });

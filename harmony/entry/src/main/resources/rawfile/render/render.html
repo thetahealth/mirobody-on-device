@@ -16,18 +16,39 @@
   </script>
   <script src="tex-svg.js" async></script>
   <script src="echarts.min.js"></script>
+  <script src="chart-theme.js"></script>
   <script>
     // 1ex -> px at the SVG's default 16px math font. The ArkTS side scales the
     // result by the user's font-scale setting.
     var EX_PX = 8.0;
 
+    // Mirrors of the ArkTS tokens (code_fg / bg_bubble in element/color.json).
+    // Duplicated across the ArkTS<->JS boundary because a webview can't read app
+    // resources; keep the two in step when either palette changes.
+    var INK = { light: '#2A2E36', dark: '#D3D8DE' };
+    var CHART_BG = { light: '#EDE8DE', dark: '#1C1F22' };
+    var TEXT = { light: '#1A1C1E', dark: '#E2E2E5' };
+    var TEXT_DIM = { light: '#52565C', dark: '#C4C7CB' };
+    var AXIS = { light: '#C9C2B4', dark: '#464D57' };
+    var GRID = { light: '#DDD6C9', dark: '#333941' };
+
+    function palette(dark) {
+      var k = dark ? 'dark' : 'light';
+      return { ink: TEXT[k], inkDim: TEXT_DIM[k], axis: AXIS[k], grid: GRID[k],
+               surface: CHART_BG[k] };
+    }
+
     // tex -> {ok, svg, w, h} (JSON string). display=true for $$ blocks. SVG
     // travels as TEXT (file:// is dependable everywhere, svg data URIs less so).
-    window.renderTex = function (tex, display) {
+    window.renderTex = function (tex, display, dark) {
       try {
         var node = MathJax.tex2svg(tex, { display: !!display });
         var svg = node.querySelector('svg');
         if (!svg) { return JSON.stringify({ ok: false }); }
+        // MathJax fills glyphs with `currentColor`. A standalone file:// SVG
+        // inherits no color, so it resolves to black — invisible in dark mode.
+        // Pin it to the theme's code ink.
+        svg.style.color = dark ? INK.dark : INK.light;
         var w = Math.ceil(parseFloat(svg.getAttribute('width')) * EX_PX);
         var h = Math.ceil(parseFloat(svg.getAttribute('height')) * EX_PX);
         var xml = new XMLSerializer().serializeToString(svg);
@@ -45,17 +66,26 @@
     // so exact size only affects sharpness, and 2x covers phone densities.
     var CHART_W = 640, CHART_H = 400;
 
-    window.renderChart = function (optionJson) {
+    // Themes + option sanitizing live in chart-theme.js (shared with the Android and
+    // iOS chart hosts). This host is the odd one out in only one respect: it bakes a
+    // PNG, which has no alpha, so it passes the opaque bubble color as the surface
+    // rather than 'transparent'.
+
+    window.renderChart = function (optionJson, dark) {
       var el = document.createElement('div');
       document.body.appendChild(el);
       var chart = null;
       try {
-        var option = JSON.parse(optionJson);
+        var option = mbPrepare(JSON.parse(optionJson));
         option.animation = false;   // a static image cannot animate
-        chart = echarts.init(el, null,
+        chart = echarts.init(el, mbChartTheme(dark, palette(dark)),
           { width: CHART_W, height: CHART_H, devicePixelRatio: 2 });
         chart.setOption(option);
-        var url = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        // Opaque, matching the bubble: the PNG has no alpha channel to blend with.
+        var url = chart.getDataURL({
+          type: 'png', pixelRatio: 2,
+          backgroundColor: dark ? CHART_BG.dark : CHART_BG.light
+        });
         return JSON.stringify({
           ok: true,
           png: url.substring('data:image/png;base64,'.length),

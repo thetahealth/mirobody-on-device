@@ -2,7 +2,119 @@
   "color": [
     {
       "name": "start_window_background",
+      "value": "#F2EFE9"
+    },
+
+    {
+      "name": "brand",
+      "value": "#1E3A6B"
+    },
+    {
+      "name": "brand_text",
+      "value": "#1E3A6B"
+    },
+    {
+      "name": "on_brand",
       "value": "#FFFFFF"
+    },
+    {
+      "name": "danger",
+      "value": "#BA1A1A"
+    },
+    {
+      "name": "danger_text",
+      "value": "#BA1A1A"
+    },
+    {
+      "name": "on_danger",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "success",
+      "value": "#2A7248"
+    },
+    {
+      "name": "warn",
+      "value": "#B0762A"
+    },
+    {
+      "name": "warn_text",
+      "value": "#8A5E15"
+    },
+
+    {
+      "name": "bg_page",
+      "value": "#F2EFE9"
+    },
+    {
+      "name": "bg_surface",
+      "value": "#FAF7F1"
+    },
+    {
+      "name": "bg_bubble",
+      "value": "#EDE8DE"
+    },
+    {
+      "name": "bg_overlay",
+      "value": "#0A000000"
+    },
+    {
+      "name": "bg_inline_code",
+      "value": "#14000000"
+    },
+    {
+      "name": "notice_bg",
+      "value": "#FBEEDD"
+    },
+
+    {
+      "name": "text_primary",
+      "value": "#1A1C1E"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#52565C"
+    },
+    {
+      "name": "text_tertiary",
+      "value": "#63666B"
+    },
+    {
+      "name": "text_disabled",
+      "value": "#A9A49A"
+    },
+    {
+      "name": "notice_fg",
+      "value": "#8A5E15"
+    },
+    {
+      "name": "code_fg",
+      "value": "#2A2E36"
+    },
+    {
+      "name": "inline_code_fg",
+      "value": "#9F3048"
+    },
+
+    {
+      "name": "divider",
+      "value": "#E7E1D5"
+    },
+    {
+      "name": "border",
+      "value": "#DDD6C9"
+    },
+    {
+      "name": "quote_bar",
+      "value": "#C9C2B4"
+    },
+    {
+      "name": "scrim",
+      "value": "#33000000"
+    },
+    {
+      "name": "shadow",
+      "value": "#26000000"
     }
   ]
 }

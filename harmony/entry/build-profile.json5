@@ -5,9 +5,18 @@
     // Device only. Each ABI needs its own cross-compiled dependency tree under
     // harmony/prebuilt/<abi> -- run `build-prebuilt.cmd <abi>` first. Add
     // "x86_64" here (and run the script for it) to also target the emulator.
+    //
+    // LLAMA_CPP_DIR turns on the on-device LLM (src/llm/local.cpp) and is the
+    // ONLY switch for it: absent, the core compiles its stub and the app still
+    // builds. Build the SDK with `build-llama.cmd <abi> <backend>`, which writes
+    // to D:\opt\llama-sdk-ohos-<abi>-<backend>; the value below is that path and
+    // is machine-local, so expect to repoint it rather than to inherit it.
+    //
+    // Use the `cpu` backend. `vulkan` builds and runs but lost on every axis on a
+    // Kirin 9020 and costs ~50 MB of shader binary -- numbers in build-llama.cmd.
     "externalNativeOptions": {
       "path": "./src/main/cpp/CMakeLists.txt",
-      "arguments": "",
+      "arguments": "-DLLAMA_CPP_DIR=D:/opt/llama-sdk-ohos-arm64-v8a-cpu",
       "cppFlags": "",
       "abiFilters": [
         "arm64-v8a"
