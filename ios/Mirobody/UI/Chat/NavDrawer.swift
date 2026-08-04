@@ -1,12 +1,15 @@
 import SwiftUI
 
-/// Left navigation drawer — the app's nav home, mirroring the web client's
+/// Left navigation drawer — the app's ONLY menu, mirroring the web client's
 /// `history.js` and Android's `ChatDrawer`. Top: a "New chat" / "Incognito" button
 /// row. Middle (the only scrolling area): conversation history (tap to resume,
-/// per-row delete). Pinned bottom: the Health & data group (Connect EHR, Connected
-/// devices, Sync health data, Bluetooth devices), the account switcher, and Sign
-/// out. App settings (language / font / backend / about) are NOT here — they live
-/// in the top-bar gear, shared with the login screen.
+/// per-row delete). Pinned bottom, three groups: Health & data (Connect EHR,
+/// Connected devices, Sync health data, Bluetooth devices), app settings, and the
+/// account switcher + Sign out.
+///
+/// The app-settings group used to be a top-right gear on this screen and on the auth
+/// screens. Folding it in here leaves one menu affordance instead of two, and lets the
+/// auth screens open the same drawer narrowed to just that group.
 ///
 /// Care circle is intentionally omitted: iOS has no care-circle feature yet, so it
 /// is out of today's scope.
@@ -80,19 +83,7 @@ struct NavDrawer: View {
 
     // MARK: Header
 
-    private var header: some View {
-        HStack(spacing: 4) {
-            Button { onDismiss() } label: {
-                Image(systemName: "chevron.backward").foregroundColor(colors.onSurfaceVariant)
-            }
-            .frame(width: 40, height: 40)
-            .accessibilityLabel(L("common_back", lang))
-            LText("chat_menu_title").mbFont(.titleMedium).foregroundColor(colors.onSurface)
-            Spacer()
-        }
-        .padding(.horizontal, 8).padding(.top, 4)
-        .frame(height: 56)
-    }
+    private var header: some View { DrawerHeader(onDismiss: onDismiss) }
 
     // MARK: New chat / Incognito
 
@@ -187,34 +178,47 @@ struct NavDrawer: View {
             .clipShape(Capsule())
     }
 
-    // MARK: Footer (pinned): Health & data + account + sign out
+    // MARK: Footer (pinned): Health & data + app settings + account + sign out
 
+    /// Three groups, each behind a rule. Kept as separate computed views rather than
+    /// one flat list: inlined it comes to exactly ten children, which is ViewBuilder's
+    /// ceiling, so the next row anyone adds would fail to compile for a reason that
+    /// has nothing to do with the row.
     private var footer: some View {
         VStack(spacing: 0) {
-            Divider().background(colors.outlineVariant.opacity(0.5))
-            // These present modally OVER the drawer (like the web's modal-over-drawer);
-            // the drawer stays open behind them and returns on dismiss.
-            drawerRow(titleKey: "chat_ehr") { showEhr = true }
-            drawerRow(titleKey: "chat_vendors") { showVendors = true }
-            drawerRow(titleKey: "chat_sync_health") { showHealth = true }
-            drawerRow(titleKey: "chat_bluetooth") { showBle = true }
-            Divider().background(colors.outlineVariant.opacity(0.5))
+            groupRule
+            healthGroup
+            groupRule
+            // App settings — what the top-bar gear used to hold. Same group the auth
+            // screens' drawer shows on its own.
+            AppSettingsSection()
+            groupRule
             accountSwitcher
-            Button { showSignOut = true } label: {
-                LText("chat_sign_out").mbFont(.bodyLarge).foregroundColor(colors.error)
-                    .frame(maxWidth: .infinity, minHeight: 40)
-            }
-            .padding(.vertical, 6)
+            signOutButton
         }
     }
 
-    private func drawerRow(titleKey: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            LText(titleKey).mbFont(.bodyLarge).foregroundColor(colors.onSurface)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20).padding(.vertical, 12)
-                .contentShape(Rectangle())
+    private var groupRule: some View {
+        Divider().background(colors.outlineVariant.opacity(0.5))
+    }
+
+    /// These present modally OVER the drawer (like the web's modal-over-drawer); the
+    /// drawer stays open behind them and returns on dismiss.
+    private var healthGroup: some View {
+        VStack(spacing: 0) {
+            DrawerRow(titleKey: "chat_ehr") { showEhr = true }
+            DrawerRow(titleKey: "chat_vendors") { showVendors = true }
+            DrawerRow(titleKey: "chat_sync_health") { showHealth = true }
+            DrawerRow(titleKey: "chat_bluetooth") { showBle = true }
         }
+    }
+
+    private var signOutButton: some View {
+        Button { showSignOut = true } label: {
+            LText("chat_sign_out").mbFont(.bodyLarge).foregroundColor(colors.error)
+                .frame(maxWidth: .infinity, minHeight: 40)
+        }
+        .padding(.vertical, 6)
     }
 
     private var accountSwitcher: some View {

@@ -9,7 +9,7 @@ import { SecureKeyStore } from '../core/SecureKeyStore';
 import { ConfigStore, ActiveSelection, AddedModel } from '../core/ConfigStore';
 import { ProviderManagerDialog } from '../components/ProviderManagerDialog';
 import { AddModelDialog } from '../components/AddModelDialog';
-import { LanguageDialog, FontSizeDialog, ThemeDialog, AboutDialog } from '../components/AppSettingsDialogs';
+import { LanguageDialog, FontSizeDialog, ThemeDialog } from '../components/AppSettingsDialogs';
 import { LocalModelStore, LocalModel, LOCAL_PROVIDER_ID } from '../core/LocalModelStore';
 import { HistoryDrawer } from '../components/HistoryDrawer';
 import { SessionStore, SessionMeta } from '../core/SessionStore';
@@ -113,26 +113,10 @@ struct Index {
     width: '90%'
   });
 
-  private aboutController: CustomDialogController = new CustomDialogController({
-    builder: AboutDialog(),
-    autoCancel: true,
-    alignment: DialogAlignment.Center,
-    backgroundBlurStyle: BlurStyle.COMPONENT_ULTRA_THICK,
-    cornerRadius: 16,
-    width: '90%'
-  });
-
-  private settingsMenu(): MenuElement[] {
-    return [
-      { value: $r('app.string.settings_language'), action: () => { this.langController.open(); } },
-      { value: $r('app.string.settings_font_size'), action: () => { this.fontController.open(); } },
-      { value: $r('app.string.settings_theme'), action: () => { this.themeController.open(); } },
-      { value: $r('app.string.settings_about'), action: () => { this.aboutController.open(); } },
-      // Temporary: step-0 native bridge probe. Remove with pages/NativeProbe.ets
-      // once the real native chat lane is wired.
-      { value: 'Native probe', action: () => { router.pushUrl({ url: 'pages/NativeProbe' }); } }
-    ];
-  }
+  // The settings dialogs above are opened from the nav drawer's footer rows -- there is
+  // no gear menu any more. The controllers stay here rather than moving into the drawer
+  // because a CustomDialogController owned by the drawer would be torn down with it the
+  // moment a row dismissed the drawer to show its dialog.
 
   private mgrController: CustomDialogController = new CustomDialogController({
     builder: ProviderManagerDialog({
@@ -920,7 +904,10 @@ struct Index {
       })
 
     Column() {
-      // Top bar
+      // Top bar: the hamburger and the wordmark beside it, and nothing else. The gear
+      // that used to sit on the trailing edge is a group inside the drawer now (see
+      // HistoryDrawer.ets), which is what leaves this bar with a single affordance --
+      // the same shape the web client's bar has.
       Row() {
         SymbolGlyph($r('sys.symbol.line_3_horizontal'))
           .fontSize(24)
@@ -929,14 +916,16 @@ struct Index {
           .onClick(() => {
             this.openDrawer();
           })
+        // Serif, as the web wordmark is: it is the brand here, not a screen title, and
+        // the app ships no other brand mark in the bar to carry that on its own.
         Text($r('app.string.app_name'))
           .fontSize(20)
-          .fontWeight(FontWeight.Bold)
+          .fontFamily('serif')
+          .fontWeight(600)
+          .fontColor($r('app.color.text_primary'))
           .layoutWeight(1)
-        SymbolGlyph($r('sys.symbol.gearshape'))
-          .fontSize(24)
-          .fontColor([$r('app.color.text_primary')])
-          .bindMenu(this.settingsMenu())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
       .width('100%')
       .padding({ left: 20, right: 20, top: 14, bottom: 14 })
@@ -999,7 +988,8 @@ struct Index {
         this.syncStick();
       })
 
-      // Composer — rounded pill: input on top, control row (model picker · send) below.
+      // Composer — rounded pill: input on top, control row (attach · model picker ·
+      // send) below.
       Column() {
         Column({ space: 6 }) {
           TextInput({ text: this.draft, placeholder: $r('app.string.chat_input_hint') })
@@ -1016,22 +1006,48 @@ struct Index {
               this.onSend();
             })
 
+          // Control row, three zones like the web composer on a phone: attach on the
+          // leading edge, send on the trailing edge, and the model picker centred in
+          // the flexible middle. The two ends are both 40x40, which is what makes the
+          // middle optically centred rather than merely "the leftover space".
           Row() {
+            // Attachment slot. Inert for now -- picking a file is easy (LocalModelStore
+            // already drives DocumentViewPicker), but neither transport can carry one:
+            // ChatMessage is text-only and both lanes map messages to bare
+            // {role, content} before sending, so a staged file would be silently
+            // dropped at send. It holds its 40x40 here so the row's geometry is the
+            // final one and wiring it later moves nothing on screen.
+            Button({ type: ButtonType.Circle }) {
+              SymbolGlyph($r('sys.symbol.paperclip'))
+                .fontSize(18)
+                .fontColor([$r('app.color.text_tertiary')])
+            }
+            .width(40)
+            .height(40)
+            .backgroundColor(Color.Transparent)
+            .enabled(false)
+
             Row() {
-              Text(this.pickerLabel())
-                .fontSize(14 * this.fontScale)
-                .fontColor($r('app.color.text_primary'))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(' ▾')
-                .fontSize(12)
-                .fontColor($r('app.color.text_tertiary'))
+              Row() {
+                Text(this.pickerLabel())
+                  .fontSize(14 * this.fontScale)
+                  .fontColor($r('app.color.text_primary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(' ▾')
+                  .fontSize(12)
+                  .fontColor($r('app.color.text_tertiary'))
+              }
+              // Clamp to the slot so a long model name ellipsizes instead of shoving
+              // the send button off the trailing edge.
+              .constraintSize({ maxWidth: '100%' })
+              .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+              .onClick(() => {
+                this.showPicker = true;
+              })
             }
             .layoutWeight(1)
-            .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-            .onClick(() => {
-              this.showPicker = true;
-            })
+            .justifyContent(FlexAlign.Center)
 
             // While busy this becomes a STOP button (tap to interrupt a slow response).
             Button({ type: ButtonType.Circle }) {
@@ -1107,7 +1123,11 @@ struct Index {
         onIncognito: () => { this.toggleIncognito(); },
         onPick: (id: string) => { this.pickSession(id); },
         onDelete: (id: string) => { this.confirmDelete(id); },
-        onClose: () => { this.showDrawer = false; }
+        onClose: () => { this.showDrawer = false; },
+        onLanguage: () => { this.langController.open(); },
+        onFontSize: () => { this.fontController.open(); },
+        onTheme: () => { this.themeController.open(); },
+        onNativeProbe: () => { router.pushUrl({ url: 'pages/NativeProbe' }); }
       })
     }
     }

@@ -5,7 +5,7 @@ rem the in-process C++ server (libmirobody.so, built from the repo-root CMakeLis
 rem NDK) needs three things that the default Windows environment gets wrong -- all traceable
 rem to a space in the NDK path and to machine-wide MSVC env vars:
 rem
-rem   1. Space-free NDK. If the SDK NDK lives under a spaced profile ("C:\Users\Feng Xie"),
+rem   1. Space-free NDK. If the SDK NDK lives under a spaced profile ("C:\Users\A B"),
 rem      the NDK toolchain invokes the compiler via an 8.3 short name -- clang++.exe becomes
 rem      CLANG_~1.EXE, which drops the "++", so clang links in C-driver mode and libc++ /
 rem      libc++abi go unresolved. build-prebuilt.cmd mirrors the NDK to a space-free path;

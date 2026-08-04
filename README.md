@@ -120,7 +120,7 @@ keeps it on your device unless you choose to share it. See
 
 ## On-device LLM
 
-The native clients (Android · iOS · Electron · Qt) can run the **chat turn entirely
+The native clients (Android · iOS · HarmonyOS · Electron · Qt) can run the **chat turn entirely
 on the device** — private by default, offline, and with no server or API key. A small
 model (1–4B parameters at 4-bit) is downloaded on demand and managed in-app; only the
 engine is bundled.
@@ -151,7 +151,11 @@ default today; the NPU is the most efficient but still too restricted for genera
 | **system service** (AICore, Apple FM) | | | ● |
 
 Desktop (Qt · Electron) runs **any GGUF** via llama.cpp — model-agnostic, managed in
-**⚙ → On-device AI**; mobile (Android · iOS) runs Gemma 4 or Qwen via LiteRT-LM. The fuller
+**⚙ → On-device AI**; mobile (Android · iOS) runs Gemma 4 or Qwen via LiteRT-LM. HarmonyOS
+also takes the GGUF route: llama.cpp is cross-compiled and linked into `libmirobody.so`, on
+the **CPU** backend — Vulkan builds and runs there but measured slower on a Kirin 9020, because
+offload copies every tensor into memory the CPU path just mmaps (numbers in
+[harmony/build-llama.cmd](harmony/build-llama.cmd)). The fuller
 picture — formats (GGUF / ONNX / LiteRT-LM), quantization, the runnable-model catalog,
 and how it compares to Gemini Nano / Apple Foundation Models — is in the slide deck
 [docs/on-device-llm.md](docs/on-device-llm.md) (a Marp deck; open in a Marp viewer or
@@ -276,6 +280,48 @@ cmake --build build-ios-arm64 --config Release
 See [Building - iOS](docs/BUILDING.md#building---ios) for the simulator slice, the xcframework
 packaging, and Swift usage.
 
+### HarmonyOS Next
+
+[`harmony/`](harmony/) is an **ArkTS / ArkUI** (stage model) app for HarmonyOS Next — bundle
+`ai.thetahealth.mirobody`, phone / tablet / 2in1. It embeds the core the way the Android app
+does, `libmirobody.so` over **NAPI** instead of JNI. What sets it apart from every other
+client: it talks to **no mirobody server at all**. There is no backend URL and no account — a
+turn either goes straight to an LLM provider's own OpenAI-compatible endpoint with a key the
+user pasted (BYOK), or runs a GGUF locally through llama.cpp. Chat history is consequently
+local, and the server- and account-shaped features (care circle, EHR, device linking) are
+absent by construction rather than pending.
+
+Build in **DevEco Studio 6.0**. The native module's dependencies are cross-compiled per ABI
+first (`arm64-v8a`, device only):
+
+```cmd
+harmony\build-prebuilt.cmd arm64-v8a     :: -> harmony\prebuilt\arm64-v8a\
+harmony\build-llama.cmd arm64-v8a cpu    :: optional, enables the on-device lane
+```
+```sh
+harmony/build-prebuilt.sh arm64-v8a
+harmony/build-llama.sh arm64-v8a cpu
+```
+
+> [!IMPORTANT]
+> **Before opening `harmony/` in DevEco Studio — once per clone:**
+>
+> ```sh
+> git update-index --skip-worktree harmony/build-profile.json5
+> ```
+>
+> DevEco writes your local signing block — cert paths and passwords — into that **tracked**
+> file, and the flag does not survive cloning. Skip this and the signing material shows up
+> as a committable change.
+
+Then generate a debug signature in DevEco (Project Structure → Signing Configs →
+*Automatically generate signature*). Chat needs no server: paste a provider key in the app,
+add a model, and send.
+
+See [harmony/README.md](harmony/README.md) for the lane/transport split (why the embedded core
+is a transport rather than a lane), live BYOK model discovery, and how a GGUF is referenced
+rather than copied.
+
 ### Desktop (Electron)
 
 [`electron/`](electron/) wraps the server in an Electron desktop app: the main
@@ -363,44 +409,59 @@ contract, and the streaming-over-`wx.request` details.
 
 Where each client stands today. **✅ done · 🚧 partial · — not yet.** Electron
 embeds the [`htdoc`](htdoc/) web UI, so it inherits every web feature and adds an
-on-device LLM.
+on-device LLM. Harmony's dashes in *Accounts* and *Health* are structural, not a
+backlog: it speaks to no mirobody server, so there is nothing to sign into and no
+health or sharing surface to reach (see [HarmonyOS Next](#harmonyos-next)).
 
-| Feature | Web | Android | iOS | Electron | Qt | Miniapp |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
-| **Chat & content** | | | | | | |
-| Streaming replies | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Thinking / reasoning trace | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Tool-call cards (MCP) | ✅ | ✅ | ✅ | ✅ | — | — |
-| Markdown | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Math (LaTeX / KaTeX) | ✅ | ✅ | ✅ | ✅ | — | — |
-| Charts (ECharts) | ✅ | ✅ | ✅ | ✅ | — | — |
-| Inline images | ✅ | ✅ | ✅ | ✅ | — | — |
-| Attachment upload | ✅ | ✅ | ✅ | ✅ | — | ✅ |
-| **Model** | | | | | | |
-| Provider / model picker | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| On-device LLM | — | ✅ | ✅ | ✅ | ✅ | — |
-| **Accounts & privacy** | | | | | | |
-| Sign in | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Multi-account switch | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Account avatar + nav drawer | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Incognito mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Chat history + resume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| **Health & sharing** | | | | | | |
-| Phone health read | — | ✅ | ✅ | — | — | 🚧 |
-| EHR (SMART on FHIR) | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Device / vendor connect | 🚧 | ✅ | ✅ | 🚧 | ✅ | — |
-| Care circles / sharing | ✅ | ✅ | 🚧 | ✅ | 🚧 | ✅ |
-| **Settings** | | | | | | |
-| Language switch (i18n) | ✅ | ✅ | ✅ | ✅ | ✅ | 🚧 |
-| Font size | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Backend URL | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Dark theme | — | ✅ | ✅ | — | — | — |
+| Feature | Web | Android | iOS | Harmony | Electron | Qt | Miniapp |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| **Chat & content** | | | | | | | |
+| Streaming replies | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Thinking / reasoning trace | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tool-call cards (MCP) | ✅ | ✅ | ✅ | 🚧 | ✅ | — | — |
+| Markdown | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | — |
+| Math (LaTeX / KaTeX) | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
+| Charts (ECharts) | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
+| Inline images | ✅ | ✅ | ✅ | — | ✅ | — | — |
+| Attachment upload | ✅ | ✅ | ✅ | — | ✅ | — | ✅ |
+| **Model** | | | | | | | |
+| Provider / model picker | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| On-device LLM | — | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| **Accounts & privacy** | | | | | | | |
+| Sign in | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
+| Multi-account switch | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
+| Account avatar + nav drawer | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ |
+| Incognito mode | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Chat history + resume | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Health & sharing** | | | | | | | |
+| Phone health read | — | ✅ | ✅ | — | — | — | 🚧 |
+| EHR (SMART on FHIR) | ✅ | ✅ | ✅ | — | ✅ | ✅ | — |
+| Device / vendor connect | 🚧 | ✅ | ✅ | — | 🚧 | ✅ | — |
+| Care circles / sharing | ✅ | ✅ | 🚧 | — | ✅ | 🚧 | ✅ |
+| **Settings** | | | | | | | |
+| Language switch (i18n) | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | 🚧 |
+| Font size | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Backend URL | ✅ | ✅ | ✅ | — | ✅ | ✅ | ✅ |
+| Dark theme | — | ✅ | ✅ | ✅ | — | — | — |
 
 **Notes**
 
 - **On-device LLM** — LiteRT-LM (Gemma 4 / Qwen) on Android / iOS; llama.cpp (any
-  GGUF) on Qt / Electron. A plain browser has no on-device model; the web app exposes
+  GGUF) on Qt / Electron / Harmony, where it is linked into `libmirobody.so` and runs
+  on the CPU backend. A plain browser has no on-device model; the web app exposes
   it only when running inside Electron. See [On-device LLM](#on-device-llm).
+- **Harmony chat & content** — markdown covers headings, lists, quotes, fenced code,
+  GFM tables and inline styling, with block ids stable across a streaming re-parse;
+  links still render as source, and there is no markdown-image or attachment path yet.
+  MCP tools do *run* (native turns go through the C++ agent pipeline) and `render_chart`
+  reaches the UI as an ECharts block, but the per-step tool card is not built, so
+  `queryDetail` is dropped. Math and charts render to SVG/PNG files through one hidden
+  Web component, keeping the chat list native.
+- **Harmony drawer / settings** — the hamburger drawer is the app's only menu and holds
+  the settings group, but has no account rows or avatar (no account exists). The theme
+  control is a superset of Android's: follow-system *or* pinned light / dark. Language
+  offers 简体中文 and English only. There is no Backend URL setting — each provider's
+  `baseUrl` is edited in the key manager instead.
 - **Phone health read** — Health Connect + HMS Health Kit (Android), HealthKit
   (iOS); the miniapp reads WeChat WeRun step data only. Qt and iOS additionally
   ingest BLE sensors directly.
@@ -413,8 +474,8 @@ on-device LLM.
   *to* you (read-only) but can't create shares yet.
 - **Miniapp language** — the picker sets the model's reply language; the UI copy
   itself is Chinese only.
-- **Dark theme** — Android and iOS follow the system light / dark scheme; the other
-  clients ship a single light palette.
+- **Dark theme** — Android and iOS follow the system light / dark scheme, Harmony adds
+  a pin-light / pin-dark override on top; the other clients ship a single light palette.
 - **iOS math** — MarkdownUI has no KaTeX equivalent, so math-bearing replies render
   through an offline KaTeX WebView (`MathMarkdownText`); plain replies stay on native
   MarkdownUI. Math resolves when the turn settles — mid-stream it shows as source.
@@ -827,6 +888,7 @@ res/                    # bundled resources: agents, MCP tools, SQL migrations
 tests/                  # C++ unit tests (build/tests/mirobody_tests)
 android/                # Gradle project that builds the Android host app
 ios/                    # SwiftUI host app (embeds mirobody.xcframework)
+harmony/                # HarmonyOS Next ArkTS app (embeds libmirobody.so over NAPI; BYOK, serverless)
 electron/               # Electron desktop app (embeds libmirobody via koffi FFI)
 qt/                     # Qt Quick (QML) desktop client (pure HTTP/SSE API client)
 miniapp/                # native WeChat Mini Program client

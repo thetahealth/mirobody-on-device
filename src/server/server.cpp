@@ -181,14 +181,22 @@ bool Server::start() {
 
         // Firebase ID-token validator is optional: built only when a project
         // ID is configured. Routes that need it must handle a null validator.
-        if (!cfg_.firebase_project_id.empty()) {
-            platform::log_info("[5/7] enabling Firebase token validator (project=%s)...",
-                               cfg_.firebase_project_id.c_str());
+        // It accepts every project in firebase_project_ids, not just the primary:
+        // clients are built against whichever project they were given, and a token
+        // is only valid for the one that issued it.
+        if (!cfg_.firebase_project_ids.empty()) {
+            std::string accepted;
+            for (std::size_t i = 0; i < cfg_.firebase_project_ids.size(); ++i) {
+                if (i) accepted += ", ";
+                accepted += cfg_.firebase_project_ids[i];
+            }
+            platform::log_info("[5/7] enabling Firebase token validator (accepting: %s)...",
+                               accepted.c_str());
             firebase_ = std::unique_ptr<jwt::FirebaseTokenValidator>(
-                new jwt::FirebaseTokenValidator(cfg_.firebase_project_id));
+                new jwt::FirebaseTokenValidator(cfg_.firebase_project_ids));
             platform::log_info("[5/7] Firebase token validator ready");
         } else {
-            platform::log_info("[5/7] Firebase token validator disabled (no FIREBASE_PROJECT_ID)");
+            platform::log_info("[5/7] Firebase token validator disabled (no FIREBASE_PROJECT_ID / FIREBASE_PROJECT_IDS)");
         }
 
         // Apple ID-token validator is optional: built only when a Services ID
@@ -340,8 +348,11 @@ bool Server::start() {
     // router->set_document_headers call below. Only nosniff stays global.
     //
     // The Firebase auth domain in frame-src is "<projectId>.firebaseapp.com",
-    // derived from cfg_.firebase_project_id; it is omitted entirely when no
-    // project is configured (Google sign-in disabled). Apple's SDK origins
+    // derived from cfg_.firebase_project_id -- the PRIMARY project only. Any extra
+    // entries in firebase_project_ids exist so native clients' tokens verify; they
+    // never open a popup in this browser, so widening the CSP for them would grant
+    // frame access nothing needs. Omitted entirely when no project is configured
+    // (Google sign-in disabled). Apple's SDK origins
     // (appleid.cdn-apple.com for the JS, appleid.apple.com for the sign-in
     // popup/iframe) are added only when APPLE_CLIENT_ID is set -- the web client
     // uses Apple's own SDK on Apple platforms (iOS/macOS) and falls back to the

@@ -2,6 +2,9 @@
 
 #include "client/http_client.hpp"
 
+#include <algorithm>
+#include <vector>
+
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -127,15 +130,34 @@ struct FirebaseTokenValidator::Impl {
     // securetoken certs on a similar cadence, so this is conservative.
     static constexpr std::chrono::seconds kCacheTtl{3600};
 
-    std::string                                project_id;
-    std::string                                issuer;       // derived from project_id
+    // Every accepted project, and the issuer each one implies. Parallel vectors
+    // rather than a map: there are one or two entries in practice, so a linear
+    // scan beats a hash, and keeping them ordered makes the error messages list
+    // the expectations in configuration order.
+    std::vector<std::string>                   project_ids;
+    std::vector<std::string>                   issuers;      // derived from project_ids
     std::mutex                                 mu;
     std::unordered_map<std::string, EVP_PKEY*> keys_by_kid;  // owns
     clock::time_point                          keys_expire_at = clock::time_point::min();
 
-    explicit Impl(std::string pid)
-        : project_id(std::move(pid)),
-          issuer("https://securetoken.google.com/" + project_id) {}
+    explicit Impl(std::vector<std::string> pids) {
+        for (std::size_t i = 0; i < pids.size(); ++i) {
+            if (pids[i].empty()) continue;   // an unset config slot, not a project
+            issuers.push_back("https://securetoken.google.com/" + pids[i]);
+            project_ids.push_back(std::move(pids[i]));
+        }
+    }
+
+    // Joined for an error message: "a, b" -- so a mismatch says what WAS allowed
+    // rather than just that the token failed.
+    static std::string join(const std::vector<std::string>& v) {
+        std::string out;
+        for (std::size_t i = 0; i < v.size(); ++i) {
+            if (i) out += ", ";
+            out += v[i];
+        }
+        return out;
+    }
 
     ~Impl() {
         for (auto& kv : keys_by_kid) {
@@ -211,7 +233,10 @@ constexpr std::chrono::seconds FirebaseTokenValidator::Impl::kCacheTtl;
 //------------------------------------------------------------------------------
 
 FirebaseTokenValidator::FirebaseTokenValidator(std::string project_id)
-    : impl_(new Impl(std::move(project_id))) {}
+    : impl_(new Impl(std::vector<std::string>(1, std::move(project_id)))) {}
+
+FirebaseTokenValidator::FirebaseTokenValidator(std::vector<std::string> project_ids)
+    : impl_(new Impl(std::move(project_ids))) {}
 
 //------------------------------------------------------------------------------
 
@@ -294,19 +319,23 @@ FirebaseTokenValidator::verify_token(const std::string& id_token) {
     if (!exp)                  { r.error = "Firebase token missing exp claim"; return r; }
     if (now_seconds() >= exp)  { r.error = "Firebase token expired.";          return r; }
 
-    // iss must be `https://securetoken.google.com/<project_id>`.
+    // iss must be `https://securetoken.google.com/<project_id>` for one of the
+    // accepted projects.
     const char* iss = json_str(payload_doc, "iss");
     if (!iss) { r.error = "Firebase token missing iss claim"; return r; }
-    if (impl_->issuer != iss) {
-        r.error = "Firebase token iss mismatch, expected: " + impl_->issuer;
+    if (std::find(impl_->issuers.begin(), impl_->issuers.end(), iss) == impl_->issuers.end()) {
+        r.error = "Firebase token iss mismatch, expected one of: " + Impl::join(impl_->issuers);
         return r;
     }
 
-    // aud must equal the project id.
+    // aud must equal one of the accepted project ids. Checked separately from iss
+    // rather than trusting that a matching iss implies it: they are independent
+    // claims, and a token pairing project A's issuer with project B's audience
+    // must not pass on the strength of either half.
     const char* aud = json_str(payload_doc, "aud");
     if (!aud) { r.error = "Firebase token missing aud claim"; return r; }
-    if (impl_->project_id != aud) {
-        r.error = "Firebase token invalid audience, expected: " + impl_->project_id;
+    if (std::find(impl_->project_ids.begin(), impl_->project_ids.end(), aud) == impl_->project_ids.end()) {
+        r.error = "Firebase token invalid audience, expected one of: " + Impl::join(impl_->project_ids);
         return r;
     }
 

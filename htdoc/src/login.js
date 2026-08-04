@@ -116,13 +116,10 @@ function buildLogin() {
     // login through the top-left hamburger: signed out, the nav drawer narrows to just
     // that group (see history.js). This screen adds no bar actions of its own.
 
-    // Probe which social providers are configured (only the sign-in panel needs
-    // it); each loader re-renders the view when its config arrives.
-    auth.loadGoogleConfig();
-    auth.loadAppleConfig();
-    auth.loadWeChatConfig();
-    auth.loadGitHubConfig();
-    auth.loadTankaConfig();
+    // Which social providers this deployment has, in one request (only the
+    // sign-in panel needs it). Re-renders the view once the answer lands, so the
+    // buttons appear together instead of popping in one probe at a time.
+    auth.loadAuthProviders();
 
     // Phone: a full-width, top-aligned column. Wide screens: a narrow, vertically
     // centered card.

@@ -99,9 +99,10 @@ EmailValidatorOptions email_options(const Config& cfg) {
     return opts;
 }
 
-// Serialize the Firebase web-app config as the GET /firebase/verify data object,
-// or "" when Google sign-in isn't configured (no api key / project id) so the
-// route can signal "unavailable" and the client hides the button. authDomain is
+// Serialize the Firebase web-app config: the GET /firebase/verify data object,
+// also spliced into GET /auth/providers under "google". Empty when Google
+// sign-in isn't configured (no api key / project id), which is how both routes
+// signal "unavailable" so the client hides the button. authDomain is
 // omitted (the client derives "<projectId>.firebaseapp.com") and so is appId
 // (not needed for Auth).
 std::string build_firebase_web_config(const Config& cfg) {
@@ -123,9 +124,9 @@ std::string build_firebase_web_config(const Config& cfg) {
     return std::string(buf.GetString(), buf.GetSize());
 }
 
-// Serialize the Apple web config as the GET /apple/verify data object, or ""
-// when Apple sign-in isn't configured (no Services ID) so the route can signal
-// "unavailable" and the client hides the button. Only the clientId is exposed --
+// Serialize the Apple web config: the GET /apple/verify data object, also spliced
+// into GET /auth/providers. Empty when Apple sign-in isn't configured (no
+// Services ID), which is how both routes signal "unavailable". Only the clientId is exposed --
 // the client needs it to initialize the Apple JS SDK.
 std::string build_apple_web_config(const Config& cfg) {
     if (cfg.apple_client_id.empty()) {
@@ -141,9 +142,9 @@ std::string build_apple_web_config(const Config& cfg) {
     return std::string(buf.GetString(), buf.GetSize());
 }
 
-// Serialize the WeChat web config as the GET /wechat/verify data object, or ""
-// when web sign-in isn't configured (no appid/secret) so the route can signal
-// "unavailable" and the client hides the button. Only the appid is exposed --
+// Serialize the WeChat web config: the GET /wechat/verify data object, also
+// spliced into GET /auth/providers. Empty when web sign-in isn't configured (no
+// appid/secret), which is how both routes signal "unavailable". Only the appid is exposed --
 // the client needs it to build the qrconnect / oauth2 authorize URL; the secret
 // stays server-side for the code exchange.
 std::string build_wechat_web_config(const std::string& appid, const std::string& secret) {
@@ -159,9 +160,9 @@ std::string build_wechat_web_config(const std::string& appid, const std::string&
     return std::string(buf.GetString(), buf.GetSize());
 }
 
-// Serialize the GitHub web config as the GET /github/verify data object, or ""
-// when sign-in isn't configured (no client_id/secret) so the route can signal
-// "unavailable" and the client hides the button. Only the clientId is exposed --
+// Serialize the GitHub web config: the GET /github/verify data object, also
+// spliced into GET /auth/providers. Empty when sign-in isn't configured (no
+// client_id/secret), which is how both routes signal "unavailable". Only the clientId is exposed --
 // the client needs it to build the authorize URL; the secret stays server-side
 // for the code exchange.
 std::string build_github_web_config(const std::string& client_id, const std::string& secret) {
@@ -173,6 +174,91 @@ std::string build_github_web_config(const std::string& client_id, const std::str
     w.StartObject();
     w.Key("clientId");
     w.String(client_id.c_str(), static_cast<rapidjson::SizeType>(client_id.size()));
+    w.EndObject();
+    return std::string(buf.GetString(), buf.GetSize());
+}
+
+// Serialize the whole sign-in capability set as the GET /auth/providers data
+// object: which federated providers this deployment has configured, and the
+// public config each one needs, in a single document.
+//
+// It exists because the per-provider GET routes above are a side channel bolted
+// onto their POST verify endpoints: a client that wants to know which buttons to
+// show has to issue four requests and read four "is this an error or just
+// unconfigured" replies. That is tolerable in a browser and wasteful on a phone.
+//
+// The already-built config strings are spliced in verbatim (RawValue), so this
+// adds no second serializer to drift from the first four.
+//
+// A provider appears with "enabled": false only when the server actually gates
+// it. One the server has no opinion about is OMITTED entirely -- that is how a
+// client tells "this deployment turned WeChat off" apart from "this build knows
+// nothing about X either way", which a blanket false would flatten.
+std::string build_auth_providers(const Config& cfg,
+                                 const std::string& firebase_web_config,
+                                 const std::string& apple_web_config,
+                                 const std::string& wechat_web_config,
+                                 const std::string& github_web_config,
+                                 bool firebase_verify_configured,
+                                 bool wechat_app_configured) {
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+
+    // One provider entry:
+    //   "enabled"    the WEB flow works -- the browser has what it needs, which for
+    //                most providers means we hold public config to hand it.
+    //   "config"     that public config, present only when enabled.
+    //   "appEnabled" the NATIVE flow works. Only emitted where the two can differ;
+    //                see the two call sites below for why they can.
+    //
+    // The split exists because "configured" is not one question. A browser needs
+    // credentials we publish to it; a native app carries its own and only needs the
+    // server able to complete the exchange. Collapsing them would have this document
+    // tell a phone to hide a button that works.
+    auto provider = [&](const char* name, const std::string& config_json,
+                        const bool* app_enabled) {
+        w.Key(name);
+        w.StartObject();
+        w.Key("enabled");
+        w.Bool(!config_json.empty());
+        if (!config_json.empty()) {
+            w.Key("config");
+            w.RawValue(config_json.data(), config_json.size(), rapidjson::kObjectType);
+        }
+        if (app_enabled) {
+            w.Key("appEnabled");
+            w.Bool(*app_enabled);
+        }
+        w.EndObject();
+    };
+
+    w.StartObject();
+
+    // Google (and X, which the clients broker through the same Firebase project).
+    // The web button needs FIREBASE_WEB_API_KEY to initialize the JS SDK; verifying
+    // an ID token needs only FIREBASE_PROJECT_ID (see server.cpp, where the
+    // validator is constructed from it alone). A server with the project id and no
+    // web key verifies native sign-ins perfectly well, so the apps read appEnabled.
+    provider("google", firebase_web_config, &firebase_verify_configured);
+
+    provider("apple",  apple_web_config, nullptr);
+    provider("github", github_web_config, nullptr);
+
+    // WeChat has two independent registrations and a server may hold either: the
+    // browser drives an Open Platform *website* app (qrconnect / oauth2,
+    // WECHAT_WEB_*), the native apps drive a *mobile application* through the
+    // OpenSDK (WECHAT_OPEN_*). appEnabled is a bare flag -- the app already carries
+    // its own appid and only needs to know the server can complete the exchange.
+    provider("wechat", wechat_web_config, &wechat_app_configured);
+
+    // Tanka QR sign-in needs no credentials of ours, so it is a plain flag. Web
+    // only: there is no native Tanka flow.
+    w.Key("tanka");
+    w.StartObject();
+    w.Key("enabled");
+    w.Bool(cfg.tanka_login_enabled);
+    w.EndObject();
+
     w.EndObject();
     return std::string(buf.GetString(), buf.GetSize());
 }
@@ -233,7 +319,15 @@ UserService::UserService(server::Router& router,
       github_client_secret_(cfg.github_client_secret),
       github_oauth_base_(cfg.github_oauth_base),
       github_api_base_(cfg.github_api_base),
-      github_web_config_(build_github_web_config(cfg.github_client_id, cfg.github_client_secret)) {
+      github_web_config_(build_github_web_config(cfg.github_client_id, cfg.github_client_secret)),
+      // Composed last: it splices the four config strings above, so they must
+      // already be initialized (member init runs in declaration order).
+      auth_providers_(build_auth_providers(cfg, firebase_web_config_, apple_web_config_,
+                                           wechat_web_config_, github_web_config_,
+                                           // "can we verify a Firebase token" is the
+                                           // accepted SET, not the primary alone.
+                                           !cfg.firebase_project_ids.empty(),
+                                           !wechat_app_appid_.empty() && !wechat_app_secret_.empty())) {
     register_routes(router);
     // Tanka QR-code sign-in lives in its own service (src/user/tanka.*); hand it a
     // callback that mints a login (create-or-get user + auth envelope) on a
@@ -1156,6 +1250,19 @@ void UserService::register_routes(server::Router& router) {
                 server::GET | server::POST);
     router.http("/github/verify", [this](const server::Request& q, server::Response& s){ on_github_verify(q, s); },
                 server::GET | server::POST);
+    router.get("/auth/providers", [this](const server::Request& q, server::Response& s){ on_auth_providers(q, s); });
+}
+
+// GET /auth/providers -- the sign-in capability document. Public and
+// unauthenticated by design: a client needs it to render the sign-in screen,
+// before it has any credentials. Everything in it is already public (the
+// per-provider GET routes serve the same values); no secret is exposed.
+//
+// Always code 0 -- "no provider is configured" is a valid answer, not an error.
+// Callers read the per-provider `enabled` flags rather than the envelope code.
+void UserService::on_auth_providers(const server::Request& req, server::Response& res) {
+    (void)req;
+    res.ok(auth_providers_);
 }
 
 }}

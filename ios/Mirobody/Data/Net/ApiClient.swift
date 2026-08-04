@@ -9,8 +9,8 @@ import Foundation
 ///  - **401 handling**: a 401 clears the persisted token so the UI routes back to
 ///    login (`UnauthorizedInterceptor`).
 ///
-/// Responses are wrapped in `ApiEnvelope` except `/mirobody.json`, which is raw —
-/// use `getRaw` for that.
+/// Responses are wrapped in `ApiEnvelope`; the few raw endpoints (FHIR) use the
+/// `getRaw` / `postRaw` helpers.
 final class ApiClient {
     private let settings: SettingsStore
     private let session: URLSession
@@ -77,7 +77,7 @@ final class ApiClient {
         try decoder.decode(ApiEnvelope<DiscardableData>.self, from: data).ensureOk()
     }
 
-    /// GET a non-enveloped (raw) JSON document, e.g. `/mirobody.json`.
+    /// GET a non-enveloped (raw) JSON document.
     func getRaw<T: Decodable>(_ path: String) async throws -> T {
         let data = try await send(makeURLRequest(path: path, method: "GET"))
         return try decoder.decode(T.self, from: data)

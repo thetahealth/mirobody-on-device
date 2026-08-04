@@ -3,11 +3,12 @@ import UniformTypeIdentifiers
 
 /// Chat screen — mirrors `ui/chat/ChatScreen.kt`.
 ///
-/// Top bar (CenterAlignedTopAppBar): LEADING = account avatar that opens the nav
-/// drawer; PRINCIPAL = the "Mirobody" brand wordmark; TRAILING = the settings gear
-/// (app settings only). The provider/model picker lives in the composer, not the
-/// center, so the brand owns the center. Everything session-scoped (history, health
-/// connections, incognito, account, sign out) lives in the left nav drawer.
+/// Top bar: LEADING = the drawer hamburger with the "Mirobody" serif wordmark beside
+/// it, the same arrangement the web bar has. There is no trailing slot: the settings
+/// gear that used to fill it is a group inside the drawer now, so the bar's only
+/// affordance is the hamburger. The provider/model picker lives in the composer.
+/// Everything else — history, health connections, incognito, app settings, account,
+/// sign out — is in that one drawer.
 struct ChatView: View {
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var settings: SettingsStore
@@ -17,10 +18,6 @@ struct ChatView: View {
     @StateObject private var vm: ChatViewModel
 
     @State private var showDrawer = false
-    @State private var showLanguage = false
-    @State private var showFontSize = false
-    @State private var showBackend = false
-    @State private var showAbout = false
     @State private var showFileImporter = false
     @State private var showOnDeviceModel = false
 
@@ -53,19 +50,19 @@ struct ChatView: View {
                 }
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) { accountAvatar }
-                    ToolbarItem(placement: .principal) { brand }
-                    ToolbarItem(placement: .navigationBarTrailing) { settingsMenu }
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        HStack(spacing: 4) {
+                            DrawerMenuButton { showDrawer = true }
+                            brand
+                        }
+                    }
                 }
             }
             drawerOverlay
         }
         .animation(.easeInOut(duration: 0.25), value: showDrawer)
-        .sheet(isPresented: $showLanguage) {
-            sheetEnv { LanguageDialog(current: settings.language) { settings.setLanguage($0) } }
-        }
-        .sheet(isPresented: $showFontSize) { sheetEnv { FontSizeDialog() } }
-        .sheet(isPresented: $showBackend) { sheetEnv { BaseUrlDialog() } }
+        // The language / font size / backend sheets moved with their rows into
+        // the drawer (AppSettingsSection), which presents them itself.
         .sheet(isPresented: $showOnDeviceModel) {
             sheetEnv {
                 OnDeviceModelView(
@@ -78,11 +75,6 @@ struct ChatView: View {
                     onDeleteImported: vm.deleteImportedOnDeviceModel
                 )
             }
-        }
-        .alert(L("chat_about", lang), isPresented: $showAbout) {
-            Button(L("common_close", lang), role: .cancel) {}
-        } message: {
-            Text(L("app_name", lang) + "\n" + L("about_version", lang, appVersion))
         }
     }
 
@@ -103,7 +95,7 @@ struct ChatView: View {
                     onAddAccount: { settings.addingAccount = true }
                 )
                 .frame(maxWidth: drawerMaxWidth)
-                .frame(width: drawerWidth)
+                .frame(width: mbDrawerWidth)
                 .ignoresSafeArea(edges: .bottom)
                 Spacer(minLength: 0)
             }
@@ -111,33 +103,12 @@ struct ChatView: View {
         }
     }
 
-    /// 85% of the screen, capped at `drawerMaxWidth` (mirrors the web/Android drawer).
-    private var drawerWidth: CGFloat {
-        min(UIScreen.main.bounds.width * 0.85, drawerMaxWidth)
-    }
-
     // MARK: Top bar pieces
 
-    private var accountAvatar: some View {
-        Button { showDrawer = true } label: {
-            ZStack {
-                Circle().fill(colors.primary)
-                if let initial = avatarInitial {
-                    Text(initial).mbFont(.labelLarge).foregroundColor(colors.onPrimary)
-                } else {
-                    Image(systemName: "person").font(.system(size: 15)).foregroundColor(colors.onPrimary)
-                }
-            }
-            .frame(width: 30, height: 30)
-        }
-        .accessibilityLabel(L("chat_menu_title", lang))
-    }
-
-    private var avatarInitial: String? {
-        settings.currentEmail?.trimmingCharacters(in: .whitespaces).first.map { String($0).uppercased() }
-    }
-
-    /// Centered brand wordmark — the true CenterAlignedTopAppBar title.
+    /// The serif wordmark, sitting next to the hamburger. Left-aligned rather than
+    /// centered now that the bar has no trailing action to balance it against, and no
+    /// logo mark beside it — the sign-in card is the screen that states the brand in
+    /// full, so repeating the mark in a 56pt bar reads as decoration.
     private var brand: some View {
         Text(L("app_name", lang))
             .font(.system(size: 20 * fontScale(forOffset: settings.fontSizeOffset),
@@ -371,23 +342,6 @@ struct ChatView: View {
         }
     }
 
-    // MARK: Settings gear — app settings ONLY (identical to the login screen).
-
-    private var settingsMenu: some View {
-        Menu {
-            Button(L("chat_language", lang)) { showLanguage = true }
-            Button(L("chat_font_size", lang)) { showFontSize = true }
-            Button(L("chat_backend", lang)) { showBackend = true }
-            Button(L("chat_about", lang)) { showAbout = true }
-        } label: {
-            Image(systemName: "gearshape").foregroundColor(colors.onSurfaceVariant)
-        }
-    }
-
-    private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-    }
-
     /// Re-injects the app environment onto presented sheets. SwiftUI inherits the
     /// environment into sheets, but doing this explicitly is cheap insurance for the
     /// `@EnvironmentObject`s the settings dialogs rely on.
@@ -403,20 +357,15 @@ struct ChatView: View {
 
 /// Font-size picker with live preview — mirrors `FontSizeDialog` in ChatScreen.kt.
 /// Preview is applied immediately by writing the offset (which drives `mbFontScale`);
-/// Cancel restores the value captured on appear. Module-internal so the pre-auth
-/// `LoginSettingsMenu` can reuse it too.
+/// Cancel restores the value captured on appear. Module-internal so the drawer's
+/// app-settings group can present it from either screen.
 struct FontSizeDialog: View {
     @EnvironmentObject private var settings: SettingsStore
     @Environment(\.mbColors) private var colors
     @Environment(\.dismiss) private var dismiss
 
-    private let tiers: [(offset: Int, labelKey: String)] = [
-        (-4, "chat_font_size_smaller"),
-        (-2, "chat_font_size_small"),
-        (0, "chat_font_size_normal"),
-        (2, "chat_font_size_large"),
-        (4, "chat_font_size_larger"),
-    ]
+    // Shared with the drawer row that shows the current tier as its hint.
+    private let tiers = fontSizeTiers
     @State private var stagedIndex = 2
     @State private var original = 0
 

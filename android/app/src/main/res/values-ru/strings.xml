@@ -16,6 +16,11 @@
     <string name="email_required">Введите эл. почту</string>
     <string name="email_send_code">Отправить код</string>
     <string name="email_resend_in">Повтор через %1$d сек</string>
+    <string name="email_sending_code">Отправка кода…</string>
+    <string name="email_send_failed">Не удалось отправить код.</string>
+    <string name="email_enter_code">Введите код из письма.</string>
+    <string name="email_verifying">Проверка…</string>
+    <string name="email_verify_failed">Не удалось подтвердить.</string>
 
     <string name="verify_title">Введите код</string>
     <string name="verify_sent_to">Отправлено на %1$s.</string>
@@ -26,7 +31,6 @@
     <string name="chat_message_hint">Спросите о чём угодно</string>
     <string name="chat_history_cd">История</string>
     <string name="chat_select_model">Выбрать модель</string>
-    <string name="chat_currently_for">Сейчас для</string>
     <string name="chat_subject_me">Я</string>
 
     <string name="chat_attach_file">Прикрепить файл</string>
@@ -102,8 +106,6 @@
     <string name="health_syncing">Синхронизация…</string>
     <string name="health_result">Отправлено %1$d, не удалось %2$d.</string>
     <string name="health_error">Ошибка: %1$s</string>
-    <string name="chat_about">О приложении</string>
-    <string name="about_version">Версия %1$s</string>
     <string name="chat_sign_out">Выйти</string>
     <string name="chat_sign_out_confirm_title">Выйти?</string>
     <string name="chat_sign_out_confirm_message">Потребуется снова войти.</string>
@@ -186,6 +188,8 @@
     <string name="chat_ehr_sync_done">Импортировано наблюдений: %1$d.</string>
     <string name="auth_apple_failed">Не удалось войти через Apple</string>
     <string name="auth_wechat_failed">Не удалось войти через WeChat</string>
+    <string name="auth_github_failed">Не удалось войти через GitHub</string>
+    <string name="auth_x_failed">Не удалось войти через X</string>
     <string name="chat_bluetooth">Bluetooth-устройства</string>
     <string name="chat_bluetooth_hdp">Bluetooth HDP (устаревший)</string>
     <string name="ble_title">Bluetooth-устройства для здоровья</string>

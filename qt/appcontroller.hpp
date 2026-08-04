@@ -46,7 +46,6 @@ class AppController : public QObject {
     Q_PROPERTY(QVariantList providers READ providers NOTIFY providersChanged)
     Q_PROPERTY(bool streaming READ streaming NOTIFY streamingChanged)
     Q_PROPERTY(ChatModel* chat READ chat CONSTANT)
-    Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
     Q_PROPERTY(QStringList baseUrlPresets READ baseUrlPresets CONSTANT)
     // The on-device model downloader (status/progress + start/cancel/remove), exposed
     // to QML for the download affordance. Bind app.onDeviceModel.status / .progress.
@@ -70,7 +69,6 @@ public:
     QVariantList  providers() const { return providers_; }
     bool          streaming() const { return streaming_; }
     ChatModel*    chat() const { return chat_; }
-    QString       appVersion() const;
     QStringList   baseUrlPresets() const;
     ModelDownloader* onDeviceModel() const { return downloader_; }
     BleHealth*    ble() const { return ble_; }

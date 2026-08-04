@@ -3,6 +3,6 @@
   "navigationBarBackgroundColor": "#f2efe9",
   "backgroundColor": "#f2efe9",
   "usingComponents": {
-    "settings-menu": "/components/settings-menu/settings-menu"
+    "settings-rows": "/components/settings-rows/settings-rows"
   }
 }

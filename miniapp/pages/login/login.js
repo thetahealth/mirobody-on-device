@@ -26,6 +26,7 @@ Page({
     verifying: false,        // /email/verify in flight
     codeError: false,        // tints the code field red after a failed verify
     status: '',              // shared status line (both flows write here)
+    drawerOpen: false,       // the settings-only nav drawer
   },
 
   // Non-reactive handles kept off `data`.
@@ -35,6 +36,17 @@ Page({
   onUnload: function () {
     if (this._cooldownTimer) { clearInterval(this._cooldownTimer); this._cooldownTimer = null; }
   },
+
+  // -- nav drawer ---------------------------------------------------------
+  // Signed out it holds the app-settings group and nothing else; everything else
+  // in the chat drawer is session-scoped.
+  openDrawer: function () { this.setData({ drawerOpen: true }); },
+  closeDrawer: function () { this.setData({ drawerOpen: false }); },
+
+  // A backend change re-points every request; nothing is in flight on this
+  // screen, so there is nothing to reload -- just close the drawer so the next
+  // sign-in attempt visibly starts against the new server.
+  onBackendChange: function () { this.closeDrawer(); },
 
   // -- shared -------------------------------------------------------------
   // `email` is passed only by the email flow (WeChat login has none); it is

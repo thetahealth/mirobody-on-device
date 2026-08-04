@@ -16,6 +16,11 @@
     <string name="email_required">E-Mail erforderlich</string>
     <string name="email_send_code">Code senden</string>
     <string name="email_resend_in">Erneut senden in %1$d s</string>
+    <string name="email_sending_code">Code wird gesendet…</string>
+    <string name="email_send_failed">Code konnte nicht gesendet werden.</string>
+    <string name="email_enter_code">Den Code aus der E-Mail eingeben.</string>
+    <string name="email_verifying">Wird bestätigt…</string>
+    <string name="email_verify_failed">Bestätigung fehlgeschlagen.</string>
 
     <string name="verify_title">Code eingeben</string>
     <string name="verify_sent_to">Gesendet an %1$s.</string>
@@ -26,7 +31,6 @@
     <string name="chat_message_hint">Beliebige Frage stellen</string>
     <string name="chat_history_cd">Verlauf</string>
     <string name="chat_select_model">Modell wählen</string>
-    <string name="chat_currently_for">Aktuell für</string>
     <string name="chat_subject_me">Ich</string>
 
     <string name="chat_attach_file">Datei anhängen</string>
@@ -102,8 +106,6 @@
     <string name="health_syncing">Wird synchronisiert…</string>
     <string name="health_result">%1$d gesendet, %2$d fehlgeschlagen.</string>
     <string name="health_error">Fehler: %1$s</string>
-    <string name="chat_about">Über</string>
-    <string name="about_version">Version %1$s</string>
     <string name="chat_sign_out">Abmelden</string>
     <string name="chat_sign_out_confirm_title">Abmelden?</string>
     <string name="chat_sign_out_confirm_message">Sie müssen sich erneut anmelden.</string>
@@ -186,6 +188,8 @@
     <string name="chat_ehr_sync_done">%1$d Beobachtungen importiert.</string>
     <string name="auth_apple_failed">Apple-Anmeldung fehlgeschlagen</string>
     <string name="auth_wechat_failed">WeChat-Anmeldung fehlgeschlagen</string>
+    <string name="auth_github_failed">GitHub-Anmeldung fehlgeschlagen</string>
+    <string name="auth_x_failed">X-Anmeldung fehlgeschlagen</string>
     <string name="chat_bluetooth">Bluetooth-Geräte</string>
     <string name="chat_bluetooth_hdp">Bluetooth HDP (alt)</string>
     <string name="ble_title">Bluetooth-Gesundheitsgeräte</string>

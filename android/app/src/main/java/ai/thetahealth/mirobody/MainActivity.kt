@@ -118,7 +118,8 @@ class MainActivity : ComponentActivity() {
     }
 
     // Launch the in-process C++ server (MirobodyService -> libmirobody.so) so the client can reach
-    // it at localhost:8080 (SettingsStore.DEFAULT_BASE_URL). If the native library is absent the
+    // it at localhost:8080 — which is what SettingsStore.DEFAULT_BASE_URL resolves to for an
+    // embedded build (a pure-client build points elsewhere). If the native library is absent the
     // service stops itself and the UI keeps running as a plain client. OpenAI/Gemini keys are left
     // empty here; supply them via config/secure storage to enable upstream chat.
     private fun startMirobodyService() {

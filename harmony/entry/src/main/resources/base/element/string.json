@@ -257,10 +257,6 @@
       "value": "深色"
     },
     {
-      "name": "settings_about",
-      "value": "关于"
-    },
-    {
       "name": "settings_lang_switched",
       "value": "语言已切换,重启应用后完全生效"
     },
@@ -297,14 +293,6 @@
       "value": "特大"
     },
     {
-      "name": "about_version",
-      "value": "版本 %s"
-    },
-    {
-      "name": "about_desc",
-      "value": "一个隐私优先的健康对话应用。\n云端推理使用您自己的 API key，该 key 只存本机。"
-    },
-    {
       "name": "engine_local_stub_byok",
       "value": "本地模型尚未在 HarmonyOS 上接入。可打开\"深度思考\"改用云端处理这条消息。"
     },
@@ -327,6 +315,10 @@
     {
       "name": "chat_math_placeholder",
       "value": "公式（渲染即将上线）"
+    },
+    {
+      "name": "drawer_menu_title",
+      "value": "菜单"
     },
     {
       "name": "drawer_new_chat",

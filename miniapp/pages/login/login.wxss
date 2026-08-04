@@ -13,15 +13,90 @@
   background: #f2efe9;              /* warm cream page background */
 }
 
-/* Top bar holding just the settings gear, right-aligned (mirrors the chat
-   screen's gear placement). */
+/* Top bar holding just the drawer hamburger, on the leading edge (mirrors the
+   chat screen's bar). */
 .topbar {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   height: 80rpx;
   padding-top: env(safe-area-inset-top);
+}
+.menu-btn {
+  flex: 0 0 auto;
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  margin-left: -12rpx;
+  text-align: center;
+  font-size: 40rpx;
+  color: #52565c;
+}
+
+/* -- settings-only nav drawer -------------------------------------------- */
+/* Same scrim + left-anchored panel as the chat drawer (chat.wxss); duplicated
+   because a page's wxss is not shared with another page. */
+.mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 200ms;
+  z-index: 1100;
+}
+.mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+.drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 82%;
+  max-width: 620rpx;
+  display: flex;
+  flex-direction: column;
+  background: #f2efe9;
+  box-shadow: 2px 0 24px rgba(0, 0, 0, 0.18);
+  transform: translateX(-100%);
+  transition: transform 220ms ease;
+  z-index: 1101;
+}
+.drawer.open {
+  transform: translateX(0);
+}
+.drawer-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 96rpx;
+  padding: 0 28rpx;
+  padding-top: env(safe-area-inset-top);
+}
+.drawer-back {
+  flex: 0 0 auto;
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  margin-left: -12rpx;
+  text-align: center;
+  font-size: 40rpx;
+  color: #52565c;
+}
+.drawer-title {
+  margin-left: 8rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+  color: #1a1c1e;
+}
+.drawer-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid #ddd6c9;
 }
 
 /* Mini Program buttons draw a hairline via ::after and carry default margins;

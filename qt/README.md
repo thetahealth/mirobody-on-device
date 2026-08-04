@@ -11,7 +11,7 @@ Full parity with the web client's main flow:
 
 | Feature | How it works |
 |---|---|
-| Email one-time-code sign-in | `POST /email/login` → `/email/verify` (6-digit, resend cooldown); token persisted via `QSettings` |
+| Email one-time-code sign-in | `POST /email/login` → `/email/verify`; login.js's staircase — a valid address (`*@*.*`) unlocks **Send code**, a send unlocks the code field and starts the 60s cooldown (editing the address re-locks it), six digits unlock **Sign in** and submit on their own; token persisted via `QSettings` |
 | Chat — *agent* mode | `POST /api/chat` SSE: `reply` / `thinking` / `costStatistics` / `error` events (+ live thinking block, cost footer) |
 | Chat — *proxy* mode | `{model, messages, stream}` → OpenAI-style `choices[].delta.content` (+ resumable `session_id` chunk) |
 | Provider picker | `POST /api/providers`, selection restored/persisted |
@@ -19,7 +19,7 @@ Full parity with the web client's main flow:
 | Direct BLE health sensors | `BleHealth` (Qt `QLowEnergyController`) decodes GATT/IEEE-11073 → FHIR `Observation` → `POST /fhir/Observation` |
 | Local persistence | transcript mirrored to `conversation-<userid>.json` under `AppDataLocation` (web client's IndexedDB stand-in) |
 | History drawer | `GET /api/history`, `POST /api/history/delete` |
-| Settings | backend URL (presets), language (all 10, rides each request + localises UI), font size, about |
+| Settings | backend URL (presets), language (all 10, rides each request + localises UI), font size |
 | Rendering | Markdown assistant replies; RTL mirroring for Arabic/Hebrew |
 
 **BLE detail** — standard-profile services only: Heart Rate `0x180D`, Blood Pressure `0x1810`,
@@ -73,8 +73,6 @@ relocate it away from that directory.
 cmake -B build-qt -S . -DMIROBODY_BUILD_QT=ON -DCMAKE_PREFIX_PATH=/path/to/Qt/6.x/<kit>
 cmake --build build-qt --target mirobody_qt
 ```
-
-`MIROBODY_QT_VERSION` sets the version shown in the About dialog (default `dev`).
 
 ### On-device LLM (optional)
 
@@ -147,9 +145,9 @@ qt/
   qml/
     Main.qml               top bar + login/chat loader + shared dialogs
     LoginPage.qml  ChatPage.qml  MessageDelegate.qml
-    SettingsMenu.qml  HistoryDrawer.qml
+    HistoryDrawer.qml      the app's only menu: history + health + app settings + account
     CostDialog.qml  BackendDialog.qml  BleDialog.qml  LanguageDialog.qml  FontDialog.qml
-    AboutDialog.qml  ConfirmDialog.qml
+    ConfirmDialog.qml
     Theme.qml              singleton: Material 3 colour scheme (mirrors config.js)
     I18n.qml               singleton: reactive i18n facade
     strings.js             UI string table (verbatim from htdoc/src/i18n.js; regenerate if it changes)

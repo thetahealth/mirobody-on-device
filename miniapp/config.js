@@ -2,7 +2,7 @@
 //
 // baseUrl is prefixed to every request URI (mirrors the web client's net.js
 // getBaseUrl()). The Mini Program sends requests to "<baseUrl><uri>", e.g.
-// "https://api.example.com/api/chat". A value chosen in the settings gear
+// "https://api.example.com/api/chat". A value chosen in the drawer settings
 // ("后端地址") is stored and overrides DEFAULT_BASE_URL, mirroring net.js's
 // setBaseUrl -- so a build can be pointed at a different backend without a
 // rebuild.
@@ -23,14 +23,8 @@ var BASE_URL_KEY = 'mirobody-base-url';     // matches the web client's key
 // Prod: your HTTPS origin, optionally including an HTTP_URI_PREFIX path.
 var DEFAULT_BASE_URL = 'http://localhost:8080';
 
-// App version, shown in the settings gear's "关于" (About) item. No build-time
-// injection here (no bundler), so it's a plain constant kept in step with the
-// repo package.json version.
-var APP_VERSION = '0.1.0';
-
 module.exports = {
   DEFAULT_BASE_URL: DEFAULT_BASE_URL,
-  APP_VERSION: APP_VERSION,
 
   // Live getter: the stored override, else the default. Callers read the
   // current value with plain `config.baseUrl` (api.js apiUrl()).
@@ -44,7 +38,7 @@ module.exports = {
 
   // The conversation language sent with each chat request (the backend agents
   // read this: 'en', 'zh-CN', ...; see the chat body { ..., language }). Chosen
-  // from the settings gear and persisted; defaults to Simplified Chinese.
+  // from the drawer settings and persisted; defaults to Simplified Chinese.
   get language() {
     return wx.getStorageSync(LANG_KEY) || 'zh-CN';
   },

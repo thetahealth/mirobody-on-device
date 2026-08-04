@@ -16,6 +16,11 @@
     <string name="email_required">이메일을 입력하세요</string>
     <string name="email_send_code">코드 보내기</string>
     <string name="email_resend_in">%1$d초 후 다시 보내기</string>
+    <string name="email_sending_code">코드 보내는 중…</string>
+    <string name="email_send_failed">코드 전송에 실패했습니다.</string>
+    <string name="email_enter_code">이메일로 받은 코드를 입력하세요.</string>
+    <string name="email_verifying">확인 중…</string>
+    <string name="email_verify_failed">인증에 실패했습니다.</string>
 
     <string name="verify_title">코드 입력</string>
     <string name="verify_sent_to">%1$s 로 보냈습니다.</string>
@@ -26,7 +31,6 @@
     <string name="chat_message_hint">무엇이든 물어보세요</string>
     <string name="chat_history_cd">기록</string>
     <string name="chat_select_model">모델 선택</string>
-    <string name="chat_currently_for">현재 대상</string>
     <string name="chat_subject_me">나</string>
 
     <string name="chat_attach_file">파일 첨부</string>
@@ -102,8 +106,6 @@
     <string name="health_syncing">동기화 중…</string>
     <string name="health_result">%1$d개 전송, %2$d개 실패.</string>
     <string name="health_error">오류: %1$s</string>
-    <string name="chat_about">정보</string>
-    <string name="about_version">버전 %1$s</string>
     <string name="chat_sign_out">로그아웃</string>
     <string name="chat_sign_out_confirm_title">로그아웃하시겠습니까?</string>
     <string name="chat_sign_out_confirm_message">다음에 다시 로그인해야 합니다.</string>
@@ -186,6 +188,8 @@
     <string name="chat_ehr_sync_done">관측 데이터 %1$d건을 가져왔습니다.</string>
     <string name="auth_apple_failed">Apple 로그인 실패</string>
     <string name="auth_wechat_failed">WeChat 로그인 실패</string>
+    <string name="auth_github_failed">GitHub 로그인 실패</string>
+    <string name="auth_x_failed">X 로그인 실패</string>
     <string name="chat_bluetooth">블루투스 기기</string>
     <string name="chat_bluetooth_hdp">블루투스 HDP(레거시)</string>
     <string name="ble_title">블루투스 건강 기기</string>

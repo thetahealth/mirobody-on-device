@@ -1,10 +1,10 @@
 /**
- * App settings dialogs — the top-right gear menu (mirrors the Android AppSettingsMenu:
- * Language / Font size / About). Backend is omitted (BYOK has no single backend server;
- * per-provider base_url lives in 配置云服务).
+ * App settings dialogs, opened from the nav drawer's settings group (mirrors Android's
+ * AppSettingsSection: Language / Font size / Appearance). Backend is omitted —
+ * BYOK has no single backend server; per-provider base_url lives in 配置云服务.
  */
 import { i18n } from '@kit.LocalizationKit';
-import { bundleManager, common } from '@kit.AbilityKit';
+import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 
@@ -200,51 +200,6 @@ export struct FontSizeDialog {
       }
       .width('100%')
       .justifyContent(FlexAlign.SpaceBetween)
-    }
-    .width('100%')
-    .padding(24)
-    .backgroundColor(Color.Transparent)
-    .borderRadius(16)
-  }
-}
-
-@CustomDialog
-export struct AboutDialog {
-  controller: CustomDialogController;
-  @State private version: string = '';
-
-  aboutToAppear(): void {
-    try {
-      const info = bundleManager.getBundleInfoForSelfSync(
-        bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_APPLICATION);
-      this.version = info.versionName;
-    } catch (err) {
-      this.version = '';
-    }
-  }
-
-  private rs(res: Resource, ...a: (string | number)[]): string {
-    return getContext(this).resourceManager.getStringSync(res.id, ...a);
-  }
-
-  build() {
-    Column({ space: 6 }) {
-      dialogHeader($r('app.string.settings_about'), () => {
-        this.controller.close();
-      })
-      Text($r('app.string.app_name'))
-        .fontSize(17)
-        .fontWeight(FontWeight.Medium)
-        .width('100%')
-      Text(this.rs($r('app.string.about_version'), this.version.length > 0 ? this.version : '—'))
-        .fontSize(14)
-        .fontColor($r('app.color.text_tertiary'))
-        .width('100%')
-      Text($r('app.string.about_desc'))
-        .fontSize(13)
-        .fontColor($r('app.color.text_tertiary'))
-        .width('100%')
-        .margin({ top: 4 })
     }
     .width('100%')
     .padding(24)

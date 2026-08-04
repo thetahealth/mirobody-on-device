@@ -27,11 +27,12 @@ ApplicationWindow {
     Binding { target: Theme; property: "fontOffset"; value: app.fontOffset }
     Binding { target: I18n;  property: "language";   value: app.language }
 
-    // --- top bar (topbar.js buildTopBar: CenterAlignedTopAppBar) -----------
-    // LEFT = account avatar that opens the nav drawer (a back arrow while adding
-    // an account); CENTER = the optically-centered Mirobody brand; RIGHT = the
-    // settings gear (app settings only). The provider/model picker now lives above
-    // the composer in ChatPage, so the center stays the brand.
+    // --- top bar (topbar.js buildTopBar) -----------------------------------
+    // LEFT = the drawer hamburger with the Mirobody wordmark beside it (a back
+    // arrow instead while adding an account). There is no right-hand zone: the
+    // settings gear that used to fill it is a group inside the drawer now, so the
+    // bar has one menu affordance rather than two competing ones. The
+    // provider/model picker lives above the composer in ChatPage.
     header: ToolBar {
         height: 56
         background: Rectangle {
@@ -44,36 +45,29 @@ ApplicationWindow {
             anchors.leftMargin: 8
             anchors.rightMargin: 8
 
-            // Left: account avatar (chat) / back arrow (adding account) / nothing.
+            // Left: the hamburger (a back arrow instead while adding an account).
             Item {
                 id: leftZone
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 width: 40; height: 40
 
-                // Account avatar: a filled circle with the first letter of the JWT
-                // email, else a person glyph. Reads as "you / account" vs the gear.
-                Rectangle {
-                    id: avatar
-                    anchors.centerIn: parent
-                    visible: app.loggedIn && !app.addingAccount
-                    width: 30; height: 30; radius: 15
-                    color: Theme.primary
-                    Label {
-                        anchors.centerIn: parent
-                        text: app.email.length > 0 ? app.email.charAt(0).toUpperCase() : "👤"
-                        color: Theme.primaryFg
-                        font.pointSize: Theme.baseSize - 1
-                        font.bold: true
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: { historyDrawer.reload(); historyDrawer.open(); }
-                    }
+                // The one menu affordance, on every screen. It shows signed out too,
+                // where the drawer narrows to the app-settings group -- that is how the
+                // login screen reaches language / font / backend now that the gear is
+                // gone. A nav glyph rather than the account avatar this used to be: the
+                // drawer's body is the conversation list and account is one pinned row
+                // at the bottom, so a profile icon undersold what the button opens.
+                ToolButton {
+                    anchors.fill: parent
+                    visible: !app.addingAccount
+                    text: "☰"
+                    font.pointSize: Theme.baseSize + 4
+                    onClicked: { historyDrawer.reload(); historyDrawer.open(); }
                 }
 
                 // Back arrow: cancel Add-account and return to the current account.
+                // No drawer here -- it would be a dead end mid-flow.
                 ToolButton {
                     anchors.fill: parent
                     visible: app.addingAccount
@@ -83,50 +77,21 @@ ApplicationWindow {
                 }
             }
 
-            // Center: the Mirobody brand (logo mark + serif-style wordmark), truly
-            // centered. A drawn navy mark avoids depending on an external asset.
-            Row {
-                anchors.centerIn: parent
-                spacing: 8
-                visible: app.loggedIn && !app.addingAccount
-                Rectangle {
-                    width: 26; height: 26; radius: 6
-                    color: Theme.brand
-                    anchors.verticalCenter: parent.verticalCenter
-                    Label {
-                        anchors.centerIn: parent
-                        text: "M"
-                        color: Theme.primaryFg
-                        font.bold: true
-                        font.pointSize: Theme.baseSize
-                    }
-                }
-                Label {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Mirobody"
-                    color: Theme.surfaceFg
-                    font.pointSize: Theme.baseSize + 4
-                    font.bold: true
-                }
-            }
-
-            // Right: settings gear (app settings only; identical on login + chat).
-            ToolButton {
-                anchors.right: parent.right
+            // The wordmark, beside the hamburger. Chat only: the login view's own card
+            // carries the mark and a display-size "Mirobody", so a second one in the
+            // bar would state the brand twice on one screen. No logo mark next to it
+            // either, matching the web bar.
+            Label {
+                anchors.left: leftZone.right
+                anchors.leftMargin: 4
                 anchors.verticalCenter: parent.verticalCenter
-                text: "⚙"
+                visible: app.loggedIn && !app.addingAccount
+                text: "Mirobody"
+                color: Theme.surfaceFg
                 font.pointSize: Theme.baseSize + 4
-                onClicked: settingsMenu.popup()
+                font.bold: true
             }
         }
-    }
-
-    SettingsMenu {
-        id: settingsMenu
-        onOpenLanguage: languageDialog.open()
-        onOpenFont: fontDialog.open()
-        onOpenBackend: backendDialog.open()
-        onOpenAbout: aboutDialog.open()
     }
 
     // --- body --------------------------------------------------------------
@@ -144,7 +109,6 @@ ApplicationWindow {
     FontDialog     { id: fontDialog }
     BackendDialog  { id: backendDialog }
     BleDialog      { id: bleDialog }
-    AboutDialog    { id: aboutDialog }
     EhrDialog      { id: ehrDialog }
     VendorsDialog  { id: vendorsDialog }
 
@@ -313,5 +277,10 @@ ApplicationWindow {
         onOpenBle: bleDialog.open()
         onOpenEhr: ehrDialog.open()
         onOpenVendors: vendorsDialog.open()
+        // ...and so does the app-settings group, which the gear used to hold. The
+        // dialogs stay owned here so the drawer can close before one opens.
+        onOpenLanguage: languageDialog.open()
+        onOpenFont: fontDialog.open()
+        onOpenBackend: backendDialog.open()
     }
 }

@@ -17,6 +17,11 @@
 "email_required" = "请输入邮箱";
 "email_send_code" = "发送验证码";
 "email_resend_in" = "%1$d 秒后重新发送";
+"email_sending_code" = "正在发送验证码…";
+"email_send_failed" = "发送验证码失败。";
+"email_enter_code" = "请输入邮件中的验证码。";
+"email_verifying" = "正在验证…";
+"email_verify_failed" = "验证失败。";
 "auth_or" = "或";
 "auth_continue_with_google" = "使用 Google 继续";
 "auth_continue_with_apple" = "使用 Apple 继续";
@@ -24,6 +29,10 @@
 "auth_continue_with_github" = "使用 GitHub 继续";
 "auth_continue_with_x" = "使用 X 继续";
 "auth_google_failed" = "Google 登录失败";
+"auth_apple_failed" = "Apple 登录失败";
+"auth_wechat_failed" = "微信登录失败";
+"auth_github_failed" = "GitHub 登录失败";
+"auth_x_failed" = "X 登录失败";
 
 "verify_title" = "输入验证码";
 "verify_sent_to" = "已发送至 %1$@。";
@@ -45,8 +54,6 @@
 "chat_backend" = "后端";
 "chat_attach_file" = "附加文件";
 "chat_attach_remove" = "移除附件";
-"chat_about" = "关于";
-"about_version" = "版本 %1$@";
 "chat_sign_out" = "退出登录";
 "chat_sign_out_confirm_title" = "退出登录？";
 "chat_sign_out_confirm_message" = "下次需要重新登录。";

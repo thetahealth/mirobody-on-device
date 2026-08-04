@@ -1,9 +1,5 @@
 import SwiftUI
 
-private enum AuthRoute: Hashable {
-    case verify(email: String)
-}
-
 /// Top-level navigation + the runtime language / font-size / error-toast plumbing —
 /// the iOS analogue of `MirobodyNavGraph.kt` plus the root Snackbar host in
 /// `MainActivity`.
@@ -17,7 +13,7 @@ struct RootView: View {
     @EnvironmentObject private var settings: SettingsStore
     @EnvironmentObject private var errorBus: ErrorBus
 
-    @State private var authPath: [AuthRoute] = []
+    @State private var showSettingsDrawer = false
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
 
@@ -47,31 +43,62 @@ struct RootView: View {
             ChatView(container: container)
                 .id(settings.currentAccountId)
         } else {
-            NavigationStack(path: $authPath) {
-                EmailView(
-                    container: container,
-                    onCodeSent: { email in authPath.append(.verify(email: email)) },
-                    onSignedIn: {}   // token lands in settings → content swaps to ChatView
-                )
-                .navigationDestination(for: AuthRoute.self) { route in
-                    switch route {
-                    case .verify(let email):
-                        VerifyView(container: container, email: email)
-                    }
-                }
-                // While adding a second account there's still a current account to
-                // return to: a Cancel backs out without signing in.
-                .toolbar {
-                    if settings.addingAccount && settings.accessToken != nil {
+            ZStack {
+                // One screen, so the stack carries no path -- it is here for the
+                // navigation bar that hosts the leading affordance below. Email and
+                // one-time code live on the same card (EmailView), as they do on the web
+                // and on Android; there is no verify screen to push.
+                NavigationStack {
+                    EmailView(
+                        container: container,
+                        onSignedIn: {}   // token lands in settings → content swaps to ChatView
+                    )
+                    // The auth flow's one leading affordance, deciding by the same rule
+                    // as the web client's `leftMode`. Adding a second account: a Cancel
+                    // backs out to the account still signed in — a drawer would be a
+                    // dead end there. Otherwise: the hamburger, which is how these
+                    // screens reach language / font size / backend now that the gear is
+                    // gone. It sits here rather than on EmailView so the drawer and the
+                    // Cancel stay one decision instead of two views' worth.
+                    .toolbar {
                         ToolbarItem(placement: .navigationBarLeading) {
-                            Button(L("common_cancel", settings.language)) {
-                                authPath = []
-                                settings.addingAccount = false
+                            if settings.addingAccount && settings.accessToken != nil {
+                                Button(L("common_cancel", settings.language)) {
+                                    settings.addingAccount = false
+                                }
+                            } else {
+                                DrawerMenuButton { showSettingsDrawer = true }
                             }
                         }
                     }
                 }
+                settingsDrawerOverlay
             }
+            .animation(.easeInOut(duration: 0.25), value: showSettingsDrawer)
+            // Signing in swaps this branch out without resetting the flag (RootView
+            // itself is never recreated), so a later sign-out would come back with the
+            // drawer already open. Start every visit to the auth flow closed.
+            .onAppear { showSettingsDrawer = false }
+        }
+    }
+
+    /// The auth screens' drawer — the app-settings group and nothing else. Same scrim +
+    /// left-anchored panel as the chat drawer, so the two open identically.
+    @ViewBuilder
+    private var settingsDrawerOverlay: some View {
+        if showSettingsDrawer {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture { showSettingsDrawer = false }
+                .transition(.opacity)
+            HStack(spacing: 0) {
+                SettingsDrawer(onDismiss: { showSettingsDrawer = false })
+                    .frame(maxWidth: drawerMaxWidth)
+                    .frame(width: mbDrawerWidth)
+                    .ignoresSafeArea(edges: .bottom)
+                Spacer(minLength: 0)
+            }
+            .transition(.move(edge: .leading))
         }
     }
 

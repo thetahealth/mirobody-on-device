@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,7 +36,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AttachFile
@@ -50,7 +48,7 @@ import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -92,6 +90,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -115,6 +114,9 @@ import ai.thetahealth.mirobody.data.llm.OnDeviceModelSpec
 import ai.thetahealth.mirobody.data.llm.OnDeviceModelStatus
 import ai.thetahealth.mirobody.data.circle.dto.HealthSharer
 import ai.thetahealth.mirobody.data.settings.StoredAccount
+import ai.thetahealth.mirobody.ui.DrawerDivider
+import ai.thetahealth.mirobody.ui.DrawerHeader
+import ai.thetahealth.mirobody.ui.DrawerRow
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import ai.thetahealth.mirobody.ui.LocalLayoutInfo
 import ai.thetahealth.mirobody.ui.circle.CareCircleDialog
@@ -123,12 +125,14 @@ import ai.thetahealth.mirobody.ui.health.BleDeviceDialog
 import ai.thetahealth.mirobody.ui.health.EhrDialog
 import ai.thetahealth.mirobody.ui.health.HdpDeviceDialog
 import ai.thetahealth.mirobody.ui.health.HealthSyncDialog
-import ai.thetahealth.mirobody.ui.settings.AppSettingsMenu
+import ai.thetahealth.mirobody.ui.settings.AppSettingsSection
 import ai.thetahealth.mirobody.ui.vendor.VendorsDialog
 import ai.thetahealth.mirobody.ui.theme.BrandBlue
+import ai.thetahealth.mirobody.ui.theme.MirobodyTheme
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import android.content.Context
+import android.content.res.Configuration
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -312,6 +316,7 @@ fun ChatScreen(
                     },
                     onClose = { scope.launch { drawerState.close() } },
                     currentEmail = currentEmail,
+                    language = state.language,
                     onSwitchAccount = { sub ->
                         onSwitchAccount(sub)
                         scope.launch { drawerState.close() }
@@ -332,20 +337,41 @@ fun ChatScreen(
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                 ),
+                // Left zone: the hamburger, and the wordmark beside it -- the same
+                // arrangement as the web bar. It was an account avatar before; a nav
+                // glyph says more about what the drawer holds (the conversation list
+                // is its body, account is one pinned row at the bottom).
                 navigationIcon = {
-                    AccountAvatar(
-                        email = currentEmail,
-                        onClick = { scope.launch { drawerState.open() } },
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(
+                                Icons.Outlined.Menu,
+                                contentDescription = stringResource(R.string.chat_menu_title),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // The wordmark and the subject picker are alternatives for one
+                        // row: without a picker the bar would otherwise be blank, and
+                        // with one there isn't width for both. Nothing has shared health
+                        // data -> brand; something has -> the picker takes the centre.
+                        if (state.sharers.isEmpty()) {
+                            Wordmark()
+                        }
+                    }
                 },
-                // Centered brand (logo + serif wordmark), the CenterAlignedTopAppBar
-                // title -- the drawer entry is the hamburger now, mirroring the web.
-                title = { BrandTitle() },
-                // Right slot: the shared settings gear (language / font / backend /
-                // about), identical to the login screen. Incognito moved to the
-                // drawer, alongside the other session-scoped items.
-                actions = {
-                    AppSettingsMenu(currentLanguage = state.language)
+                // Centre: only what the view puts there -- the subject picker, which on
+                // the web moves up here on a narrow screen rather than sitting in the
+                // composer. There are NO right-hand actions: the settings gear that used
+                // to fill that slot is a group inside the drawer now, so the bar's one
+                // affordance is the hamburger.
+                title = {
+                    if (state.sharers.isNotEmpty()) {
+                        SubjectPicker(
+                            sharers = state.sharers,
+                            subject = state.subject,
+                            onSelect = vm::onSubjectSelected,
+                        )
+                    }
                 },
             )
         },
@@ -365,17 +391,8 @@ fun ChatScreen(
                             .widthIn(max = layout.contentMaxWidth)
                             .padding(horizontal = 12.dp, vertical = 8.dp),
                     ) {
-                        // "Currently for" subject picker — shown only when care-circle
-                        // members have shared their health data with this user. Picking
-                        // one sends `subject` so the AI's family_health tool defaults to
-                        // that member ("how is Mom doing?").
-                        if (state.sharers.isNotEmpty()) {
-                            SubjectPicker(
-                                sharers = state.sharers,
-                                subject = state.subject,
-                                onSelect = vm::onSubjectSelected,
-                            )
-                        }
+                        // (The subject picker used to sit here; it lives in the top bar's
+                        // centre slot now -- see the app bar above.)
                         // Staged attachments, removable until the turn is sent.
                         if (state.attachments.isNotEmpty()) {
                             AttachmentChips(
@@ -492,57 +509,25 @@ fun ChatScreen(
     }
 }
 
-/** Top-left account avatar that opens the drawer: a navy circle with the email's
- *  first letter (person glyph when there's no email). Reads as "you / account",
- *  distinct from the settings gear on the right. */
+/**
+ * The brand in the top app bar: the serif wordmark alone, sitting next to the
+ * hamburger. No logo mark here — the sign-in card is the screen that states the brand
+ * in full (mark + display-size wordmark), and repeating the mark in a 56dp bar reads
+ * as decoration rather than identity.
+ */
 @Composable
-private fun AccountAvatar(email: String?, onClick: () -> Unit) {
-    val initial = email?.trim()?.firstOrNull()?.uppercaseChar()?.toString()
-    IconButton(onClick = onClick) {
-        Box(
-            modifier = Modifier
-                .size(30.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (initial != null) {
-                Text(
-                    text = initial,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            } else {
-                Icon(
-                    Icons.Outlined.Person,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-    }
-}
-
-/** Centered brand in the top app bar: the Mirobody mark + serif wordmark. */
-@Composable
-private fun BrandTitle() {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Image(
-            painter = androidx.compose.ui.res.painterResource(R.drawable.ic_mirobody_logo),
-            contentDescription = null,
-            modifier = Modifier.size(width = 26.dp, height = 27.dp),
-        )
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontFamily = FontFamily.Serif,
-                fontWeight = FontWeight.SemiBold,
-            ),
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(start = 8.dp),
-        )
-    }
+private fun Wordmark() {
+    Text(
+        text = stringResource(R.string.app_name),
+        style = MaterialTheme.typography.titleLarge.copy(
+            fontFamily = FontFamily.Serif,
+            fontWeight = FontWeight.SemiBold,
+        ),
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(start = 4.dp),
+    )
 }
 
 @Composable
@@ -683,6 +668,16 @@ private fun SendButton(
 private fun HealthSharer.displayLabel(): String =
     nickname.ifBlank { email }.ifBlank { "#$member" }
 
+/**
+ * Whose health the turn is about — shown in the top bar's centre slot, and only when
+ * care-circle members have actually shared data with this user. Picking one sends
+ * `subject` so the AI's family_health tool defaults to that member ("how is Mom
+ * doing?").
+ *
+ * No "Currently for" label: the web client dropped it, and in a 56dp bar the label
+ * would eat the width the names need. The dropdown carries the meaning on its own —
+ * its default option is "Me".
+ */
 @Composable
 private fun SubjectPicker(
     sharers: List<HealthSharer>,
@@ -693,17 +688,7 @@ private fun SubjectPicker(
     val meLabel = stringResource(R.string.chat_subject_me)
     val selectedLabel = if (subject == 0L) meLabel
         else sharers.firstOrNull { it.member == subject }?.displayLabel() ?: meLabel
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.chat_currently_for),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Box {
             TextButton(
                 onClick = { expanded = true },
@@ -711,8 +696,10 @@ private fun SubjectPicker(
             ) {
                 Text(
                     text = selectedLabel,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Icon(
                     Icons.Outlined.ArrowDropDown,
@@ -804,10 +791,19 @@ private fun AttachmentChips(
 }
 
 /**
- * Left navigation drawer (mirrors the web client): a header with the "Menu" title,
- * a "New chat" / "Incognito" button row, the conversation history, and a pinned
- * footer with the health + account items — each launching its dialog. App settings
- * (language / font / backend / about) live in the top-bar gear, not here.
+ * Left navigation drawer, the app's only menu (mirrors `htdoc/src/history.js`): a
+ * header with the "Menu" title, a "New chat" / "Incognito" button row, the
+ * conversation history, then three groups — health & data, app settings, and the
+ * account rows.
+ *
+ * Everything under the header is one scrolling list. `htdoc` pins those three groups
+ * to the bottom and scrolls only the history, but they come to ~585dp of rows: pinned,
+ * they overflowed a phone sheet in landscape (and at a larger font size, and on short
+ * screens) with no way to scroll to what fell off.
+ *
+ * The app-settings group used to be a top-right gear on both this screen and login.
+ * Folding it in here leaves one menu affordance instead of two, and lets the login
+ * screen open the same drawer narrowed to just that group.
  */
 @Composable
 private fun ChatDrawer(
@@ -815,6 +811,7 @@ private fun ChatDrawer(
     isActive: Boolean,
     incognito: Boolean,
     currentEmail: String?,
+    language: String,
     onToggleIncognito: () -> Unit,
     onNewChat: () -> Unit,
     onOpenConversation: (String) -> Unit,
@@ -835,125 +832,119 @@ private fun ChatDrawer(
     var showShareDialog by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
 
+    val history = rememberHistoryController(isActive = isActive)
+
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header: close + "Menu" title.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 4.dp, end = 12.dp, top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.ArrowBack,
-                        contentDescription = stringResource(R.string.common_back),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.chat_menu_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            // New chat + Incognito: two equal-width bordered text buttons in one row
-            // (the build version isn't shown here -- it's in the gear's About item).
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                DrawerActionButton(
-                    label = stringResource(R.string.chat_new_chat),
-                    active = false,
-                    onClick = onNewChat,
-                    modifier = Modifier.weight(1f),
-                )
-                DrawerActionButton(
-                    label = stringResource(R.string.chat_incognito_mode),
-                    active = incognito,
-                    onClick = onToggleIncognito,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            // History fills the middle and scrolls; the footer below stays pinned.
-            // (No divider here -- each history row carries its own top rule.)
-            HistoryList(
-                isActive = isActive,
-                onOpen = onOpenConversation,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            // Health & data.
-            DrawerRow(stringResource(R.string.chat_care_circle), onClick = { showCircleDialog = true })
-            DrawerRow(stringResource(R.string.chat_vendors), onClick = { showVendorsDialog = true })
-            DrawerRow(stringResource(R.string.chat_ehr), onClick = { showEhrDialog = true })
-            DrawerRow(stringResource(R.string.chat_sync_health), onClick = { showHealthDialog = true })
-            DrawerRow(stringResource(R.string.chat_bluetooth), onClick = { showBleDialog = true })
-            // Legacy classic-Bluetooth HDP only runs on Android 9 and below.
-            if (Build.VERSION.SDK_INT <= 28) {
-                DrawerRow(stringResource(R.string.chat_bluetooth_hdp), onClick = { showHdpDialog = true })
-            }
-            if (conversationId.isNotBlank()) {
-                DrawerRow(stringResource(R.string.chat_share), onClick = { showShareDialog = true })
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            // App settings (language / font / backend / about) live in the top-bar
-            // gear now, shared with login; the drawer is navigation + account only.
-            // Account switcher: the current email expands the other signed-in
-            // accounts (tap to switch) plus "Add account"; Sign out is below.
-            val others = accounts.filter { !it.current }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { switcherOpen = !switcherOpen }
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = currentEmail?.takeIf { it.isNotBlank() }
-                        ?: stringResource(R.string.chat_account),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    if (switcherOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (switcherOpen) {
-                others.forEach { acc ->
-                    DrawerRow(
-                        label = acc.email.ifBlank { "#" + acc.sub.take(6) },
-                        onClick = { onSwitchAccount(acc.sub) },
-                    )
-                }
-                DrawerRow(
-                    label = stringResource(R.string.chat_add_account),
-                    onClick = onAddAccount,
-                    leading = {
-                        Icon(
-                            Icons.Outlined.Add,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            // Only the header is pinned -- it holds the affordance that closes the
+            // drawer, so it must stay in reach. Everything below scrolls as ONE region:
+            // the menu groups alone are ~585dp tall, so when they were pinned to the
+            // bottom (with history the only scroller) they overflowed the sheet on a
+            // short screen, in landscape, or at a larger font size, and the rows past
+            // the fold could not be reached at all.
+            DrawerHeader(onClose = onClose)
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                // New chat + Incognito: two equal-width bordered text buttons in one row.
+                item("actions") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        DrawerActionButton(
+                            label = stringResource(R.string.chat_new_chat),
+                            active = false,
+                            onClick = onNewChat,
+                            modifier = Modifier.weight(1f),
                         )
-                    },
-                )
+                        DrawerActionButton(
+                            label = stringResource(R.string.chat_incognito_mode),
+                            active = incognito,
+                            onClick = onToggleIncognito,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                // The conversation list. (No divider before it -- each history row
+                // carries its own top rule.)
+                historySection(history, onOpen = onOpenConversation)
+                // The menu groups, below the history rather than pinned under them.
+                item("menu") {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        DrawerDivider()
+                        // Health & data.
+                        DrawerRow(stringResource(R.string.chat_care_circle), onClick = { showCircleDialog = true })
+                        DrawerRow(stringResource(R.string.chat_vendors), onClick = { showVendorsDialog = true })
+                        DrawerRow(stringResource(R.string.chat_ehr), onClick = { showEhrDialog = true })
+                        DrawerRow(stringResource(R.string.chat_sync_health), onClick = { showHealthDialog = true })
+                        DrawerRow(stringResource(R.string.chat_bluetooth), onClick = { showBleDialog = true })
+                        // Legacy classic-Bluetooth HDP only runs on Android 9 and below.
+                        if (Build.VERSION.SDK_INT <= 28) {
+                            DrawerRow(stringResource(R.string.chat_bluetooth_hdp), onClick = { showHdpDialog = true })
+                        }
+                        if (conversationId.isNotBlank()) {
+                            DrawerRow(stringResource(R.string.chat_share), onClick = { showShareDialog = true })
+                        }
+                        DrawerDivider()
+                        // App settings (language / font / backend) -- what the
+                        // top-bar gear used to hold. The same group the login drawer
+                        // shows on its own.
+                        AppSettingsSection(currentLanguage = language)
+                        DrawerDivider()
+                        // Account switcher: the current email expands the other signed-in
+                        // accounts (tap to switch) plus "Add account"; Sign out is below.
+                        val others = accounts.filter { !it.current }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { switcherOpen = !switcherOpen }
+                                .padding(horizontal = 20.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = currentEmail?.takeIf { it.isNotBlank() }
+                                    ?: stringResource(R.string.chat_account),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Icon(
+                                if (switcherOpen) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (switcherOpen) {
+                            others.forEach { acc ->
+                                DrawerRow(
+                                    label = acc.email.ifBlank { "#" + acc.sub.take(6) },
+                                    onClick = { onSwitchAccount(acc.sub) },
+                                )
+                            }
+                            DrawerRow(
+                                label = stringResource(R.string.chat_add_account),
+                                onClick = onAddAccount,
+                                leading = {
+                                    Icon(
+                                        Icons.Outlined.Add,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                },
+                            )
+                        }
+                        DrawerRow(
+                            label = stringResource(R.string.chat_sign_out),
+                            onClick = { showSignOutDialog = true },
+                            danger = true,
+                            center = true,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
             }
-            DrawerRow(
-                label = stringResource(R.string.chat_sign_out),
-                onClick = { showSignOutDialog = true },
-                danger = true,
-                center = true,
-            )
-            Spacer(Modifier.height(6.dp))
         }
 
     if (showHealthDialog) {
@@ -1005,49 +996,6 @@ private fun ChatDrawer(
             },
             onDismiss = { showSignOutDialog = false },
         )
-    }
-}
-
-/** One tappable row in the drawer: optional leading icon, label, optional right-aligned
- *  hint (e.g. the backend host). `danger` paints the label red (Sign out). */
-@Composable
-private fun DrawerRow(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    hint: String? = null,
-    leading: (@Composable () -> Unit)? = null,
-    danger: Boolean = false,
-    center: Boolean = false,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (center) Arrangement.Center else Arrangement.Start,
-    ) {
-        if (leading != null) {
-            leading()
-            Spacer(Modifier.width(10.dp))
-        }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        )
-        if (hint != null) {
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = hint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 12.dp),
-            )
-        }
     }
 }
 
@@ -1787,6 +1735,122 @@ private fun TypingDots() {
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha)),
             )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Compose previews.
+//
+// This app has no layout XML, so the IDE's Design pane is blank unless a
+// @Preview exists. These cover the chat screen's self-contained pieces — the
+// ones that take plain parameters and touch neither LocalAppContainer nor a
+// ViewModel, which is what makes them renderable without a running app.
+//
+// ChatScreen itself is deliberately not previewed: it builds its ViewModel from
+// LocalAppContainer, and AppContainer constructs OkHttp / Retrofit / DataStore /
+// ModelManager against a real Context. Previewing a whole screen would mean
+// extracting an interface for it first.
+// ---------------------------------------------------------------------------
+
+@Preview(name = "Top bar brand", showBackground = true)
+@Composable
+private fun WordmarkPreview() {
+    MirobodyTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = {}) {
+                    Icon(
+                        Icons.Outlined.Menu,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Wordmark()
+            }
+        }
+    }
+}
+
+@Preview(name = "Subject picker", showBackground = true)
+@Composable
+private fun SubjectPickerPreview() {
+    MirobodyTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            SubjectPicker(
+                sharers = listOf(
+                    HealthSharer(member = 1, email = "mom@example.com", nickname = "Mom"),
+                    HealthSharer(member = 2, email = "dad@example.com", nickname = "Dad"),
+                ),
+                subject = 1,
+                onSelect = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "Empty state · light", showBackground = true, heightDp = 320)
+@Preview(
+    name = "Empty state · dark",
+    showBackground = true,
+    heightDp = 320,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+private fun EmptyStatePreview() {
+    MirobodyTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            EmptyState(incognito = false)
+        }
+    }
+}
+
+@Preview(name = "Empty state · incognito", showBackground = true, heightDp = 320)
+@Composable
+private fun EmptyStateIncognitoPreview() {
+    MirobodyTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            EmptyState(incognito = true)
+        }
+    }
+}
+
+@Preview(name = "Incognito banner", showBackground = true)
+@Composable
+private fun IncognitoBannerPreview() {
+    MirobodyTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            IncognitoBanner()
+        }
+    }
+}
+
+@Preview(name = "Drawer top row", showBackground = true)
+@Composable
+private fun DrawerActionButtonsPreview() {
+    MirobodyTheme {
+        Surface(color = MaterialTheme.colorScheme.background) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DrawerActionButton(
+                    label = "New chat",
+                    active = false,
+                    onClick = {},
+                    modifier = Modifier.weight(1f),
+                )
+                // Incognito on: navy border + navy label, so "am I being recorded"
+                // is answerable at a glance.
+                DrawerActionButton(
+                    label = "Incognito",
+                    active = true,
+                    onClick = {},
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }

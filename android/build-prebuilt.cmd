@@ -70,7 +70,7 @@ if not defined NDK_HOME (
 if not defined NDK_HOME goto :ndk_missing
 if not exist "%NDK_HOME%\build\cmake\android.toolchain.cmake" goto :ndk_missing
 rem Work around spaces in the NDK path. openssl's autoconf/make build invokes $(CC)
-rem unquoted, so a profile like "C:\Users\Feng Xie" fails with
+rem unquoted, so a profile like "C:\Users\A B" fails with
 rem "/bin/sh: C:/Users/Feng: No such file or directory". The NDK's android.toolchain
 rem .cmake resolves 8.3 short names and junctions back to the real spaced location,
 rem so only a *physical* copy at a space-free path works: mirror the NDK once under

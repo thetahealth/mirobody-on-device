@@ -91,6 +91,10 @@ fun MirobodyNavGraph() {
         }
 
         composable(Routes.EMAIL) {
+            // A back stack behind this screen means it was opened over a live session
+            // to add another account, which is what the top bar keys its left
+            // affordance off: a back arrow here, the drawer hamburger otherwise.
+            val canCancel = nav.previousBackStackEntry != null
             EmailScreen(
                 // Reset the stack to a single fresh chat -- covers both a first
                 // login and an "Add account" login (which had CHAT in the back
@@ -100,6 +104,9 @@ fun MirobodyNavGraph() {
                         popUpTo(0) { inclusive = true }
                     }
                 },
+                onCancel = if (canCancel) {
+                    { nav.popBackStack() }
+                } else null,
             )
         }
 

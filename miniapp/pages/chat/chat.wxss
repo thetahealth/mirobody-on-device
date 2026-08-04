@@ -9,7 +9,7 @@
   background: #f2efe9;
 }
 
-/* -- toolbar (hamburger / centered brand / settings gear) ---------------- */
+/* -- toolbar (hamburger + wordmark / centered subject picker / empty) ---- */
 .toolbar {
   flex: 0 0 auto;
   display: flex;
@@ -17,40 +17,47 @@
   height: 80rpx;
   padding: 0 24rpx;
 }
-/* Equal-width side zones keep the brand optically centered. */
+/* Equal-width side zones: the trailing one carries no actions any more, but the
+   matched pair is what keeps the centre element optically centred rather than
+   shoved right by the hamburger. */
 .tb-side {
   flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
 }
 .tb-right {
   justify-content: flex-end;
 }
+/* The centre hosts only what the view puts there — the subject picker. */
+.tb-center {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* The one menu affordance: opens the nav drawer (history, health, app settings,
+   account). It replaced an account avatar — the drawer's body is the conversation
+   list, so a profile glyph undersold what the button opens. */
+.menu-btn {
+  flex: 0 0 auto;
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  text-align: center;
+  font-size: 40rpx;
+  color: #52565c;
+}
 .brand {
   flex: 0 1 auto;
+  margin-left: 8rpx;
   font-size: 36rpx;
   font-weight: 600;
   color: #0f1115;
   white-space: nowrap;
-}
-/* Account avatar: a filled navy circle with the JWT email's initial (or a
-   white person glyph when the token carries no email). Opens the nav drawer. */
-.avatar {
-  width: 56rpx;
-  height: 56rpx;
-  border-radius: 50%;
-  background: #1e3a6b;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28rpx;
-  font-weight: 600;
-  line-height: 1;
-}
-.avatar-glyph {
-  width: 32rpx;
-  height: 32rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .incognito-banner {
   margin: 0 0 20rpx;
@@ -217,8 +224,18 @@
   color: #52565c;
 }
 /* Subject / model each fill an equal half of the row and center within it. */
-.half {
-  flex: 1 1 0;
+/* In the top bar the subject picker sits on the page background, not on the
+   composer's white field — the web client draws the same distinction by
+   placement, and 44vw is the width it caps that picker at on a phone. */
+.tb-center .pill {
+  max-width: 44vw;
+  background: transparent;
+}
+
+/* The model picker's slot: everything between the two 40rpx-ish ends, with the
+   picker centred in it. */
+.model-slot {
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -298,10 +315,21 @@
   padding: 0 28rpx;
   padding-top: env(safe-area-inset-top);
 }
-.drawer-title {
+.drawer-back {
+  flex: 0 0 auto;
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 56rpx;
+  margin-left: -12rpx;
+  text-align: center;
   font-size: 40rpx;
-  font-weight: 600;
-  color: #0f1115;
+  color: #52565c;
+}
+.drawer-title {
+  margin-left: 8rpx;
+  font-size: 32rpx;
+  font-weight: 500;
+  color: #1a1c1e;
 }
 /* Two equal-width bordered text buttons (New chat / Incognito). */
 .drawer-actions {
@@ -444,7 +472,7 @@
   white-space: nowrap;
 }
 
-/* -- font-size tiers (settings gear "字号") ------------------------------- */
+/* -- font-size tiers (drawer settings "字号") ----------------------------- */
 /* WeChat has no rem root to scale like the web client, so the chosen tier is a
    class on .page that scales the message text (the primary content). */
 .page.fs-smaller .bubble,

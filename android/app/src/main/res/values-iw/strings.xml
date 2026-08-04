@@ -18,6 +18,11 @@
     <string name="email_required">נדרש אימייל</string>
     <string name="email_send_code">שליחת קוד</string>
     <string name="email_resend_in">שליחה מחדש בעוד %1$d שניות</string>
+    <string name="email_sending_code">שולח קוד…</string>
+    <string name="email_send_failed">שליחת הקוד נכשלה.</string>
+    <string name="email_enter_code">הזן את הקוד מהאימייל.</string>
+    <string name="email_verifying">מאמת…</string>
+    <string name="email_verify_failed">האימות נכשל.</string>
     <string name="auth_or">או</string>
     <string name="auth_continue_with_google">המשך עם Google</string>
     <string name="auth_continue_with_apple">המשך עם Apple</string>
@@ -37,7 +42,6 @@
     <string name="chat_message_hint">שאל כל דבר</string>
     <string name="chat_history_cd">היסטוריה</string>
     <string name="chat_select_model">בחר מודל</string>
-    <string name="chat_currently_for">כעת עבור</string>
     <string name="chat_subject_me">אני</string>
 
     <string name="chat_attach_file">צירוף קובץ</string>
@@ -113,8 +117,6 @@
     <string name="health_syncing">מסנכרן…</string>
     <string name="health_result">נשלחו %1$d, נכשלו %2$d.</string>
     <string name="health_error">שגיאה: %1$s</string>
-    <string name="chat_about">אודות</string>
-    <string name="about_version">גרסה %1$s</string>
     <string name="chat_sign_out">התנתקות</string>
     <string name="chat_sign_out_confirm_title">להתנתק?</string>
     <string name="chat_sign_out_confirm_message">יהיה עליך להתחבר שוב.</string>
@@ -194,6 +196,8 @@
     <string name="chat_ehr_sync_done">יובאו %1$d תצפיות.</string>
     <string name="auth_apple_failed">ההתחברות ל-Apple נכשלה</string>
     <string name="auth_wechat_failed">ההתחברות ל-WeChat נכשלה</string>
+    <string name="auth_github_failed">ההתחברות עם GitHub נכשלה</string>
+    <string name="auth_x_failed">ההתחברות עם X נכשלה</string>
     <string name="chat_bluetooth">מכשירי Bluetooth</string>
     <string name="chat_bluetooth_hdp">‏Bluetooth HDP (ישן)</string>
     <string name="ble_title">מכשירי בריאות Bluetooth</string>

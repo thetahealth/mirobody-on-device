@@ -16,8 +16,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.theme.MirobodyTheme
 import kotlin.math.roundToInt
+
+/**
+ * The five font tiers, persisted sp offset -> label. Top-level rather than local to
+ * the dialog because the drawer row that opens it shows the current tier as its hint,
+ * so both need the same offset->label mapping.
+ */
+internal val FONT_TIERS: List<Pair<Int, Int>> = listOf(
+    -4 to R.string.chat_font_size_smaller,
+    -2 to R.string.chat_font_size_small,
+    0 to R.string.chat_font_size_normal,
+    2 to R.string.chat_font_size_large,
+    4 to R.string.chat_font_size_larger,
+)
+
+/** Label for a stored offset; anything unrecognized reads as the normal tier. */
+internal fun fontTierLabelRes(offset: Int): Int =
+    FONT_TIERS.firstOrNull { it.first == offset }?.second ?: R.string.chat_font_size_normal
 
 /**
  * Font-size preference picker (a 5-tier slider). [onPreview] live-updates the
@@ -31,13 +50,7 @@ fun FontSizeDialog(
     onPick: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val tiers = listOf(
-        -4 to R.string.chat_font_size_smaller,
-        -2 to R.string.chat_font_size_small,
-        0 to R.string.chat_font_size_normal,
-        2 to R.string.chat_font_size_large,
-        4 to R.string.chat_font_size_larger,
-    )
+    val tiers = FONT_TIERS
     val initialIndex = tiers.indexOfFirst { it.first == current }.let {
         if (it < 0) 2 else it
     }
@@ -86,4 +99,12 @@ fun FontSizeDialog(
             }
         },
     )
+}
+
+@Preview(name = "Font size dialog", showBackground = true, heightDp = 320)
+@Composable
+private fun FontSizeDialogPreview() {
+    MirobodyTheme {
+        FontSizeDialog(current = 0, onPreview = {}, onPick = {}, onDismiss = {})
+    }
 }

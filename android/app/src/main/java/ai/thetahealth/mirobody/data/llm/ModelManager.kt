@@ -58,10 +58,9 @@ class ModelManager(context: Context) {
 
     private val importPrefs = appContext.getSharedPreferences("ondevice_imports", Context.MODE_PRIVATE)
 
-    init {
-        migrateLegacyModels()
-        loadImports()
-    }
+    // NOTE: the init block is deliberately NOT here. It calls loadImports(), which writes
+    // _imported / _statuses, and Kotlin runs property initializers and init blocks in
+    // declaration order -- from here those flows are still null. See below.
 
     fun fileFor(spec: OnDeviceModelSpec): File =
         spec.localPath?.let(::File) ?: File(modelsDir, spec.fileName)
@@ -98,6 +97,18 @@ class ModelManager(context: Context) {
     /** User-imported models currently registered; drives the imported section of the picker. */
     private val _imported = MutableStateFlow<List<OnDeviceModelSpec>>(emptyList())
     val imported: StateFlow<List<OnDeviceModelSpec>> = _imported.asStateFlow()
+
+    /**
+     * Must stay BELOW _statuses / _imported: loadImports() assigns both, and Kotlin runs
+     * property initializers and init blocks strictly in declaration order. Higher up (where
+     * this used to sit, next to importPrefs) the flows are still null and every construction
+     * of ModelManager dies with an NPE -- which meant the app could not start at all, since
+     * AppContainer builds one eagerly.
+     */
+    init {
+        migrateLegacyModels()
+        loadImports()
+    }
 
     fun status(spec: OnDeviceModelSpec): OnDeviceModelStatus =
         _statuses.value[spec.id] ?: OnDeviceModelStatus.Absent

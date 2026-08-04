@@ -11,7 +11,7 @@ android {
     // compileSdk only governs which APIs compile; targetSdk/minSdk stay as-is.
     compileSdk = 36
     ndkVersion = "27.0.12077973"
-    // A space in the resolved NDK path (e.g. a Windows profile like "C:\Users\Feng Xie") makes the
+    // A space in the resolved NDK path (e.g. a Windows profile like "C:\Users\A B") makes the
     // NDK toolchain invoke the compiler through an 8.3 short name -- clang++.exe becomes CLANG_~1.EXE,
     // which no longer ends in "++", so clang links in C-driver mode and libc++/libc++abi go
     // unresolved. Let a space-free NDK (e.g. the mirror build-prebuilt.cmd creates) override via env.
@@ -85,12 +85,47 @@ android {
 }
 
 // The in-process C++ server (libmirobody.so) is built from the repo-root CMakeLists.txt via the
-// NDK. Wiring the externalNativeBuild requires arm64 prebuilt dependencies under android/prebuilt/.
+// NDK. Wiring the externalNativeBuild requires prebuilt dependencies under android/prebuilt/<ABI>/.
 // Until those exist we skip the native build entirely so the app still assembles as a pure Kotlin
 // client; MirobodyService degrades gracefully when the .so is absent. Drop the prebuilts in place
 // and rebuild to enable embedding -- no edit here needed.
-val androidAbi = "arm64-v8a"
-val nativeServerEnabled = rootProject.file("prebuilt/$androidAbi").exists()
+//
+// Two properties override that default (a third, mirobody.baseUrl, is just below). All are
+// settable in gradle.properties, in Android Studio's Settings -> Build -> Compiler ->
+// "Command-line Options", or per invocation. In PowerShell quote the whole argument --
+// unquoted, `-Pmirobody.native=false` is split and Gradle looks for a task named
+// `.native=false`:
+//
+//   -Pmirobody.abi=x86_64        which ABI to build the embedded server for. Pair it with
+//                                `build-prebuilt.cmd x86_64` (the script takes the same names).
+//                                An x86_64 emulator on an x86_64 host keeps hardware
+//                                acceleration, so this is the only way to exercise the embedded
+//                                server at full speed without a physical arm64 device.
+//   -Pmirobody.native=false      force a pure-client APK even with the prebuilts in place. Also
+//                                the supported way to compile-verify Kotlin without invoking
+//                                CMake -- no need to rename android/prebuilt/ out of the way.
+val androidAbi = (project.findProperty("mirobody.abi") as String?)
+    ?.takeIf { it.isNotBlank() } ?: "arm64-v8a"
+val nativeOptIn = (project.findProperty("mirobody.native") as String?)?.toBoolean() ?: true
+val nativeServerEnabled = nativeOptIn && rootProject.file("prebuilt/$androidAbi").exists()
+
+// Where the app points when the user has not chosen a backend. An embedded build serves on
+// 127.0.0.1:8080 in-process, so localhost is right; a client build has nothing listening there
+// and would boot onto a dead address, so it defaults to the public test server instead.
+// -Pmirobody.baseUrl=... overrides either (e.g. http://10.0.2.2:18080 for a host-run server
+// reached from an emulator).
+val defaultBaseUrl = (project.findProperty("mirobody.baseUrl") as String?)
+    ?.takeIf { it.isNotBlank() }
+    ?: if (nativeServerEnabled) "http://localhost:8080" else "https://test.mirobody.ai"
+
+// No companion "is this an embedded build" flag: MainActivity already gates on
+// NativeBridge.available, which reports whether the .so actually loaded rather than whether
+// the build intended it to — the more accurate of the two, and one source of truth.
+android {
+    defaultConfig {
+        buildConfigField("String", "DEFAULT_BASE_URL", "\"$defaultBaseUrl\"")
+    }
+}
 if (nativeServerEnabled) {
     android {
         defaultConfig {

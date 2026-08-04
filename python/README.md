@@ -165,4 +165,3 @@ versions, wire up [`cibuildwheel`](https://cibuildwheel.pypa.io/) in CI.
 - **API surface.** The wrapper currently covers server lifecycle
   (start/stop/is_running/listen_port). Richer in-process calls mean growing
   `python_bridge.cpp` (and, if you want the C ABI too, `src/mirobody.h`).
-```

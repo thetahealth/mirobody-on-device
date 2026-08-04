@@ -4,13 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -44,15 +43,21 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Conversation-history list, hosted inside the chat drawer (below "New chat",
- * above the settings footer). No own scaffold/top-bar — the drawer frames it.
+ * The history state plus the actions its rows need, hoisted so the chat drawer can
+ * emit the rows into its OWN lazy list (see [historySection]) instead of hosting a
+ * second scroller. The drawer's menu groups are ~585dp tall on their own, so a
+ * history band that scrolled independently left everything below it unreachable on a
+ * short screen, in landscape, or at a larger font size.
  */
+internal class HistoryController(
+    val state: HistoryUiState,
+    val refresh: () -> Unit,
+    val delete: (String) -> Unit,
+)
+
+/** Loads the history for the drawer, refreshed on each open. */
 @Composable
-internal fun HistoryList(
-    isActive: Boolean,
-    onOpen: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
+internal fun rememberHistoryController(isActive: Boolean): HistoryController {
     val container = LocalAppContainer.current
     val vm: HistoryViewModel = viewModel(
         factory = viewModelFactory {
@@ -67,51 +72,77 @@ internal fun HistoryList(
         if (isActive) vm.refresh()
     }
 
-    Box(modifier = modifier) {
-        when {
-            state.loading && state.items.isEmpty() ->
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+    return remember(state) { HistoryController(state, vm::refresh, vm::deleteHistory) }
+}
 
-            state.error != null -> Column(
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = state.error.orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                TextButton(onClick = { vm.refresh() }) {
-                    Text(stringResource(R.string.common_retry), color = MaterialTheme.colorScheme.primary)
-                }
-            }
+/**
+ * The conversation rows — or the loading / error / empty placeholder standing in for
+ * them — as items of the drawer's lazy list.
+ */
+internal fun LazyListScope.historySection(
+    controller: HistoryController,
+    onOpen: (String) -> Unit,
+) {
+    val state = controller.state
+    when {
+        state.loading && state.items.isEmpty() -> item("history-loading") {
+            HistoryPlaceholder { CircularProgressIndicator() }
+        }
 
-            state.items.isEmpty() -> Text(
-                text = stringResource(R.string.history_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.align(Alignment.Center).padding(24.dp),
-            )
-
-            else -> LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp),
-            ) {
-                items(state.items, key = { it.sessionId }) { item ->
-                    // A rule above each row (the last row has none below it).
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                        modifier = Modifier.padding(horizontal = 20.dp),
+        state.error != null -> item("history-error") {
+            HistoryPlaceholder {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = state.error.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
                     )
-                    HistoryRow(
-                        item,
-                        onOpen = { onOpen(item.sessionId) },
-                        onDelete = { vm.deleteHistory(item.sessionId) },
-                    )
+                    TextButton(onClick = controller.refresh) {
+                        Text(stringResource(R.string.common_retry), color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
+
+        state.items.isEmpty() -> item("history-empty") {
+            HistoryPlaceholder {
+                Text(
+                    text = stringResource(R.string.history_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        else -> items(state.items, key = { it.sessionId }) { item ->
+            // A rule above each row (the last row has none below it).
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            HistoryRow(
+                item,
+                onOpen = { onOpen(item.sessionId) },
+                onDelete = { controller.delete(item.sessionId) },
+            )
+        }
+    }
+}
+
+/** Centred stand-in for the row list, tall enough to read as a band of its own. */
+@Composable
+private fun HistoryPlaceholder(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 96.dp)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
     }
 }
 

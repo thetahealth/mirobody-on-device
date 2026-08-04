@@ -1,17 +1,21 @@
 {
   "app": {
-    // Empty by design in the repo: each developer generates a local debug signature via
-    // DevEco (Project Structure → Signing Configs → Automatically generate signature). The
-    // material lives under ~/.ohos and must never be committed to this open-source repo.
+    // Local signing lands in this TRACKED file: DevEco (Project Structure → Signing
+    // Configs → Automatically generate signature) writes cert paths under ~/.ohos plus
+    // store/key passwords into "signingConfigs" below, and rewrites them from time to
+    // time. Right after cloning — BEFORE opening the project in DevEco — run
     //
-    // Keep your local signature out of git. After DevEco fills in `signingConfigs` below, run:
-    //   git update-index --skip-worktree harmony/build-profile.json5
-    // Verify with `git ls-files -v harmony/build-profile.json5` — it must print `S`, not `H`.
-    // Use `--no-skip-worktree` only when you intend to change this committed baseline.
+    //     git update-index --skip-worktree harmony/build-profile.json5
+    //
+    // so those rewrites never reach a commit. To change the shared settings below
+    // (products / buildModeSet / modules), lift the flag, commit, and set it again:
+    //
+    //     git update-index --no-skip-worktree harmony/build-profile.json5
     "signingConfigs": [],
     "products": [
       {
         "name": "default",
+        "signingConfig": "default",
         "compatibleSdkVersion": "5.0.0(12)",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
@@ -24,7 +28,7 @@
     ],
     "buildModeSet": [
       {
-        "name": "debug",
+        "name": "debug"
       },
       {
         "name": "release"

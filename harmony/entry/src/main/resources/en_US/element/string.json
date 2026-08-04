@@ -257,10 +257,6 @@
       "value": "Dark"
     },
     {
-      "name": "settings_about",
-      "value": "About"
-    },
-    {
       "name": "settings_lang_switched",
       "value": "Language switched. Restart the app to fully apply."
     },
@@ -297,14 +293,6 @@
       "value": "Extra large"
     },
     {
-      "name": "about_version",
-      "value": "Version %s"
-    },
-    {
-      "name": "about_desc",
-      "value": "A privacy-first health chat app. Cloud inference runs on your own API key (BYOK); keys stay on this device only."
-    },
-    {
       "name": "engine_local_stub_byok",
       "value": "On-device models aren't wired up on HarmonyOS yet. Turn on \"Deep thinking\" to handle this message via the cloud (BYOK)."
     },
@@ -327,6 +315,10 @@
     {
       "name": "chat_math_placeholder",
       "value": "formula (rendering coming soon)"
+    },
+    {
+      "name": "drawer_menu_title",
+      "value": "Menu"
     },
     {
       "name": "drawer_new_chat",

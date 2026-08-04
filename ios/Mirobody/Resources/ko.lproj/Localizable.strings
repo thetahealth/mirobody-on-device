@@ -17,6 +17,11 @@
 "email_required" = "이메일을 입력하세요";
 "email_send_code" = "코드 보내기";
 "email_resend_in" = "%1$d초 후 다시 보내기";
+"email_sending_code" = "코드 보내는 중…";
+"email_send_failed" = "코드 전송에 실패했습니다.";
+"email_enter_code" = "이메일로 받은 코드를 입력하세요.";
+"email_verifying" = "확인 중…";
+"email_verify_failed" = "인증에 실패했습니다.";
 "auth_or" = "또는";
 "auth_continue_with_google" = "Google로 계속";
 "auth_continue_with_apple" = "Apple로 계속";
@@ -24,6 +29,10 @@
 "auth_continue_with_github" = "GitHub로 계속";
 "auth_continue_with_x" = "X로 계속";
 "auth_google_failed" = "Google 로그인 실패";
+"auth_apple_failed" = "Apple 로그인 실패";
+"auth_wechat_failed" = "WeChat 로그인 실패";
+"auth_github_failed" = "GitHub 로그인 실패";
+"auth_x_failed" = "X 로그인 실패";
 
 "verify_title" = "코드 입력";
 "verify_sent_to" = "%1$@ 로 보냈습니다.";
@@ -45,8 +54,6 @@
 "chat_backend" = "백엔드";
 "chat_attach_file" = "파일 첨부";
 "chat_attach_remove" = "첨부 삭제";
-"chat_about" = "정보";
-"about_version" = "버전 %1$@";
 "chat_sign_out" = "로그아웃";
 "chat_sign_out_confirm_title" = "로그아웃하시겠습니까?";
 "chat_sign_out_confirm_message" = "다음에 다시 로그인해야 합니다.";

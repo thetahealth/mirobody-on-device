@@ -8,21 +8,39 @@ import Mirobody
 // on browser SDKs/popups and are intentionally omitted from the native client;
 // email login covers every account.) A successful verify flips app.loggedIn,
 // which makes Main swap this view for the chat.
+//
+// login.js's staircase, each step unlocking the next: a valid-looking address
+// unlocks Send code; a successful send unlocks the code field and starts the resend
+// cooldown; six digits unlock Sign in, and also submit on their own.
 Item {
     id: page
 
     property bool sending: false
     property bool verifying: false
-    property bool codeStage: false
     property int  cooldown: 0
 
-    function emailValid(v) { return /^[^\s@]+@[^\s@]+$/.test((v || "").trim()); }
+    // Lowercased address the last code went to, "" until one is sent. Compared against
+    // the field rather than kept as a plain flag, so editing the address re-locks the
+    // code field until a code goes to THAT one (and a change back unlocks it again).
+    property string codeSentTo: ""
+
+    // At least *@*.* -- stricter than the server's lenient normalize_email (which
+    // would take a single-label domain like "user@demo"), so a typo dies here instead
+    // of costing a sent code.
+    function emailValid(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((v || "").trim()); }
+
+    readonly property bool codeSent:
+        codeSentTo.length > 0 && codeSentTo === emailField.text.trim().toLowerCase()
 
     Connections {
         target: app
         function onCodeSent() {
             page.sending = false;
-            page.codeStage = true;
+            // A new code means a clean field: drop whatever was typed for the previous
+            // one, then unlock it (codeSentTo) and hand it the caret.
+            page.codeSentTo = emailField.text.trim().toLowerCase();
+            codeField.clear();
+            codeField.error = false;
             status.text = I18n.t("codeSentTo", emailField.text.trim());
             page.cooldown = 60;
             cooldownTimer.start();
@@ -77,11 +95,13 @@ Item {
                 onAccepted: if (sendBtn.enabled) sendBtn.clicked()
             }
 
-            // Six-digit code entry, shown after a code is sent.
+            // Six-digit code entry -- always on the card, but inert until a code has
+            // actually gone to the address above it (login.js locks it the same way
+            // rather than hiding it, so the whole form is visible from the start).
             TextField {
                 id: codeField
                 property bool error: false
-                visible: page.codeStage
+                enabled: page.codeSent
                 Layout.fillWidth: true
                 placeholderText: "······"
                 horizontalAlignment: TextInput.AlignHCenter
@@ -93,8 +113,11 @@ Item {
                 color: error ? Theme.error : Theme.surfaceFg
                 onTextChanged: {
                     error = false;
-                    if (text.length === 6 && !page.verifying) verifyBtn.clicked();
+                    // Six digits submit on their own, through the same gate the button
+                    // uses -- so this can never fire on a code Sign in would refuse.
+                    if (verifyBtn.enabled) verifyBtn.clicked();
                 }
+                onAccepted: if (verifyBtn.enabled) verifyBtn.clicked()
             }
 
             Button {
@@ -102,23 +125,28 @@ Item {
                 Layout.fillWidth: true
                 enabled: !page.sending && page.cooldown === 0 && page.emailValid(emailField.text)
                 text: page.cooldown > 0 ? I18n.t("resendIn", page.cooldown)
-                                        : (page.codeStage ? I18n.t("resendCode") : I18n.t("sendCode"))
+                                        : (page.codeSentTo.length > 0 ? I18n.t("resendCode")
+                                                                     : I18n.t("sendCode"))
                 onClicked: {
                     var email = emailField.text.trim();
-                    if (!email) { status.text = I18n.t("emailRequired"); return; }
+                    if (!page.emailValid(email)) { status.text = I18n.t("emailRequired"); return; }
                     page.sending = true;
                     status.text = I18n.t("sendingCode");
                     app.sendCode(email);
                 }
             }
 
+            // Sign in needs the whole staircase: a valid address, a code sent to it,
+            // and all six digits.
             Button {
                 id: verifyBtn
                 Layout.fillWidth: true
-                visible: page.codeStage
                 highlighted: true
-                enabled: !page.verifying && codeField.text.trim().length === 6
-                text: I18n.t("verifyButton")
+                enabled: !page.verifying && page.codeSent && codeField.text.trim().length === 6
+                // "Sign in", as login.js labels the primary button -- it stands on the
+                // card from the start now, not only once a code has been sent, and
+                // "Verify" read as a step rather than the action that ends the flow.
+                text: I18n.t("loginTitle")
                 onClicked: {
                     var code = codeField.text.trim();
                     if (!code) { status.text = I18n.t("enterCode"); return; }

@@ -33,9 +33,19 @@ ever drifts), `brew install xcodegen && xcodegen generate` rewrites it from the
 spec.
 
 On launch the app talks to the base URL configured in-app (default
-`http://localhost:8080`). Set a reachable backend via the gear menu → **Backend**,
+`http://localhost:8080`). Set a reachable backend via the nav drawer (☰) → **Backend**,
 e.g. `https://test.mirobody.ai`. Email sign-in works immediately; Google sign-in
 needs the one-time Firebase setup below.
+
+Email + one-time code is **one screen** (`UI/Auth/EmailView.swift`), as on the web and
+on Android — no pushed verify screen. It follows `htdoc/src/login.js`'s staircase, each
+step unlocking the next (`UI/Auth/AuthViewModels.swift` — `EmailViewModel`): a
+valid-looking address (`*@*.*`, stricter than the server's `normalize_email`) unlocks
+**Send code**; a successful send unlocks the six code boxes and starts a 60s resend
+cooldown (editing the address re-locks them until a code goes to that one); six digits
+unlock **Sign in** and submit on their own. A rejected code stays in the boxes, tinted.
+One status line under the buttons reports every step — the server's message when it sent
+one, else a localized fallback.
 
 ### Sideloading onto your own iPhone
 
@@ -160,7 +170,7 @@ only; there is no Apple cloud API). See [src/health/README.md](../src/health/REA
   steps / heart rate / sleep / weight, reads the last 7 days, maps each to a FHIR
   R4 `Observation` (`FhirObservation`), and `POST`s to `/fhir/Observation` via
   `ApiClient.postRaw`.
-- **UI**: settings gear → **Sync health data** (`UI/Health/HealthSyncView`), which
+- **UI**: nav drawer (☰) → **Sync health data** (`UI/Health/HealthSyncView`), which
   requests authorization then runs the sync.
 - **Setup**: the HealthKit capability and `NSHealthShareUsageDescription` are
   declared in [`project.yml`](project.yml)
@@ -179,7 +189,7 @@ Beyond HealthKit, the app can talk **directly to a standard-profile BLE sensor**
 `BleHealth` and Android `BleHealthController`. Built on **Core Bluetooth**, it scans,
 connects, subscribes to each supported measurement characteristic, decodes it
 (`GattHealthCodec`), and `POST`s the FHIR `Observation` to `/fhir/Observation` — the
-same path HealthKit uses (no new server code). Reached from the settings gear →
+same path HealthKit uses (no new server code). Reached from the nav drawer (☰) →
 **Bluetooth devices** (`UI/Health/BleDeviceView`).
 
 - **Supported services**: Heart Rate `0x180D` → `0x2A37`, Blood Pressure `0x1810` →
@@ -210,7 +220,7 @@ ios/
       Auth/                   # DTOs, AuthRepository, Firebase Google sign-in
       Chat/                   # DTOs, SSE stream client, ChatRepository
       LLM/                    # On-device LLM: LiteRtLlmEngine (LiteRT-LM), ModelManager
-      Config/                 # /mirobody.json model + store
+      Config/                 # /auth/providers model + store (sign-in capabilities)
       Health/                 # HealthKitRepository + FHIR mapper; BLE GATT (BleHealthController, GattHealthCodec)
       Settings/               # UserDefaults-backed settings
     UI/

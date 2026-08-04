@@ -377,14 +377,34 @@ struct Config {
     // Care-circle limits (circle count / member count / invite rate). See CircleConfig.
     CircleConfig               circle;
 
-    // Firebase project ID, used to verify Firebase ID tokens: the validator in
-    // src/jwt/firebase.* requires the token's `aud` claim to equal this value
-    // and its `iss` to be `https://securetoken.google.com/<firebase_project_id>`.
-    // Set via the FIREBASE_PROJECT_ID env var (or the YAML store).
+    // The PRIMARY Firebase project: the one published to the web client (see
+    // firebase_web_api_key below) and named in the CSP for the sign-in popup.
+    // Set via FIREBASE_PROJECT_ID, or taken as the first entry of
+    // FIREBASE_PROJECT_IDS.
     std::string firebase_project_id;
 
-    // Firebase *web app* config, returned by GET /firebase/verify so the web
-    // client can initialize the Firebase JS SDK for Google sign-in. projectId
+    // EVERY Firebase project whose ID tokens this server will accept, primary
+    // first. The validator (src/jwt/firebase.*) requires a token's `aud` to equal
+    // one of these and its `iss` to be
+    // `https://securetoken.google.com/<that id>`.
+    //
+    // More than one is allowed because clients are built against whatever project
+    // they were given, and a token is only valid for the project that issued it:
+    // the Android APK ships a google-services.json naming one, while the web
+    // client is handed the primary at runtime. Without a set, serving both would
+    // mean rebuilding a client per deployment. It costs nothing to verify -- the
+    // Google cert bundle is not per-project.
+    //
+    // Set via FIREBASE_PROJECT_IDS (YAML sequence, or a comma-separated scalar for
+    // the env-var form). When unset it is just { firebase_project_id }, so an
+    // existing single-project deployment needs no change.
+    //
+    // Each entry widens who can sign in: anyone able to mint a token in that
+    // project. List only projects you control.
+    std::vector<std::string> firebase_project_ids;
+
+    // Firebase *web app* config, advertised under "google" by GET /auth/providers
+    // so the web client can initialize the Firebase JS SDK for Google sign-in. projectId
     // comes from firebase_project_id; authDomain is not configured here (the
     // client uses its own origin). Set via FIREBASE_WEB_API_KEY /
     // FIREBASE_MESSAGING_SENDER_ID. The web Google button is shown only when the
@@ -429,7 +449,7 @@ struct Config {
     // Apple "Sign in with Apple" Services ID (the web client_id). Set via the
     // APPLE_CLIENT_ID env var (or the YAML store). The Apple ID-token validator
     // under src/jwt/apple.* checks that incoming tokens carry this value in their
-    // `aud` claim; GET /apple/verify advertises it to the web client so it can
+    // `aud` claim; GET /auth/providers advertises it to the web client so it can
     // initialize the Apple JS SDK. Web Apple sign-in is enabled only when set.
     std::string apple_client_id;
 
@@ -463,7 +483,7 @@ struct Config {
     // WeChat web: the browser redirects to GitHub's authorize page, bounces back
     // with an OAuth `code`, and POSTs it to /github/verify, which exchanges it
     // server-side (the secret never leaves the server) and reads the user's
-    // primary verified email to identify the account. GET /github/verify
+    // primary verified email to identify the account. GET /auth/providers
     // advertises the client_id to the web client so it can build the authorize
     // URL; the button is shown only when both credentials are set.
     //
@@ -492,7 +512,7 @@ struct Config {
     // gateway server-side (the browser can't reach it directly -- CORS). On a
     // confirmed scan we read the email straight from Tanka's TLS response and
     // mint our usual tokens. ON by default; set TANKA_LOGIN_ENABLED: false to
-    // disable. GET /tanka/verify advertises the state to the web client so it
+    // disable. GET /auth/providers advertises the state to the web client so it
     // shows/hides the button. See src/user/tanka.cpp.
     bool        tanka_login_enabled = true;
     // Tanka gateway base + the two whitelisted forward paths (the only paths the
@@ -635,6 +655,12 @@ struct Config {
     // at startup to surface config errors before the server runs.
     void print() const;
 };
+
+// Settle FIREBASE_PROJECT_ID against FIREBASE_PROJECT_IDS into one primary plus one
+// accepted set (see Config::firebase_project_ids). Applied by load_config; exposed
+// because load_config also reads a remote config server, so this is the only way to
+// exercise the precedence without the network.
+void reconcile_firebase_projects(std::string& primary, std::vector<std::string>& all);
 
 Config load_config(const mirobody::optional<std::string>& yaml_path = mirobody::nullopt);
 

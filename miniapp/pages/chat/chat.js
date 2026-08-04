@@ -9,19 +9,19 @@
 // question, language, conversation_id, subject. SSE events: reply / thinking /
 // conversation (thread id) / upload / transcript / costStatistics / error.
 //
-// The top-left account avatar opens a left nav drawer — a New chat / Incognito
-// button row, past sessions (resume/delete), WeChat-steps sync, care circle, an
-// account switcher (switch / add account), and sign out. App settings (language
-// / font size / backend / about) live in the top-bar settings gear (the shared
-// <settings-menu> component), mirroring the web client whose gear carries them
-// on both the login and chat screens.
+// The top-left hamburger opens the app's ONLY menu, a left nav drawer — a New
+// chat / Incognito button row, past sessions (resume/delete), WeChat-steps sync,
+// care circle, the app-settings group (the shared <settings-rows> component:
+// language / font size / backend), an account switcher, and sign out.
+// The settings gear that used to sit at the top right is gone: folding it in here
+// leaves one menu affordance instead of two, mirroring the web client.
 var config = require('../../config.js');
 var api = require('../../utils/api.js');
 var auth = require('../../utils/auth.js');
 var werun = require('../../utils/werun.js');
 
 // Font-size offset -> the .page class that scales message text, matching the
-// five tiers in the settings gear (see components/settings-menu).
+// five tiers in the drawer's settings group (see components/settings-rows).
 function fontClassFor(offset) {
   var map = { '-4': 'fs-smaller', '-2': 'fs-small', '0': '', '2': 'fs-large', '4': 'fs-larger' };
   return map[String(offset)] || '';
@@ -54,8 +54,7 @@ Page({
     showSubject: false,
 
     // top bar / settings
-    avatarInitial: '',   // first letter of the JWT email; '' -> person glyph
-    fontClass: '',       // font-size tier class chosen in the settings gear
+    fontClass: '',       // font-size tier class chosen in the drawer's settings group
 
     // drawer
     drawerOpen: false,
@@ -81,11 +80,7 @@ Page({
       wx.redirectTo({ url: '/pages/login/login' });
       return;
     }
-    var email = auth.getUserEmail();
-    this.setData({
-      avatarInitial: email ? email.charAt(0).toUpperCase() : '',
-      fontClass: fontClassFor(config.fontOffset),
-    });
+    this.setData({ fontClass: fontClassFor(config.fontOffset) });
     this.loadProviders();
     this.loadSubjects();
   },
@@ -232,7 +227,7 @@ Page({
     }
   },
 
-  // -- settings gear events (from the shared <settings-menu> component) ----
+  // -- app-settings events (from the shared <settings-rows> component) -----
   // Language selection lives entirely in the component (config.language is read
   // per request in onSend), so only font + backend need a host reaction.
   onFontChange: function (e) {

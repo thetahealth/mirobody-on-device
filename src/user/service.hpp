@@ -62,6 +62,9 @@ private:
     void on_apple_verify(const server::Request& req, server::Response& res);
     void on_wechat_verify(const server::Request& req, server::Response& res);
     void on_github_verify(const server::Request& req, server::Response& res);
+    // GET /auth/providers -- which federated sign-ins this deployment has
+    // configured, plus each one's public config, in a single public document.
+    void on_auth_providers(const server::Request& req, server::Response& res);
 
     // Confirmed-scan callback for TankaService: create-or-get the user for `email`
     // and write the standard auth envelope (the Tanka login flow lives in
@@ -124,14 +127,14 @@ private:
     // returns a Dummy validator when no transport is configured).
     std::unique_ptr<EmailCodeValidator> email_validator_;
 
-    // Firebase web-app config JSON, served by GET /firebase/verify so the web
-    // client can initialize the Firebase JS SDK. Built once from `cfg` in the
-    // ctor; fields are empty when unconfigured.
+    // Firebase web-app config JSON, served by GET /firebase/verify and included in
+    // GET /auth/providers, so a client can initialize the Firebase JS SDK. Built
+    // once from `cfg` in the ctor; empty when unconfigured.
     std::string firebase_web_config_;
 
-    // Apple web config JSON ({"clientId": ...}), served by GET /apple/verify so
-    // the web client can initialize the Apple JS SDK. Built once from `cfg` in
-    // the ctor; empty when Apple sign-in is unconfigured (no APPLE_CLIENT_ID).
+    // Apple web config JSON ({"clientId": ...}), served by GET /apple/verify and
+    // included in GET /auth/providers, so a client can initialize the Apple JS SDK.
+    // Built once from `cfg` in the ctor; empty when unconfigured (no APPLE_CLIENT_ID).
     std::string apple_web_config_;
 
     // WeChat Mini Program credentials for POST /wechat/verify, copied from `cfg`
@@ -151,6 +154,7 @@ private:
     // with {"flow":"web"}, exchanged via sns/oauth2/access_token). Fall back to
     // the Mini Program credentials above when no separate web creds are set.
     // wechat_web_config_ is the JSON {"appid":...} served by GET /wechat/verify
+    // (and included in GET /auth/providers)
     // so the web client can build the authorize URL; empty when unconfigured.
     std::string wechat_web_appid_;
     std::string wechat_web_secret_;
@@ -168,6 +172,12 @@ private:
     std::string github_oauth_base_;
     std::string github_api_base_;
     std::string github_web_config_;
+
+    // The whole sign-in capability set as one JSON object, served by
+    // GET /auth/providers so a client can render its sign-in screen from a single
+    // request instead of probing the four per-provider GET routes. Composed in the
+    // ctor from the config strings above, so it must be declared AFTER them.
+    std::string auth_providers_;
 
     // Tanka QR-code sign-in, owned here so its routes + auto-discovery thread share
     // this service's lifetime. It calls tanka_login() (above) on a confirmed scan;

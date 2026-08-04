@@ -12,7 +12,7 @@ device:
 - **Where the model runs** — the *inference lane*: on-device, a home server, or a cloud
   provider. Chosen per turn by a router. → [Part 1](#part-1--the-inference-lanes)
 - **Where the data lives** — the *storage tier*, which is just the **Backend** setting
-  already in the app's gear menu: this device, a home server, or a hosted deployment.
+  already in the app's nav drawer: this device, a home server, or a hosted deployment.
   Chosen once in settings. → [Part 2](#part-2--the-storage-tiers)
 
 They are orthogonal on purpose. Sending one hard question to a cloud model does not
@@ -558,8 +558,8 @@ with a notice rather than dying.
 
 ## Backend *is* the storage selector
 
-The app already has the control this needs: **Backend** in the gear menu (Android's
-`BaseUrlDialog` in [AppSettingsMenu.kt](../android/app/src/main/java/ai/thetahealth/mirobody/ui/settings/AppSettingsMenu.kt),
+The app already has the control this needs: **Backend** in the nav drawer (Android's
+`BaseUrlDialog` in [AppSettingsSection.kt](../android/app/src/main/java/ai/thetahealth/mirobody/ui/settings/AppSettingsSection.kt),
 the base-URL override in [net.js](../htdoc/src/net.js)). It sets the base URL every
 request is prefixed with — and since chat history, uploads, health records, and the
 account all live behind that server, **Backend already decides where the user's data

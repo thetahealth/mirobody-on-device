@@ -1,8 +1,9 @@
 import Foundation
 import Combine
 
-/// Fetches and caches the server-side `/mirobody.json` document for the current
-/// base URL. Mirrors `data/config/ServerConfigStore.kt`.
+/// Fetches and caches the server's sign-in capability document
+/// (GET /auth/providers) for the current base URL. Mirrors
+/// `data/config/ServerConfigStore.kt`.
 ///
 /// On every base-URL change it hydrates from the per-URL cache and kicks off a
 /// background refresh. `config` is nil until something lands.
@@ -40,7 +41,7 @@ final class ServerConfigStore: ObservableObject {
 
     @discardableResult
     private func refreshInternal(_ baseURL: String) async throws -> ServerConfig {
-        let fetched: ServerConfig = try await api.getRaw("/mirobody.json")
+        let fetched: ServerConfig = try await api.get("/auth/providers")
         if let data = try? JSONEncoder().encode(fetched),
            let json = String(data: data, encoding: .utf8) {
             settings.setCachedServerConfig(baseURL: baseURL, json: json)

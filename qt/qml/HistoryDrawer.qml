@@ -3,16 +3,19 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Mirobody
 
-// The left navigation drawer -- the app's nav home (history.js openHistory).
+// The left navigation drawer -- the app's ONLY menu (history.js openHistory).
 //   top    : a "New chat" / "Incognito" button row (pinned)
 //   middle : the scrolling history list (GET /api/history), each row tap-to-resume
 //            (app.openConversation) and deletable (app.deleteHistory)
-//   bottom : the pinned Health & data group (Connect EHR, Connected devices, and
-//            the Bluetooth devices entry moved off the settings gear) + the account
-//            switcher (current email + caret -> other accounts + Add account) +
-//            Sign out (confirmed).
-// App settings (language / font / backend / about) are NOT here -- they live in the
-// top-bar settings gear, shared with the login screen.
+//   bottom : pinned groups -- Health & data (Connect EHR, Connected devices,
+//            Bluetooth devices), app settings (language / font / backend),
+//            and the account switcher (current email + caret -> other accounts +
+//            Add account) + Sign out (confirmed).
+//
+// The app-settings group used to be the top-bar gear, and was the sole reason the
+// login screen had a right-hand action at all. Folding it in here leaves one menu
+// affordance instead of two -- and lets the login screen open this same drawer
+// showing just that group, since everything else is session-scoped.
 Drawer {
     id: drawer
     edge: I18n.isRtl(app.language) ? Qt.RightEdge : Qt.LeftEdge
@@ -23,6 +26,15 @@ Drawer {
     signal openBle()
     signal openEhr()
     signal openVendors()
+    // App settings, likewise owned by Main so the drawer can close before one opens.
+    signal openLanguage()
+    signal openFont()
+    signal openBackend()
+
+    // Signed out (the login screen's drawer) only the app-settings group applies:
+    // history, New chat / Incognito, health connections and the account rows are all
+    // session-scoped and are left out entirely.
+    readonly property bool signedIn: app.loggedIn && !app.addingAccount
 
     property string status: "loading"   // "loading" | "error" | "list"
     property string errorMessage: ""
@@ -33,9 +45,36 @@ Drawer {
     function reload() {
         status = "loading";
         items.clear();
-        accounts = app.listAccounts();
         switcherOpen = false;
+        // Nothing to load signed out, and /api/history would 401 -- the drawer is
+        // just the settings group then.
+        if (!signedIn) { accounts = []; return; }
+        accounts = app.listAccounts();
         app.loadHistory(0, 20);
+    }
+
+    // One footer row: label on the leading edge, current value on the trailing edge,
+    // so "Language  English" is answerable without opening the dialog.
+    component NavRow: ItemDelegate {
+        id: navRow
+        property string rowLabel: ""
+        property string rowHint: ""
+        contentItem: RowLayout {
+            spacing: 8
+            Label {
+                Layout.fillWidth: true
+                text: navRow.rowLabel
+                color: Theme.surfaceFg
+                elide: Text.ElideRight
+            }
+            Label {
+                visible: navRow.rowHint.length > 0
+                text: navRow.rowHint
+                color: Theme.surfaceVarFg
+                font.pointSize: Theme.baseSize - 2
+                elide: Text.ElideRight
+            }
+        }
     }
 
     function pad(n) { return (n < 10 ? "0" : "") + n; }
@@ -114,7 +153,10 @@ Drawer {
         }
 
         // --- Top row: New chat + Incognito toggle (pinned) -----------------
+        // Signed out there is no thread to start or hide. An invisible item is
+        // skipped by ColumnLayout, so the group below simply moves up.
         RowLayout {
+            visible: drawer.signedIn
             Layout.fillWidth: true
             Layout.margins: 12
             spacing: 8
@@ -138,7 +180,11 @@ Drawer {
         }
 
         // --- Middle: history list (the only scrolling area) ----------------
+        // This is the one item with fillHeight, so hiding it signed out is also what
+        // stops the settings group being pushed to the bottom of an empty drawer:
+        // with no stretching item left, everything sits under the header.
         Item {
+            visible: drawer.signedIn
             Layout.fillWidth: true
             Layout.fillHeight: true
 
@@ -235,15 +281,16 @@ Drawer {
             }
         }
 
-        // --- Footer: Health & data + account switcher + Sign out (pinned) --
+        // --- Footer: Health & data + app settings + account (all pinned) ---
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 0
 
-            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.outlineVar }
+            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: Theme.outlineVar }
 
             // Health & data group label.
             Label {
+                visible: drawer.signedIn
                 Layout.fillWidth: true
                 Layout.topMargin: 8
                 Layout.leftMargin: 20
@@ -254,27 +301,62 @@ Drawer {
             }
 
             ItemDelegate {
+                visible: drawer.signedIn
                 Layout.fillWidth: true
                 text: I18n.t("ehrConnect")
                 onClicked: { drawer.close(); drawer.openEhr(); }
             }
             ItemDelegate {
+                visible: drawer.signedIn
                 Layout.fillWidth: true
                 text: I18n.t("vendorManageTitle")
                 onClicked: { drawer.close(); drawer.openVendors(); }
             }
             // The direct BLE GATT sensor connect, moved here from the settings gear.
             ItemDelegate {
+                visible: drawer.signedIn
                 Layout.fillWidth: true
                 text: I18n.t("bluetoothDevices")
                 onClicked: { drawer.close(); drawer.openBle(); }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.topMargin: 4; height: 1; color: Theme.outlineVar; opacity: 0.5 }
+            Rectangle {
+                visible: drawer.signedIn
+                Layout.fillWidth: true; Layout.topMargin: 4
+                Layout.preferredHeight: 1; color: Theme.outlineVar; opacity: 0.5
+            }
+
+            // App settings -- what the gear used to hold, and the only group the login
+            // screen shows. Each row closes the drawer first, then opens its dialog.
+            NavRow {
+                Layout.fillWidth: true
+                rowLabel: I18n.t("language")
+                rowHint: I18n.languageLabel(app.language)
+                onClicked: { drawer.close(); drawer.openLanguage(); }
+            }
+            NavRow {
+                Layout.fillWidth: true
+                rowLabel: I18n.t("fontSize")
+                rowHint: I18n.fontTierLabel(app.fontOffset)
+                onClicked: { drawer.close(); drawer.openFont(); }
+            }
+            NavRow {
+                Layout.fillWidth: true
+                rowLabel: I18n.t("backend")
+                rowHint: app.baseUrl
+                onClicked: { drawer.close(); drawer.openBackend(); }
+            }
+
+            Rectangle {
+                visible: drawer.signedIn
+                Layout.fillWidth: true; Layout.topMargin: 4
+                Layout.preferredHeight: 1; color: Theme.outlineVar; opacity: 0.5
+            }
 
             // Account switcher: the current email + caret expands the other stored
             // accounts (tap to switch) plus "Add account".
             ItemDelegate {
+                visible: drawer.signedIn
                 Layout.fillWidth: true
                 onClicked: drawer.switcherOpen = !drawer.switcherOpen
                 contentItem: RowLayout {
@@ -296,7 +378,7 @@ Drawer {
             // Expanded switcher: other accounts + Add account.
             Column {
                 Layout.fillWidth: true
-                visible: drawer.switcherOpen
+                visible: drawer.signedIn && drawer.switcherOpen
                 Repeater {
                     model: drawer.accounts
                     delegate: ItemDelegate {
@@ -318,6 +400,7 @@ Drawer {
             // Sign out the current account (confirmed). app.signOut then falls back
             // to another stored account, or the login screen when none remain.
             ItemDelegate {
+                visible: drawer.signedIn
                 Layout.fillWidth: true
                 Layout.bottomMargin: 6
                 contentItem: Label {

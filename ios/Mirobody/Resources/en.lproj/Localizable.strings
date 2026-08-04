@@ -20,6 +20,11 @@
 "email_required" = "Email is required";
 "email_send_code" = "Send code";
 "email_resend_in" = "Resend in %1$ds";
+"email_sending_code" = "Sending code…";
+"email_send_failed" = "Failed to send code.";
+"email_enter_code" = "Enter the code from the email.";
+"email_verifying" = "Verifying…";
+"email_verify_failed" = "Verification failed.";
 "auth_or" = "or";
 "auth_continue_with_google" = "Continue with Google";
 "auth_continue_with_apple" = "Continue with Apple";
@@ -27,6 +32,10 @@
 "auth_continue_with_github" = "Continue with GitHub";
 "auth_continue_with_x" = "Continue with X";
 "auth_google_failed" = "Google sign-in failed";
+"auth_apple_failed" = "Apple sign-in failed";
+"auth_wechat_failed" = "WeChat sign-in failed";
+"auth_github_failed" = "GitHub sign-in failed";
+"auth_x_failed" = "X sign-in failed";
 
 /* Verify */
 "verify_title" = "Enter code";
@@ -50,8 +59,6 @@
 "chat_backend" = "Backend";
 "chat_attach_file" = "Attach file";
 "chat_attach_remove" = "Remove attachment";
-"chat_about" = "About";
-"about_version" = "Version %1$@";
 "chat_sign_out" = "Sign out";
 "chat_sign_out_confirm_title" = "Sign out?";
 "chat_sign_out_confirm_message" = "You'll need to sign in again.";

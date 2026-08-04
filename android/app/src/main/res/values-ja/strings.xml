@@ -16,6 +16,11 @@
     <string name="email_required">メールアドレスを入力してください</string>
     <string name="email_send_code">コードを送信</string>
     <string name="email_resend_in">%1$d 秒後に再送信</string>
+    <string name="email_sending_code">コードを送信中…</string>
+    <string name="email_send_failed">コードの送信に失敗しました。</string>
+    <string name="email_enter_code">メールに記載のコードを入力してください。</string>
+    <string name="email_verifying">認証中…</string>
+    <string name="email_verify_failed">認証に失敗しました。</string>
 
     <string name="verify_title">コードを入力</string>
     <string name="verify_sent_to">%1$s に送信しました。</string>
@@ -26,7 +31,6 @@
     <string name="chat_message_hint">何でも質問してください</string>
     <string name="chat_history_cd">履歴</string>
     <string name="chat_select_model">モデルを選択</string>
-    <string name="chat_currently_for">現在の対象</string>
     <string name="chat_subject_me">自分</string>
 
     <string name="chat_attach_file">ファイルを添付</string>
@@ -102,8 +106,6 @@
     <string name="health_syncing">同期中…</string>
     <string name="health_result">%1$d 件送信、%2$d 件失敗。</string>
     <string name="health_error">エラー：%1$s</string>
-    <string name="chat_about">バージョン情報</string>
-    <string name="about_version">バージョン %1$s</string>
     <string name="chat_sign_out">ログアウト</string>
     <string name="chat_sign_out_confirm_title">ログアウトしますか？</string>
     <string name="chat_sign_out_confirm_message">次回は再度ログインが必要です。</string>
@@ -186,6 +188,8 @@
     <string name="chat_ehr_sync_done">%1$d 件の観測データを取り込みました。</string>
     <string name="auth_apple_failed">Apple サインインに失敗しました</string>
     <string name="auth_wechat_failed">WeChat サインインに失敗しました</string>
+    <string name="auth_github_failed">GitHub サインインに失敗しました</string>
+    <string name="auth_x_failed">X サインインに失敗しました</string>
     <string name="chat_bluetooth">Bluetooth デバイス</string>
     <string name="chat_bluetooth_hdp">Bluetooth HDP（レガシー）</string>
     <string name="ble_title">Bluetooth 健康デバイス</string>

@@ -5,9 +5,10 @@
 // for it). A popup yields a Firebase ID token, which POST /firebase/verify
 // validates server-side (FirebaseTokenValidator) and exchanges for app tokens.
 //
-// The Firebase web config comes from GET /firebase/verify (loadGoogleConfig);
-// the button is shown only once a usable config (apiKey + projectId) arrives,
-// so a server without Firebase configured simply hides Google sign-in.
+// The Firebase web config comes from GET /auth/providers (loadAuthProviders, at
+// the bottom of this file); the button is shown only once a usable config
+// (apiKey + projectId) arrives, so a server without Firebase configured simply
+// hides Google sign-in.
 //----------------------------------------------------------------------------
 
 const net = require("./net");
@@ -16,28 +17,14 @@ const app = require("./app");
 var FIREBASE_VERSION = "10.12.0";
 var firebaseConfig = null;   // {apiKey, projectId, messagingSenderId} when available
 
-// The Google button is shown iff GET /firebase/verify returned code 0 (i.e. the
-// server has Google sign-in configured), which net.get signals via onsuccess.
+// The Google button is shown iff the capability document reported google as
+// enabled, i.e. the server has Google sign-in configured.
 function googleEnabled() {
     return !!firebaseConfig;
 };
 
-// Fetch the web config once, lazily, the first time the sign-in panel renders
-// (not at page load; that first render can also be the signed-in Switch-account
-// view). On success (code 0), re-render the login view to reveal the button.
-var googleConfigRequested = false;
-function loadGoogleConfig() {
-    if (googleConfigRequested) { return; }
-    googleConfigRequested = true;
-    net.get(
-        "/firebase/verify",
-        function (data) {
-            firebaseConfig = (data && typeof data === "object") ? data : {};
-            if (app.showingLogin()) { app.render(); }
-        },
-        function () { /* non-zero code / error: leave Google sign-in hidden */ }
-    );
-};
+// Google's config arrives with everyone else's, from the single capability
+// document -- see loadAuthProviders() near the bottom of this file.
 
 // Resolve once to {authMod, auth}; reused across clicks.
 var firebasePromise = null;
@@ -78,7 +65,7 @@ function signInWithGoogle() {
 //   * On Apple platforms (iOS / iPadOS / macOS) we use Apple's own JS SDK, which
 //     presents the system-integrated sign-in sheet. It yields an Apple ID token
 //     validated by POST /apple/verify (AppleTokenValidator). It authenticates
-//     against the Services ID (GET /apple/verify -> {clientId}) and needs that
+//     against the Services ID (from GET /auth/providers) and needs that
 //     Services ID's return URL (https://<origin>/) registered + the domain
 //     verified in the Apple Developer console.
 //
@@ -97,7 +84,7 @@ function signInWithGoogle() {
 
 var APPLE_SDK_URL =
     "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
-var appleConfig = null;   // {clientId} (the Services ID) once GET /apple/verify resolves
+var appleConfig = null;   // {clientId} (the Services ID) once discovery resolves
 
 // True on Apple operating systems (in any browser): iPhone/iPad/iPod, iPadOS 13+
 // (which reports as "Mac" but is touch-capable), and macOS. This is an OS check,
@@ -113,29 +100,17 @@ function isApplePlatform() {
 
 // The Apple button is shown whenever sign-in is actually possible here: the
 // Firebase fallback covers every platform, and on Apple platforms the native
-// flow also works once its Services ID config (GET /apple/verify) has loaded.
+// flow also works once its Services ID config has arrived from discovery.
 function appleEnabled() {
     return !!firebaseConfig || (isApplePlatform() && !!appleConfig);
 };
 
-// Fetch the Apple web config once, lazily. Resolves to {clientId} (or null when
-// the server has no Apple Services ID configured). On a successful load it
-// re-renders the login view so the button can appear if Firebase is absent.
-var appleConfigPromise = null;
+// Resolves to {clientId}, or null when the server has no Apple Services ID
+// configured. Apple is the one provider whose config is needed *before* a click can proceed:
+// signInWithApple has to hand the Services ID to Apple's SDK. So this stays a
+// promise, now just a view onto the shared discovery below.
 function loadAppleConfig() {
-    if (appleConfigPromise) { return appleConfigPromise; }
-    appleConfigPromise = new Promise(function (resolve) {
-        net.get(
-            "/apple/verify",
-            function (data) {
-                appleConfig = (data && typeof data === "object") ? data : {};
-                if (app.showingLogin()) { app.render(); }
-                resolve(appleConfig);
-            },
-            function () { appleConfig = null; resolve(null); }
-        );
-    });
-    return appleConfigPromise;
+    return loadAuthProviders().then(function () { return appleConfig; });
 };
 
 // Load Apple's JS SDK once (it attaches window.AppleID). Its script origin is
@@ -206,8 +181,8 @@ function signInWithApple() {
 };
 
 //----------------------------------------------------------------------------
-// WeChat web sign-in. GET /wechat/verify returns {appid} (code 0) when WeChat
-// web sign-in is configured, so the button is shown only then. Clicking it sends
+// WeChat web sign-in. Discovery reports {appid} when WeChat web sign-in is
+// configured, so the button is shown only then. Clicking it sends
 // the browser to WeChat to obtain an OAuth `code`: inside WeChat's in-app
 // browser via oauth2/authorize (snsapi_userinfo, a seamless redirect like the
 // Google button), elsewhere via qrconnect (a desktop QR scan, snsapi_login).
@@ -220,28 +195,13 @@ var WECHAT_STATE_KEY = "mirobody-wechat-state";
 var wechatConfig = null;   // {appid} when available
 var wechatError  = false;  // set when a callback exchange fails; read by the login view
 
-// Enabled whenever the probe succeeded (GET /wechat/verify returned code 0),
-// mirroring googleEnabled() -- the server only returns code 0 when web sign-in
-// is configured, so a non-null config is the signal to show the button.
+// Enabled whenever discovery reported wechat as enabled, mirroring
+// googleEnabled() -- a non-null config is the signal to show the button.
 function wechatEnabled() {
     return !!wechatConfig;
 };
 
-// Fetch the WeChat web config once, lazily, the first time the sign-in panel
-// renders. On success (code 0), re-render the login view to reveal the button.
-var wechatConfigRequested = false;
-function loadWeChatConfig() {
-    if (wechatConfigRequested) { return; }
-    wechatConfigRequested = true;
-    net.get(
-        "/wechat/verify",
-        function (data) {
-            wechatConfig = (data && typeof data === "object") ? data : {};
-            if (app.showingLogin()) { app.render(); }
-        },
-        function () { /* not configured / error: leave WeChat sign-in hidden */ }
-    );
-};
+// wechatConfig is filled by the shared capability fetch (loadAuthProviders).
 
 // True when the page is loaded inside WeChat's in-app browser.
 function inWeChat() {
@@ -347,8 +307,8 @@ function takeWeChatError() {
 };
 
 //----------------------------------------------------------------------------
-// GitHub OAuth sign-in (web). GET /github/verify returns {clientId} (code 0)
-// when GitHub sign-in is configured, so the button is shown only then. Clicking
+// GitHub OAuth sign-in (web). Discovery reports {clientId} when GitHub sign-in
+// is configured, so the button is shown only then. Clicking
 // it redirects the browser to GitHub's authorize page; GitHub bounces back here
 // with ?code=...&state=..., and consumeGitHubRedirect() exchanges that code via
 // POST /github/verify for app tokens. Like WeChat web this is a full-page
@@ -359,27 +319,13 @@ var GITHUB_STATE_KEY = "mirobody-github-state";
 var githubConfig = null;   // {clientId} when available
 var githubError  = false;  // set when a callback exchange fails; read by the login view
 
-// Enabled whenever the probe succeeded (GET /github/verify returned code 0),
-// mirroring wechatEnabled().
+// Enabled whenever discovery reported github as enabled, mirroring
+// wechatEnabled().
 function githubEnabled() {
     return !!githubConfig;
 };
 
-// Fetch the GitHub web config once, lazily, the first time the sign-in panel
-// renders. On success (code 0), re-render the login view to reveal the button.
-var githubConfigRequested = false;
-function loadGitHubConfig() {
-    if (githubConfigRequested) { return; }
-    githubConfigRequested = true;
-    net.get(
-        "/github/verify",
-        function (data) {
-            githubConfig = (data && typeof data === "object") ? data : {};
-            if (app.showingLogin()) { app.render(); }
-        },
-        function () { /* not configured / error: leave GitHub sign-in hidden */ }
-    );
-};
+// githubConfig is filled by the shared capability fetch (loadAuthProviders).
 
 // Where GitHub returns to: this page stripped of any query/hash, so the
 // bounce-back lands on the login route carrying just ?code=...&state=...
@@ -455,7 +401,7 @@ function takeGitHubError() {
 //----------------------------------------------------------------------------
 // X (formerly Twitter) sign-in (web). Brokered through Firebase Auth's built-in
 // "twitter.com" provider, exactly like the Google button above -- it reuses the
-// same Firebase web config (GET /firebase/verify) and the same loadFirebase()
+// same Firebase web config (from GET /auth/providers) and the same loadFirebase()
 // helper, so there is no dedicated /x/verify route: the Firebase ID token from
 // the popup is validated by the backend's FirebaseTokenValidator at
 // /firebase/verify regardless of which provider produced it.
@@ -485,8 +431,8 @@ function signInWithX() {
 };
 
 //----------------------------------------------------------------------------
-// Tanka QR-code sign-in (web). GET /tanka/verify returns code 0 when Tanka login
-// is enabled on the server, so the button is shown only then. Unlike the other
+// Tanka QR-code sign-in (web). The capability document reports whether Tanka
+// login is enabled on the server, so the button is shown only then. Unlike the other
 // providers there's no client-side SDK or redirect: clicking the button opens an
 // in-card QR panel (see tanka.js) that talks to /tanka/qrcode + /tanka/poll.
 
@@ -496,26 +442,69 @@ function tankaEnabled() {
     return !!tankaConfig;
 };
 
-// Fetch the enablement flag once, lazily, the first time the sign-in panel
-// renders. On success (code 0), re-render the login view to reveal the button.
-var tankaConfigRequested = false;
-function loadTankaConfig() {
-    if (tankaConfigRequested) { return; }
-    tankaConfigRequested = true;
-    net.get(
-        "/tanka/verify",
-        function (data) {
-            tankaConfig = (data && typeof data === "object") ? data : {};
-            if (app.showingLogin()) { app.render(); }
-        },
-        function () { /* not configured / error: leave Tanka sign-in hidden */ }
-    );
+// tankaConfig is filled by the shared capability fetch (loadAuthProviders).
+
+//----------------------------------------------------------------------------
+// Sign-in capability discovery -- one request that answers "which federated
+// buttons does this deployment have", for all of them at once:
+//
+//   GET /auth/providers
+//   {"google":{"enabled":true,"config":{apiKey,projectId,messagingSenderId}},
+//    "apple":{"enabled":true,"config":{clientId}},
+//    "wechat":{"enabled":false},
+//    "github":{"enabled":true,"config":{clientId}},
+//    "tanka":{"enabled":true}}
+//
+// This replaced five separate probes -- a GET on each provider's own /verify
+// route -- which meant five round trips before the sign-in panel stopped
+// shifting, and leaned on those routes' GET side channel (they are really the
+// POST verify endpoints). The five routes still work; nothing here depends on
+// them any more.
+//
+// A provider the server has no opinion about is ABSENT from the document rather
+// than present-and-false, so its client-side default stands. X is the live case:
+// it is brokered entirely through Firebase and has no server config of its own.
+//
+// It fills exactly the same per-provider variables the old probes did, so every
+// accessor and SDK loader above is unchanged.
+
+var providersPromise = null;
+function loadAuthProviders() {
+    if (providersPromise) { return providersPromise; }
+    providersPromise = new Promise(function (resolve) {
+        net.get(
+            "/auth/providers",
+            function (data) {
+                var doc = (data && typeof data === "object") ? data : {};
+                // Disabled -> null (the *Enabled() accessors test truthiness).
+                // Enabled with no public config -- Tanka needs no credentials of
+                // ours -- still has to be truthy, hence the {} fallback.
+                function configFor(name) {
+                    var p = doc[name];
+                    if (!p || !p.enabled) { return null; }
+                    return (p.config && typeof p.config === "object") ? p.config : {};
+                }
+                firebaseConfig = configFor("google");
+                appleConfig    = configFor("apple");
+                wechatConfig   = configFor("wechat");
+                githubConfig   = configFor("github");
+                tankaConfig    = configFor("tanka");
+                if (app.showingLogin()) { app.render(); }
+                resolve(doc);
+            },
+            // Unreachable server, or one too old to serve this route: every
+            // federated button stays hidden and email sign-in still works.
+            function () { resolve(null); }
+        );
+    });
+    return providersPromise;
 };
 
 //----------------------------------------------------------------------------
 
+exports.loadAuthProviders = loadAuthProviders;
+
 exports.googleEnabled    = googleEnabled;
-exports.loadGoogleConfig = loadGoogleConfig;
 exports.signInWithGoogle = signInWithGoogle;
 
 exports.appleEnabled    = appleEnabled;
@@ -523,13 +512,11 @@ exports.loadAppleConfig = loadAppleConfig;
 exports.signInWithApple = signInWithApple;
 
 exports.wechatEnabled        = wechatEnabled;
-exports.loadWeChatConfig     = loadWeChatConfig;
 exports.startWeChatLogin     = startWeChatLogin;
 exports.consumeWeChatRedirect = consumeWeChatRedirect;
 exports.takeWeChatError      = takeWeChatError;
 
 exports.githubEnabled         = githubEnabled;
-exports.loadGitHubConfig      = loadGitHubConfig;
 exports.startGitHubLogin      = startGitHubLogin;
 exports.consumeGitHubRedirect = consumeGitHubRedirect;
 exports.takeGitHubError       = takeGitHubError;
@@ -538,4 +525,3 @@ exports.xEnabled     = xEnabled;
 exports.signInWithX  = signInWithX;
 
 exports.tankaEnabled    = tankaEnabled;
-exports.loadTankaConfig = loadTankaConfig;

@@ -1,9 +1,11 @@
 <view class="login">
-  <!-- Top bar: just the app-settings gear on the right (language / font size /
-       backend / about), the same shared <settings-menu> the chat screen shows,
-       so settings sit in one consistent place across both screens. -->
+  <!-- Top bar: the hamburger, and nothing else. It opens the same nav drawer the
+       chat screen has, narrowed to the app-settings group — history, the account
+       rows and the health connections are all session-scoped, so signed out there
+       is nothing else to show. No wordmark beside it either: the brand block just
+       below is already the brand statement. -->
   <view class="topbar">
-    <settings-menu></settings-menu>
+    <view class="menu-btn" bindtap="openDrawer">☰</view>
   </view>
 
   <!-- Brand block: the real mirobody mark, a serif title, and the subtitle,
@@ -72,4 +74,18 @@
 
   <view class="status" wx:if="{{status}}">{{status}}</view>
   <view class="hint">登录即表示同意用户协议与隐私政策</view>
+
+  <!-- The settings-only drawer, same scrim + left-anchored panel as the chat one.
+       No scrolling band here: with no history to fill it, the group sits straight
+       under the header rather than being pushed to the bottom of a blank panel. -->
+  <view class="mask {{drawerOpen ? 'show' : ''}}" bindtap="closeDrawer"></view>
+  <view class="drawer {{drawerOpen ? 'open' : ''}}">
+    <view class="drawer-head">
+      <view class="drawer-back" bindtap="closeDrawer">←</view>
+      <text class="drawer-title">菜单</text>
+    </view>
+    <view class="drawer-foot">
+      <settings-rows bind:backendchange="onBackendChange"></settings-rows>
+    </view>
+  </view>
 </view>

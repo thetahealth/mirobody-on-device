@@ -74,6 +74,19 @@ goto parse
 :parsed
 
 if "%ABI%"=="" set "ABI=arm64-v8a"
+
+rem The sysroot's per-target lib dir, which the vulkan loader below is read from.
+rem Derived rather than hardcoded: `x86_64 vulkan` used to be handed the aarch64
+rem path, which does not exist in an x86_64 sysroot. Unknown ABIs are rejected here
+rem instead of reaching -DOHOS_ARCH, where they fail deep in the toolchain file.
+set "OHOS_TRIPLE="
+if /I "%ABI%"=="arm64-v8a" set "OHOS_TRIPLE=aarch64-linux-ohos"
+if /I "%ABI%"=="x86_64"    set "OHOS_TRIPLE=x86_64-linux-ohos"
+if not defined OHOS_TRIPLE (
+    echo [build-llama] abi must be arm64-v8a^|x86_64 ^(got '%ABI%'^)
+    exit /b 2
+)
+
 rem Default is the best measured config on a Kirin 9020: vs baseline armv8-a it is
 rem ~2.95x prefill and ~1.42x decode. `+sve` is deliberately absent -- the device
 rem has SVE1, and adding it REGRESSED prefill by ~34% (measured), apparently by
@@ -136,8 +149,9 @@ rem and is not part of the cross toolchain. Point CMake at the sysroot's Vulkan
 rem explicitly; left to itself it would find the HOST SDK's and link the wrong ABI.
 set "VK_ARG="
 if /I "%BACKEND%"=="vulkan" (
-    set "GLSLC="
-    for /f "delims=" %%G in ('dir /b /o-n "D:\VulkanSDK" 2^>nul') do (
+    rem A preset GLSLC wins -- the message below offers that override, and clearing
+    rem the variable first made it a no-op. Otherwise: newest SDK under D:\VulkanSDK.
+    if not defined GLSLC for /f "delims=" %%G in ('dir /b /o-n "D:\VulkanSDK" 2^>nul') do (
         if not defined GLSLC if exist "D:\VulkanSDK\%%G\Bin\glslc.exe" set "GLSLC=D:\VulkanSDK\%%G\Bin\glslc.exe"
     )
     if not defined GLSLC (
@@ -175,7 +189,7 @@ if /I "%BACKEND%"=="vulkan" (
     rem cooperative_matrix2: 3.3 MB of 44. So the 50 MB is the price of the backend,
     rem and the only question that matters is whether it buys throughput on Maleoon --
     rem if not, drop `vulkan` and the whole cost goes with it.
-    set "VK_ARG=-DGGML_VULKAN=ON -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH -DVulkan_GLSLC_EXECUTABLE="!GLSLC!" -DVulkan_INCLUDE_DIR="!VULKAN_SDK!/Include" -DVulkan_LIBRARY="!NATIVE!/sysroot/usr/lib/aarch64-linux-ohos/libvulkan.so" -DSPIRV-Headers_DIR="!VULKAN_SDK!/Lib/cmake/SPIRV-Headers""
+    set "VK_ARG=-DGGML_VULKAN=ON -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH -DVulkan_GLSLC_EXECUTABLE="!GLSLC!" -DVulkan_INCLUDE_DIR="!VULKAN_SDK!/Include" -DVulkan_LIBRARY="!NATIVE!/sysroot/usr/lib/!OHOS_TRIPLE!/libvulkan.so" -DSPIRV-Headers_DIR="!VULKAN_SDK!/Lib/cmake/SPIRV-Headers""
 )
 
 "%CMAKE%" -S "%LLAMA_SRC%" -B "%BUILD%" -G Ninja ^

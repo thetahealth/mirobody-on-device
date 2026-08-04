@@ -1,27 +1,29 @@
 <view class="page {{fontClass}}">
-  <!-- Toolbar, mirroring the web client's CenterAlignedTopAppBar: the account
-       avatar (left) opens the nav drawer, the "Mirobody" brand is centered, and
-       the settings gear (right) opens the app-settings menu. The avatar is a
-       filled navy circle showing the first letter of the JWT email, or a person
-       glyph when the token carries no email (e.g. a WeChat login). -->
+  <!-- Toolbar, mirroring the web client's on a phone: the hamburger opens the nav
+       drawer with the "Mirobody" wordmark beside it, the centre holds the subject
+       picker, and there is no right-hand zone — the settings gear that used to fill
+       it is a group inside the drawer now.
+
+       The wordmark and the subject picker are alternatives for one row: nothing
+       shared with me -> brand; a care-circle member has -> the picker takes the
+       centre and the brand gives way. The empty trailing zone is what keeps that
+       picker optically centred against the hamburger. -->
   <view class="toolbar">
     <view class="tb-side">
-      <view class="avatar" bindtap="openDrawer">
-        <text wx:if="{{avatarInitial}}">{{avatarInitial}}</text>
-        <image
-          wx:else
-          class="avatar-glyph"
-          mode="aspectFit"
-          src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZmZmZiI+PGNpcmNsZSBjeD0iMTIiIGN5PSI4IiByPSI0LjIiLz48cGF0aCBkPSJNMy41IDIwLjVjMC00LjMgNC4yLTYuNSA4LjUtNi41czguNSAyLjIgOC41IDYuNXoiLz48L3N2Zz4="
-        />
-      </view>
+      <view class="menu-btn" bindtap="openDrawer">☰</view>
+      <text wx:if="{{!showSubject}}" class="brand serif">Mirobody</text>
     </view>
-    <text class="brand serif">Mirobody</text>
-    <view class="tb-side tb-right">
-      <settings-menu
-        bind:fontchange="onFontChange"
-        bind:backendchange="onBackendChange"></settings-menu>
+    <view class="tb-center">
+      <picker
+        wx:if="{{showSubject}}"
+        mode="selector"
+        range="{{subjectNames}}"
+        value="{{subjectIndex}}"
+        bindchange="onSubjectChange">
+        <view class="pill">{{subjectNames[subjectIndex]}}</view>
+      </picker>
     </view>
+    <view class="tb-side tb-right"></view>
   </view>
 
   <!-- Message list -->
@@ -74,25 +76,15 @@
         bindfocus="onBarFocus"
         bindblur="onBarBlur"></textarea>
 
-      <!-- Control row: attach and Send are fixed ends; between them the subject
-           and model pickers split the bar into two equal halves, each centered
-           in its own half (mirrors the web client's composer). -->
+      <!-- Control row: attach and Send are the fixed ends, and the model picker
+           fills the space between them, centred. The subject picker used to share
+           that space; on a phone the web client moves it up into the top bar
+           instead, which leaves the model picker alone in the middle and reading
+           as centred between two equal-width ends. -->
       <view class="controls">
         <view class="attach" bindtap="onAttach">＋</view>
 
-        <view class="half">
-          <picker
-            wx:if="{{showSubject}}"
-            class="subject"
-            mode="selector"
-            range="{{subjectNames}}"
-            value="{{subjectIndex}}"
-            bindchange="onSubjectChange">
-            <view class="pill">{{subjectNames[subjectIndex]}}</view>
-          </picker>
-        </view>
-
-        <view class="half">
+        <view class="model-slot">
           <picker
             class="provider"
             mode="selector"
@@ -115,7 +107,8 @@
   <view class="mask {{drawerOpen ? 'show' : ''}}" bindtap="closeDrawer"></view>
   <view class="drawer {{drawerOpen ? 'open' : ''}}">
     <view class="drawer-head">
-      <text class="drawer-title serif">Mirobody</text>
+      <view class="drawer-back" bindtap="closeDrawer">←</view>
+      <text class="drawer-title">菜单</text>
     </view>
 
     <!-- Two equal-width text buttons: New chat and the incognito toggle, matching
@@ -153,10 +146,17 @@
 
       <view class="foot-divider"></view>
 
+      <!-- App settings — what the top-bar gear used to hold. The same group the
+           login screen's drawer shows on its own. -->
+      <settings-rows
+        bind:fontchange="onFontChange"
+        bind:backendchange="onBackendChange"></settings-rows>
+
+      <view class="foot-divider"></view>
+
       <!-- Account switcher: the current account's email (muted) with a caret
            that expands the other signed-in accounts (tap to switch) plus an
-           "添加账号" row. Mirrors the web client's history.js account block.
-           App settings live in the top-bar gear, not here. -->
+           "添加账号" row. Mirrors the web client's history.js account block. -->
       <view class="acct-row" bindtap="toggleSwitcher">
         <text class="acct-email">{{accountLabel}}</text>
         <text class="acct-caret {{switcherOpen ? 'up' : ''}}">⌄</text>

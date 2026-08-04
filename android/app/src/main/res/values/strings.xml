@@ -20,6 +20,11 @@
     <string name="email_required">Email is required</string>
     <string name="email_send_code">Send code</string>
     <string name="email_resend_in">Resend in %1$ds</string>
+    <string name="email_sending_code">Sending code…</string>
+    <string name="email_send_failed">Failed to send code.</string>
+    <string name="email_enter_code">Enter the code from the email.</string>
+    <string name="email_verifying">Verifying…</string>
+    <string name="email_verify_failed">Verification failed.</string>
     <string name="auth_or">or</string>
     <string name="auth_continue_with_google">Continue with Google</string>
     <string name="auth_google_failed">Google sign-in failed</string>
@@ -27,6 +32,8 @@
     <string name="auth_apple_failed">Apple sign-in failed</string>
     <string name="auth_continue_with_wechat">Continue with WeChat</string>
     <string name="auth_wechat_failed">WeChat sign-in failed</string>
+    <string name="auth_github_failed">GitHub sign-in failed</string>
+    <string name="auth_x_failed">X sign-in failed</string>
     <string name="auth_continue_with_github">Continue with GitHub</string>
     <string name="auth_continue_with_x">Continue with X</string>
 
@@ -51,7 +58,6 @@
     <string name="chat_add_account">Add account</string>
     <string name="chat_history_cd">History</string>
     <string name="chat_select_model">Select model</string>
-    <string name="chat_currently_for">Currently for</string>
     <string name="chat_subject_me">Me</string>
 
     <string name="chat_attach_file">Attach file</string>
@@ -166,8 +172,6 @@
     <string name="hdp_unsupported">HDP is only available on Android 9 and below. On newer devices use Bluetooth (BLE) instead.</string>
     <string name="hdp_start">Start listening</string>
     <string name="hdp_stop">Stop</string>
-    <string name="chat_about">About</string>
-    <string name="about_version">Version %1$s</string>
     <string name="chat_sign_out">Sign out</string>
     <string name="chat_sign_out_confirm_title">Sign out?</string>
     <string name="chat_sign_out_confirm_message">You\'ll need to sign in again.</string>

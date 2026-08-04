@@ -127,4 +127,3 @@ At runtime `main.js` switches its paths to `process.resourcesPath` when
   local use, do not ship it enabled (anyone could sign in with the well-known
   codes). It also carries the full server template (e.g. a `PG_*` block); those
   keys are inert under the desktop's SQLite-backed shared library.
-```

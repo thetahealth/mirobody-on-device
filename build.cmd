@@ -107,7 +107,12 @@ if not exist "%BUILD_DIR%\build.ninja" (
 )
 
 cmake --build "%BUILD_DIR%" --config Release
-goto :eof
+:: Propagate cmake's exit code. NOT `goto :eof`, which is what used to be here:
+:: goto is itself a successful command, so it resets ERRORLEVEL to 0 and a failed
+:: build reported success -- CI would go green on a broken tree. Bare `exit /b`
+:: has the same problem despite the folklore; only `exit /b %errorlevel%` carries
+:: the code out. (The jump is still needed: the :usage block follows.)
+exit /b %errorlevel%
 
 :usage
 echo Usage: build.cmd [arch] [backend] [mobile] [clean]      (tokens in any order)

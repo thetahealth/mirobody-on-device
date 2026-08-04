@@ -17,6 +17,11 @@
 "email_required" = "Se requiere correo";
 "email_send_code" = "Enviar código";
 "email_resend_in" = "Reenviar en %1$d s";
+"email_sending_code" = "Enviando código…";
+"email_send_failed" = "No se pudo enviar el código.";
+"email_enter_code" = "Introduce el código del correo.";
+"email_verifying" = "Verificando…";
+"email_verify_failed" = "Error de verificación.";
 "auth_or" = "o";
 "auth_continue_with_google" = "Continuar con Google";
 "auth_continue_with_apple" = "Continuar con Apple";
@@ -24,6 +29,10 @@
 "auth_continue_with_github" = "Continuar con GitHub";
 "auth_continue_with_x" = "Continuar con X";
 "auth_google_failed" = "Error al iniciar sesión con Google";
+"auth_apple_failed" = "Error al iniciar sesión con Apple";
+"auth_wechat_failed" = "Error al iniciar sesión con WeChat";
+"auth_github_failed" = "Error al iniciar sesión con GitHub";
+"auth_x_failed" = "Error al iniciar sesión con X";
 
 "verify_title" = "Introducir código";
 "verify_sent_to" = "Enviado a %1$@.";
@@ -45,8 +54,6 @@
 "chat_backend" = "Servidor";
 "chat_attach_file" = "Adjuntar archivo";
 "chat_attach_remove" = "Quitar adjunto";
-"chat_about" = "Acerca de";
-"about_version" = "Versión %1$@";
 "chat_sign_out" = "Cerrar sesión";
 "chat_sign_out_confirm_title" = "¿Cerrar sesión?";
 "chat_sign_out_confirm_message" = "Tendrás que iniciar sesión de nuevo.";

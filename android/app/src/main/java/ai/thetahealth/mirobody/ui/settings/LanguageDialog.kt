@@ -27,8 +27,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.theme.MirobodyTheme
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -154,5 +156,15 @@ private fun LanguageWheelPicker(
                 .align(Alignment.TopCenter)
                 .padding(top = itemHeight * (sideCount + 1)),
         )
+    }
+}
+
+// The picker takes plain parameters and reads no AppContainer, so it renders in
+// the IDE as-is. See ui/DrawerRow.kt for why previews exist at all here.
+@Preview(name = "Language dialog", showBackground = true, heightDp = 420)
+@Composable
+private fun LanguageDialogPreview() {
+    MirobodyTheme {
+        LanguageDialog(current = "zh", onPick = {}, onDismiss = {})
     }
 }

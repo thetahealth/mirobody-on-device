@@ -59,14 +59,6 @@ qt_add_executable(mirobody_qt
 # of the repo stays at its C++11 floor.
 target_compile_features(mirobody_qt PRIVATE cxx_std_17)
 
-# The package version is surfaced in the About dialog (mirrors the web client's
-# __APP_VERSION__). Falls back to "dev" when not overridden by the caller.
-if(NOT DEFINED MIROBODY_QT_VERSION)
-    set(MIROBODY_QT_VERSION "dev")
-endif()
-target_compile_definitions(mirobody_qt PRIVATE
-    MIROBODY_QT_VERSION="${MIROBODY_QT_VERSION}")
-
 # The QML module. QML_FILES are compiled to C++ by the Qt Quick compiler and
 # embedded in the binary; RESOURCES carry the plain-JS string table. Theme.qml
 # and I18n.qml are singletons (declared with `pragma Singleton`); flag them so
@@ -84,7 +76,6 @@ qt_add_qml_module(mirobody_qt
         qml/LoginPage.qml
         qml/ChatPage.qml
         qml/MessageDelegate.qml
-        qml/SettingsMenu.qml
         qml/HistoryDrawer.qml
         qml/CostDialog.qml
         qml/BackendDialog.qml
@@ -93,7 +84,6 @@ qt_add_qml_module(mirobody_qt
         qml/VendorsDialog.qml
         qml/LanguageDialog.qml
         qml/FontDialog.qml
-        qml/AboutDialog.qml
         qml/ConfirmDialog.qml
     RESOURCES
         qml/strings.js

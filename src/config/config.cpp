@@ -213,6 +213,33 @@ AzureConfig load_azure_config(const utils::LocalYamlStore& store) {
 
 //------------------------------------------------------------------------------
 
+// Settle FIREBASE_PROJECT_ID against FIREBASE_PROJECT_IDS into one primary + one
+// accepted set. Split out of load_config so it can be tested without the network:
+// load_config also pulls a remote config store, which would supply these very keys.
+//
+// Rules, in the order they matter:
+//   - no list        -> the set is just the primary (the single-project deployment).
+//   - no primary     -> the list's first entry becomes it; something has to be the
+//                       project published to the web client and named in the CSP.
+//   - primary absent
+//     from the list  -> PREPENDED, never dropped. A deployment that adds the list
+//                       for a second client and forgets to repeat the primary would
+//                       otherwise stop accepting its own web client's tokens, with
+//                       nothing in the logs to say why.
+void reconcile_firebase_projects(std::string& primary, std::vector<std::string>& all) {
+    if (all.empty()) {
+        if (!primary.empty()) all.push_back(primary);
+        return;
+    }
+    if (primary.empty()) {
+        primary = all.front();
+        return;
+    }
+    if (std::find(all.begin(), all.end(), primary) == all.end()) {
+        all.insert(all.begin(), primary);
+    }
+}
+
 Config load_config(const mirobody::optional<std::string>& yaml_path) {
     utils::LocalYamlStore store = load_config_store(yaml_path);
 
@@ -464,7 +491,27 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.email.from_email    = store.get_str("EMAIL_FROM");
     cfg.email.from_name     = store.get_str("EMAIL_FROM_NAME");
     cfg.email.template_name = store.get_str("EMAIL_TEMPLATE");
+    // FIREBASE_PROJECT_IDS is the full accepted set, primary first; FIREBASE_PROJECT_ID
+    // is the single-project spelling. Either may be given: the list wins for the set,
+    // and whichever is present supplies the primary (the one published to the web
+    // client and named in the CSP). Parsing follows FILE_ENCRYPTION_KEY below -- a YAML
+    // sequence via get_list, else a plain or comma-separated scalar.
     cfg.firebase_project_id = store.get_str("FIREBASE_PROJECT_ID", cfg.firebase_project_id);
+    cfg.firebase_project_ids = store.get_list("FIREBASE_PROJECT_IDS");
+    if (cfg.firebase_project_ids.empty()) {
+        const std::string raw = store.get_str("FIREBASE_PROJECT_IDS");
+        std::size_t start = 0;
+        while (start <= raw.size()) {
+            std::size_t comma = raw.find(',', start);
+            std::string tok = raw.substr(start, comma == std::string::npos ? std::string::npos : comma - start);
+            std::size_t b = tok.find_first_not_of(" \t\r\n");
+            std::size_t e = tok.find_last_not_of(" \t\r\n");
+            if (b != std::string::npos) cfg.firebase_project_ids.push_back(tok.substr(b, e - b + 1));
+            if (comma == std::string::npos) break;
+            start = comma + 1;
+        }
+    }
+    reconcile_firebase_projects(cfg.firebase_project_id, cfg.firebase_project_ids);
     cfg.firebase_web_api_key        = store.get_str("FIREBASE_WEB_API_KEY", cfg.firebase_web_api_key);
     cfg.firebase_messaging_sender_id = store.get_str("FIREBASE_MESSAGING_SENDER_ID", cfg.firebase_messaging_sender_id);
     cfg.http_headers        = store.get_dict("HTTP_HEADERS");
@@ -877,6 +924,16 @@ void Config::print() const {
         std::fprintf(out, "\n");
         std::fprintf(out, "  firebase\n");
         std::fprintf(out, "    project_id    : %s\n", firebase_project_id.c_str());
+        // Only worth a line when there is more than the primary; otherwise it
+        // would just repeat the line above.
+        if (firebase_project_ids.size() > 1) {
+            std::string accepted;
+            for (std::size_t i = 0; i < firebase_project_ids.size(); ++i) {
+                if (i) accepted += ", ";
+                accepted += firebase_project_ids[i];
+            }
+            std::fprintf(out, "    accepting     : %s\n", accepted.c_str());
+        }
     }
 
     if (!wechat_appid.empty() || !wechat_web_appid.empty() || !wechat_app_appid.empty()) {

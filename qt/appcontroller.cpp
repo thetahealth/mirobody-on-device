@@ -130,14 +130,6 @@ AppController::AppController(QObject* parent)
 
 AppController::~AppController() = default;
 
-QString AppController::appVersion() const {
-#ifdef MIROBODY_QT_VERSION
-    return QStringLiteral(MIROBODY_QT_VERSION);
-#else
-    return QStringLiteral("dev");
-#endif
-}
-
 QStringList AppController::baseUrlPresets() const {
     // Local dev server first (config.yml's HTTP_PORT), then the hosted
     // environment (config.js BASE_URL_PRESETS).

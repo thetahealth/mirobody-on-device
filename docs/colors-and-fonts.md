@@ -363,7 +363,7 @@ All clients expose the same five tiers, offset `-4 / -2 / 0 / +2 / +4`
 ## 8. Dark mode
 
 The navy system's dark scheme ships on **android, ios, and htdoc/electron** (htdoc: a
-system/light/dark setting in the gear menu; "system" follows `prefers-color-scheme` live);
+system/light/dark setting in the nav drawer; "system" follows `prefers-color-scheme` live);
 harmony has full light/dark on its old palette; qt and miniapp are light-only today.
 
 ### 8.1 Principles

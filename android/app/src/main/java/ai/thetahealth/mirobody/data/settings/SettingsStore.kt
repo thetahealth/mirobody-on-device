@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import ai.thetahealth.mirobody.BuildConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -190,8 +191,12 @@ class SettingsStore(private val context: Context) {
     }
 
     companion object {
-        // Self-hosted server contacted when no base URL is configured (see baseUrl above).
-        const val DEFAULT_BASE_URL: String = "http://localhost:8080"
+        // Server contacted when no base URL is configured (see baseUrl above). Set at build
+        // time: an embedded build serves in-process on 127.0.0.1:8080, so it points at
+        // localhost; a pure-client build (-Pmirobody.native=false, or no prebuilts) has nothing
+        // listening there and points at the public test server instead. Override either with
+        // -Pmirobody.baseUrl=... -- see app/build.gradle.kts.
+        val DEFAULT_BASE_URL: String = BuildConfig.DEFAULT_BASE_URL
 
         private val KEY_BASE_URL: Preferences.Key<String> = stringPreferencesKey("base_url")
         // Legacy single-token slot, migrated to the per-account scheme on launch.

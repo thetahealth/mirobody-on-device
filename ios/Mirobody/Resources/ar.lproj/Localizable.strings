@@ -20,6 +20,11 @@
 "email_required" = "البريد الإلكتروني مطلوب";
 "email_send_code" = "إرسال الرمز";
 "email_resend_in" = "إعادة الإرسال خلال %1$d ثانية";
+"email_sending_code" = "جارٍ إرسال الرمز…";
+"email_send_failed" = "فشل إرسال الرمز.";
+"email_enter_code" = "أدخل الرمز من البريد الإلكتروني.";
+"email_verifying" = "جارٍ التحقق…";
+"email_verify_failed" = "فشل التحقق.";
 "auth_or" = "أو";
 "auth_continue_with_google" = "المتابعة باستخدام Google";
 "auth_continue_with_apple" = "المتابعة باستخدام Apple";
@@ -27,6 +32,10 @@
 "auth_continue_with_github" = "المتابعة باستخدام GitHub";
 "auth_continue_with_x" = "المتابعة باستخدام X";
 "auth_google_failed" = "فشل تسجيل الدخول عبر Google";
+"auth_apple_failed" = "فشل تسجيل الدخول عبر Apple";
+"auth_wechat_failed" = "فشل تسجيل الدخول عبر WeChat";
+"auth_github_failed" = "فشل تسجيل الدخول عبر GitHub";
+"auth_x_failed" = "فشل تسجيل الدخول عبر X";
 
 /* Verify */
 "verify_title" = "أدخل الرمز";
@@ -50,8 +59,6 @@
 "chat_backend" = "الخادم";
 "chat_attach_file" = "إرفاق ملف";
 "chat_attach_remove" = "إزالة المرفق";
-"chat_about" = "حول";
-"about_version" = "الإصدار %1$@";
 "chat_sign_out" = "تسجيل الخروج";
 "chat_sign_out_confirm_title" = "تسجيل الخروج؟";
 "chat_sign_out_confirm_message" = "ستحتاج إلى تسجيل الدخول مرة أخرى.";

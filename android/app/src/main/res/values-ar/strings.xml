@@ -18,6 +18,11 @@
     <string name="email_required">البريد الإلكتروني مطلوب</string>
     <string name="email_send_code">إرسال الرمز</string>
     <string name="email_resend_in">إعادة الإرسال خلال %1$d ثانية</string>
+    <string name="email_sending_code">جارٍ إرسال الرمز…</string>
+    <string name="email_send_failed">فشل إرسال الرمز.</string>
+    <string name="email_enter_code">أدخل الرمز من البريد الإلكتروني.</string>
+    <string name="email_verifying">جارٍ التحقق…</string>
+    <string name="email_verify_failed">فشل التحقق.</string>
     <string name="auth_or">أو</string>
     <string name="auth_continue_with_google">المتابعة باستخدام Google</string>
     <string name="auth_continue_with_apple">المتابعة باستخدام Apple</string>
@@ -37,7 +42,6 @@
     <string name="chat_message_hint">اسأل عن أي شيء</string>
     <string name="chat_history_cd">السجل</string>
     <string name="chat_select_model">اختر النموذج</string>
-    <string name="chat_currently_for">حاليًا لـ</string>
     <string name="chat_subject_me">أنا</string>
 
     <string name="chat_attach_file">إرفاق ملف</string>
@@ -113,8 +117,6 @@
     <string name="health_syncing">جارٍ المزامنة…</string>
     <string name="health_result">تم الإرسال %1$d، فشل %2$d.</string>
     <string name="health_error">خطأ: %1$s</string>
-    <string name="chat_about">حول</string>
-    <string name="about_version">الإصدار %1$s</string>
     <string name="chat_sign_out">تسجيل الخروج</string>
     <string name="chat_sign_out_confirm_title">تسجيل الخروج؟</string>
     <string name="chat_sign_out_confirm_message">ستحتاج إلى تسجيل الدخول مرة أخرى.</string>
@@ -194,6 +196,8 @@
     <string name="chat_ehr_sync_done">تم استيراد %1$d قياسًا.</string>
     <string name="auth_apple_failed">فشل تسجيل الدخول عبر Apple</string>
     <string name="auth_wechat_failed">فشل تسجيل الدخول عبر WeChat</string>
+    <string name="auth_github_failed">فشل تسجيل الدخول عبر GitHub</string>
+    <string name="auth_x_failed">فشل تسجيل الدخول عبر X</string>
     <string name="chat_bluetooth">أجهزة البلوتوث</string>
     <string name="chat_bluetooth_hdp">‏Bluetooth HDP (قديم)</string>
     <string name="ble_title">أجهزة صحية عبر البلوتوث</string>

@@ -1,5 +1,6 @@
 package ai.thetahealth.mirobody.data.config
 
+import ai.thetahealth.mirobody.data.net.unwrap
 import ai.thetahealth.mirobody.data.settings.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,7 +12,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 /**
- * Fetches and caches the server-side `/mirobody.json` document for the current base URL.
+ * Fetches and caches the server's sign-in capability document (GET /auth/providers)
+ * for the current base URL.
  *
  * Behavior:
  *  - On construction, watches the configured base URL. When it changes (including initial
@@ -52,7 +54,7 @@ class ServerConfigStore(
     }
 
     private suspend fun refreshInternal(baseUrl: String): ServerConfig {
-        val fetched = api.fetch()
+        val fetched = api.fetch().unwrap()
         settings.setCachedServerConfig(baseUrl, json.encodeToString(ServerConfig.serializer(), fetched))
         _config.value = fetched
         return fetched

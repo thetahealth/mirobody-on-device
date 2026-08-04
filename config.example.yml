@@ -641,12 +641,13 @@ CIRCLE_INVITE_WINDOW_SEC: 1800
 # server trust them through a single verifier. mirobody uses it two ways:
 #
 #   - Token verification (server): jwt::FirebaseTokenValidator accepts any
-#     Firebase ID token by its iss/aud (FIREBASE_PROJECT_ID) and reads the email.
+#     Firebase ID token by its iss/aud (FIREBASE_PROJECT_ID, or any entry of
+#     FIREBASE_PROJECT_IDS) and reads the email.
 #     POST /firebase/verify runs this path, so EVERY Firebase-brokered provider --
 #     Google, GitHub, and X (Twitter) -- lands there regardless of which one the
 #     user picked. There is no per-provider server route for these.
-#   - Web sign-in buttons (client): GET /firebase/verify hands the browser the web
-#     app config (the two FIREBASE_WEB_* keys below). The web client shows
+#   - Web sign-in buttons (client): GET /auth/providers hands the browser the web
+#     app config (the two FIREBASE_WEB_* keys below), under "google". The web client shows
 #     "Continue with Google" and "Continue with X" only when that config is
 #     present; clicking opens a Firebase popup and POSTs the resulting ID token to
 #     /firebase/verify. The native Android / iOS apps do the same via the Firebase
@@ -692,10 +693,35 @@ CIRCLE_INVITE_WINDOW_SEC: 1800
 #   4. The Spark (free) tier is enough for development.
 FIREBASE_PROJECT_ID: 'mirobody-81000'
 
+# Every Firebase project whose ID tokens this server will accept, primary first.
+# Optional: unset, it is just FIREBASE_PROJECT_ID above, which is what a
+# single-project deployment wants.
+#
+# It exists because a client is built against whatever project it was handed, and
+# a token is only valid for the project that issued it. The Android APK ships a
+# google-services.json naming one project at build time; the web client is handed
+# FIREBASE_PROJECT_ID at runtime. If those differ, one of them cannot sign in --
+# the server rejects its tokens on the iss/aud check -- and the only ways out are
+# rebuilding the app per deployment or accepting both here.
+#
+# FIREBASE_PROJECT_ID stays the PRIMARY: it is the one published to the web client
+# and named in the CSP for the sign-in popup. The extra entries only widen token
+# verification; they cost no extra work, since Google's securetoken cert bundle is
+# not per-project.
+#
+# Each entry is a trust decision: anyone who can mint a token in that project can
+# sign in here. List only projects you control. As a YAML sequence, or a
+# comma-separated scalar for the env-var form.
+#
+# FIREBASE_PROJECT_IDS:
+#   - mirobody-81000        # primary (repeat it, or it is prepended for you)
+#   - thetahealth-51ba1     # e.g. the project a shipped mobile build was signed against
+
 # Firebase *web app* config for the web client's "Continue with Google" and
 # "Continue with X" buttons (both go through Firebase -- see the Firebase setup
-# notes above). GET /firebase/verify returns {apiKey, projectId, messagingSenderId}
-# ONLY when both keys below are set, and the client shows those buttons only then.
+# notes above). GET /auth/providers reports google as enabled, with
+# {apiKey, projectId, messagingSenderId}, ONLY when both keys below are set, and
+# the client shows those buttons only then.
 # The client derives the rest itself: authDomain is "<projectId>.firebaseapp.com"
 # (Firebase hosts the /__/auth/handler there) and appId isn't needed for Auth.
 #
@@ -711,8 +737,9 @@ FIREBASE_WEB_API_KEY: 'AIzaSyCGuHqukiVwiClH0b1HYpW4I1bGdK9O-1w'
 FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 
 # Sign in with Apple (web). The Apple *Services ID* (NOT the app's bundle ID),
-# e.g. 'ai.thetahealth.mirobody.web'. GET /apple/verify returns {clientId} (code
-# 0) only when this is set, so the web login shows an Apple button; the button
+# e.g. 'ai.thetahealth.mirobody.web'. GET /auth/providers reports apple as enabled
+# with {clientId} only when this is set, so the web login shows an Apple button;
+# the button
 # opens Apple's JS popup, and the returned id_token is POSTed to /apple/verify
 # and verified against Apple's JWKS (jwt::AppleTokenValidator) with this value as
 # the expected `aud`. Set up under developer.apple.com -> Certificates,
@@ -739,8 +766,11 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # WECHAT_SECRET: ''
 # WECHAT_API_BASE: 'https://api.weixin.qq.com'   # override only to point tests at a mock
 #
-# WeChat *web* sign-in for the browser client. GET /wechat/verify returns the
-# appid (code 0) when configured, so the web login shows a WeChat button; the
+# WeChat *web* sign-in for the browser client. GET /auth/providers reports wechat
+# "enabled" with its appid when configured, so the web login shows a WeChat
+# button. That flag is the WEB registration only -- the native apps drive the
+# separate Open Platform mobile application (WECHAT_OPEN_* below) and read
+# "appEnabled" instead, since a server may have either without the other. The
 # button redirects to WeChat's qrconnect (desktop QR, scope snsapi_login) or, in
 # WeChat's in-app browser, oauth2/authorize (scope snsapi_userinfo). The returned
 # code is POSTed to /wechat/verify with {"flow":"web"} and exchanged via
@@ -802,7 +832,7 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # PROXIES the already-signed requests to Tanka's gateway (gw-q.tanka.ai) -- the
 # browser can't reach it directly (CORS). On a confirmed scan the server reads
 # the email straight from Tanka's TLS response and mints the usual app tokens.
-# ON by default -- GET /tanka/verify advertises it so the web login shows a
+# ON by default -- GET /auth/providers advertises it so the web login shows a
 # "Continue with Tanka" button; the button opens a QR the user scans with the
 # Tanka app. Set TANKA_LOGIN_ENABLED: false to disable it (the button then hides
 # and the /tanka/* + signer routes 404). Note: while on, the signer auto-discovery

@@ -1,3 +1,4 @@
+#include "config/config.hpp"
 #include "config/store.hpp"
 #include "config/fernet.hpp"
 
@@ -230,4 +231,84 @@ TEST_CASE("RemoteYamlStore::load rejects empty server/token/env", "[config]") {
     REQUIRE_FALSE(RemoteYamlStore("",        "tok", "dev").load());
     REQUIRE_FALSE(RemoteYamlStore("http://x", "",   "dev").load());
     REQUIRE_FALSE(RemoteYamlStore("http://x", "tok", "").load());
+}
+
+//------------------------------------------------------------------------------
+// FIREBASE_PROJECT_ID / FIREBASE_PROJECT_IDS reconciliation.
+//
+// Two spellings feed one decision -- which projects' ID tokens the server accepts --
+// and getting the precedence wrong locks a client out of sign-in with nothing in the
+// logs to explain it. Tested against the extracted pure function rather than
+// load_config(), which also pulls a remote config server that supplies these very
+// keys. (The claim checks themselves sit behind signature verification and would
+// need a mocked JWKS to reach.)
+
+using mirobody::reconcile_firebase_projects;
+
+TEST_CASE("a primary alone is the whole accepted set", "[config][firebase]") {
+    std::string primary = "solo-project";
+    std::vector<std::string> all;
+    reconcile_firebase_projects(primary, all);
+
+    REQUIRE(primary == "solo-project");
+    REQUIRE(all.size() == 1);
+    REQUIRE(all[0] == "solo-project");
+}
+
+TEST_CASE("a list alone makes its first entry primary", "[config][firebase]") {
+    // Something has to be the project published to the web client and named in
+    // the CSP, so the first entry is promoted.
+    std::string primary;
+    std::vector<std::string> all{"web-project", "android-project"};
+    reconcile_firebase_projects(primary, all);
+
+    REQUIRE(primary == "web-project");
+    REQUIRE(all.size() == 2);
+    REQUIRE(all[1] == "android-project");
+}
+
+TEST_CASE("a primary missing from the list is prepended, not dropped",
+          "[config][firebase]") {
+    // The dangerous case: a deployment adds the list for a second client and
+    // forgets to repeat the primary. Dropping it would stop the web client's own
+    // tokens verifying.
+    std::string primary = "web-project";
+    std::vector<std::string> all{"android-project"};
+    reconcile_firebase_projects(primary, all);
+
+    REQUIRE(primary == "web-project");
+    REQUIRE(all.size() == 2);
+    REQUIRE(all[0] == "web-project");
+    REQUIRE(all[1] == "android-project");
+}
+
+TEST_CASE("a primary already listed is not duplicated", "[config][firebase]") {
+    std::string primary = "web-project";
+    std::vector<std::string> all{"web-project", "android-project"};
+    reconcile_firebase_projects(primary, all);
+
+    REQUIRE(all.size() == 2);
+    REQUIRE(all[0] == "web-project");
+}
+
+TEST_CASE("neither set accepts nothing", "[config][firebase]") {
+    // Empty means the server builds no validator, so Firebase sign-in is off --
+    // not "accept any project".
+    std::string primary;
+    std::vector<std::string> all;
+    reconcile_firebase_projects(primary, all);
+
+    REQUIRE(primary.empty());
+    REQUIRE(all.empty());
+}
+
+TEST_CASE("a primary not first in the list stays where it is", "[config][firebase]") {
+    // Order is the operator's; only absence is corrected.
+    std::string primary = "android-project";
+    std::vector<std::string> all{"web-project", "android-project"};
+    reconcile_firebase_projects(primary, all);
+
+    REQUIRE(all.size() == 2);
+    REQUIRE(all[0] == "web-project");
+    REQUIRE(primary == "android-project");
 }

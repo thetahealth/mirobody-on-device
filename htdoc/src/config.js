@@ -12,7 +12,8 @@ const net = require("./net");
 var DEFAULT_MODEL = "gemini-2.5-flash";
 
 // Package version, injected at build by webpack's DefinePlugin (see
-// webpack.config.js); shown in the About dialog.
+// webpack.config.js). Exported but not surfaced in the UI: the web client has no
+// About dialog, and no other view states a build version.
 var APP_VERSION = (typeof __APP_VERSION__ === "string") ? __APP_VERSION__ : "";
 
 // Remembers the last provider the user picked, so the selector restores it on
