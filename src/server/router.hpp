@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include "compat/cxx11.hpp"
@@ -123,6 +124,19 @@ public:
     // or null `storage` disables the mount. Checked before the LocalStorage
     // disk mount and the static fallback.
     void set_file_mount(std::string url_prefix, storage::Storage* storage, std::string secret);
+
+    // Largest request body accepted on any route, in bytes (HTTP_MAX_BODY_BYTES);
+    // 0 disables the bound. A body is buffered whole before dispatch, so without
+    // this one upload can pin arbitrary memory -- several times its own size once
+    // the chat path copies it down the attachment chain. Checked twice: at headers
+    // time against Content-Length (so an oversized upload is refused before its
+    // bytes are read), and again as the body accumulates, which is the only check
+    // a chunked body -- or a lying Content-Length -- can be caught by. Over the
+    // bound the request is answered 413 (the standard error envelope, default
+    // headers included) and the connection is closed rather than kept alive: the
+    // client is still sending a body nobody is reading, and keep-alive would parse
+    // the remainder as the next request.
+    void set_max_body_bytes(std::size_t bytes);
 
     // URI prefix prepended to every route registered afterwards (HTTP and
     // WebSocket) and stripped from request paths before static files are

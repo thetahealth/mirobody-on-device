@@ -551,6 +551,36 @@ function buildChat() {
         return bubble;
     };
 
+    // The "waiting for the model" indicator: three pulsing dots that stand in the
+    // assistant bubble from the moment a turn is sent until its first token
+    // arrives. The send button turns into a spinner at the same moment, but that
+    // is at the far end of the page from where the answer will appear -- and the
+    // wait is seconds long whenever the model thinks (or calls a tool) before
+    // answering, which is exactly when the user is watching this spot. Sized to
+    // roughly one line of body text so the swap to real content doesn't jump.
+    // The mb-dot keyframes live in index.css -- the CSP blocks injected <style>,
+    // inline styles may only reference them.
+    function typingDots() {
+        var row = ui.dom("div", {
+            display    : "flex",
+            alignItems : "center",
+            gap        : "4px",
+            height     : "1.6rem"
+        });
+        for (var i = 0; i < 3; i ++) {
+            row.appendChild(ui.dom("span", {
+                display        : "inline-block",
+                width          : "6px",
+                height         : "6px",
+                borderRadius   : "50%",
+                background     : color.onSurfaceVar,
+                animation      : "mb-dot 1.2s ease-in-out infinite",
+                animationDelay : (i * 0.16) + "s"
+            }));
+        }
+        return row;
+    };
+
     function iconButton(svg, title) {
         var b = ui.dom("button", {
             border         : "none",
@@ -1265,14 +1295,27 @@ function buildChat() {
         var turnProvider = state.provider;   // provider used for this turn (label + persisted)
         var assistantCost = null;            // set from the costStatistics event (agent path)
         var bubble = appendMessage("assistant", "", assistantTs);
-        bubble.style.animation = "mb-blink 1s steps(2, start) infinite";
+        // Hold the reply's place with the pulsing dots until its first token
+        // lands. (This replaces a blink animation on the bubble itself, which
+        // had nothing to show while the bubble was empty -- which is the whole
+        // stretch it was meant to cover.)
+        var dots = typingDots();
+        bubble.appendChild(dots);
         var acc = "";
+
+        // Drop the placeholder. Idempotent, and safe after a render has already
+        // replaced the bubble's content: every exit from a turn runs it, since
+        // one of them (an error with no text) leaves the bubble untouched.
+        function stopDots() {
+            if (dots && dots.parentNode) { dots.parentNode.removeChild(dots); }
+            dots = null;
+        };
 
         function finish(assistantText) {
             state.streaming = false;
             setSendBusy(false);
             activeStop = null;
-            bubble.style.animation = "";
+            stopDots();
             input.focus();
             if (ui.isString(assistantText)) {
                 renderInto(bubble, assistantText);   // final, un-throttled render
@@ -1696,8 +1739,8 @@ function buildChat() {
                 if (ui.isString(ev.reply)) {
                     var firstReply = !acc;
                     acc += ev.reply;
+                    stopDots();                  // the answer takes the place back
                     streamRender(bubble, acc);
-                    bubble.style.animation = ""; // stop the cursor blink once text streams
                     if (firstReply) { syncThinking(); } // answer started: fold the thinking block
                     followBottom();
                 } else if (ui.isString(ev.thinking)) {

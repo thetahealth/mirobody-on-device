@@ -7,6 +7,7 @@ import { i18n } from '@kit.LocalizationKit';
 import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
+import { FONT, ICON } from '../model/Typography';
 
 interface LangOpt {
   label: string;
@@ -22,11 +23,11 @@ interface ThemeOpt {
 function dialogHeader(title: ResourceStr, close: () => void) {
   Row() {
     Text(title)
-      .fontSize(18)
+      .fontSize(FONT.title)
       .fontWeight(FontWeight.Bold)
       .layoutWeight(1)
     Text('✕')
-      .fontSize(20)
+      .fontSize(ICON.lg)
       .fontColor($r('app.color.text_tertiary'))
       .padding({ left: 12, top: 2, bottom: 2 })
       .onClick(close)
@@ -65,7 +66,7 @@ export struct LanguageDialog {
       })
       ForEach(this.opts, (o: LangOpt) => {
         Row() {
-          Text(o.label).fontSize(16).layoutWeight(1)
+          Text(o.label).fontSize(FONT.control).layoutWeight(1)
         }
         .width('100%')
         .padding({ top: 13, bottom: 13 })
@@ -114,9 +115,9 @@ export struct ThemeDialog {
       })
       ForEach(this.opts, (o: ThemeOpt) => {
         Row() {
-          Text(o.label).fontSize(16).layoutWeight(1)
+          Text(o.label).fontSize(FONT.control).layoutWeight(1)
           if (this.pref === o.mode) {
-            Text('✓').fontSize(16).fontColor($r('app.color.brand_text'))
+            Text('✓').fontSize(FONT.control).fontColor($r('app.color.brand_text'))
           }
         }
         .width('100%')
@@ -194,7 +195,7 @@ export struct FontSizeDialog {
       Row() {
         ForEach(this.labels, (lab: ResourceStr, i: number) => {
           Text(lab)
-            .fontSize(12)
+            .fontSize(FONT.caption)
             .fontColor(i === this.idx ? $r('app.color.brand_text') : $r('app.color.text_tertiary'))
         }, (lab: ResourceStr, i: number) => i.toString())
       }

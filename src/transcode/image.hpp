@@ -70,6 +70,26 @@ struct Limits {
     long long   max_pixels   = 2560LL * 2560;      // total-pixel budget
     double      max_aspect   = 200.0;              // long/short <= 200:1
     int         jpeg_quality = 85;                 // re-encode quality (1..100)
+
+    // Hard ceiling on the SOURCE pixel count the transcoder will decode, read
+    // from the header before any pixel buffer is allocated (0 = no ceiling).
+    //
+    // A safety limit, not a quality knob -- max_pixels above is what the output
+    // is shrunk to. It exists because decoding, not transfer, is where an image
+    // costs memory: RGBA is 4 bytes per pixel however well the source
+    // compressed, so a highly compressible image is a small file that expands
+    // enormously (a 435 KB flat 12000x12000 PNG decodes to 576 MB). And the
+    // shrink to max_pixels can only happen AFTER the decode -- so without this
+    // gate, the images that most need shrinking are exactly the ones
+    // materialized in full first.
+    //
+    // Past the ceiling transcode() throws ImageError before allocating, which
+    // every caller already handles (the file parser logs it and sends the
+    // original bytes untouched -- harmless, as such a file is by nature small).
+    //
+    // The default admits any real photo or scan -- a 600 dpi A3 scan is ~70 MP
+    // -- while capping a single decode near 320 MB.
+    long long   max_decode_pixels = 80LL * 1000 * 1000;   // 80 MP
 };
 
 //------------------------------------------------------------------------------

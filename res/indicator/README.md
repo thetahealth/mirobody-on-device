@@ -1,7 +1,8 @@
 # res/indicator — terminology artifacts
 
 Runtime artifact(s) for the `src/indicator` terminology resolver. Currently just
-`fhir_lexicon.bin` (gitignored, ~112 MB, rebuilt from `E:/ref`). The rest of this
+`fhir_lexicon.bin` (gitignored, ~112 MB, rebuilt from the reference tree — see
+[`src/indicator/README.md`](../../src/indicator/README.md)). The rest of this
 file is its byte-level format spec.
 
 ## Runtime access (C++)
@@ -60,7 +61,7 @@ Maps normalized surface forms → standard codes (LOINC / SNOMED_CT / RXNORM / C
 
 All integers are **little-endian**, unsigned. Offsets are **byte offsets into
 the string blob**. The artifact is **not committed** (gitignored here, ~112 MB);
-rebuild from `E:/ref`.
+rebuild from the reference tree.
 
 ## Outer container
 

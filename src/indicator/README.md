@@ -58,7 +58,7 @@ postings → string blob. Per-code metadata reserves `rank_tier` + a 17-bit
 
 **Compression.** The payload is zlib-wrapped (`LXCZ | u64 raw_len | deflate`),
 decompressed on load. ~4.7× (528 MB → ~112 MB). The artifact is **not**
-committed (gitignored under `res/indicator/`) — rebuilt from `E:/ref`. Deeper
+committed (gitignored under `res/indicator/`) — rebuilt from the reference tree. Deeper
 size wins (FST + input trimming, mmap-able, on-device) are future work.
 
 ## Data sources
@@ -83,7 +83,7 @@ ENG + CHI, everything bridged by CUI):
 disease / chemicals / food is effectively empty — the crosscutting gap, handled
 separately (NHSA, ICD-10-cn, curated).
 
-### Tier B — external sources to add (English deepeners; not in UMLS / not in E:/ref)
+### Tier B — external sources to add (English deepeners; not in UMLS, not in the reference tree)
 
 Prefer permissively-licensed sources; license is a hard gate for a commercial
 health app.
@@ -118,7 +118,9 @@ Code identity is now `(system:uint8, code string)` — the artifact stores a pla
 
 ## Build the lexicon (dev / offline)
 
-Needs raw reference data under `E:/ref`. Current sources: LOINC 2.82 core +
+Needs raw reference data under one local root, passed as `--ref`. The commands below
+spell it `<ref>` — it lives outside the repo, so put it wherever you like and
+substitute. Current sources: LOINC 2.82 core +
 zhCN linguistic variant, CVX (en + `cvx_cn.csv`), **UMLS MRCONSO — all sources**
 (SNOMED / LOINC / RxNorm native codes; MeSH / NCI / DrugBank / CHV / … via the
 CUI-sharing bridge, with a `UMLS_CUI` fallback code so chemicals lacking a native
@@ -133,18 +135,18 @@ Phases chain via files (each independently re-runnable):
 
 ```sh
 # 1. build the artifact (+ optional full-vocabulary dump)
-indicator build-lexicon --ref E:/ref [--no-pubchem] --out res/indicator/fhir_lexicon.bin [--dump build/vocab_all.tsv]
+indicator build-lexicon --ref <ref> [--no-pubchem] --out res/indicator/fhir_lexicon.bin [--dump build/vocab_all.tsv]
 # 2. word-token vocab from the dump (iterate the tokenizer here — ~22s, no rebuild)
 indicator words --in build/vocab_all.tsv --out build/vocab_name.tsv
 # word-level synonyms: mine token pairs from surfaces sharing a (system,code)
 # (spelling/abbrev/plural + cross-lingual glucose↔葡萄糖) — ~60s, no rebuild.
 # --lex merges authoritative single-token spelling variants from the SPECIALIST
-# Lexicon (E:/ref/LEX/LRSPL). Output is word_a·word_b·support·source
+# Lexicon (<ref>/LEX/LRSPL). Output is word_a·word_b·support·source
 # (source = corpus | lex | corpus+lex). LRABR (abbrev→phrase, highly ambiguous)
 # and LRAGR (inflection, redundant with the corpus) are intentionally not used.
-indicator synonyms --in build/vocab_all.tsv --out build/synonyms.tsv --min-support 10 --lex E:/ref/LEX
+indicator synonyms --in build/vocab_all.tsv --out build/synonyms.tsv --min-support 10 --lex <ref>/LEX
 # unit thesaurus (LOINC Parts) + abbreviation table
-indicator build-units --ref E:/ref --out build/units.tsv --abbrev build/abbrev.tsv
+indicator build-units --ref <ref> --out build/units.tsv --abbrev build/abbrev.tsv
 # query
 indicator resolve --lexicon res/indicator/fhir_lexicon.bin --top-k 5 "烟曲霉" "aspirin" "50-78-2"
 ```

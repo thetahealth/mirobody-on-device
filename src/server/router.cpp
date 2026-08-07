@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
@@ -43,6 +44,13 @@ struct PerHttpSession {
     size_t out_sent = 0;
     Response response;
     bool response_ready = false;
+
+    // Close the connection once this response is written instead of completing
+    // the transaction for keep-alive. Set when we answer WITHOUT having consumed
+    // the request body (currently only the 413 below): the client is still
+    // sending bytes we stopped reading, and a kept-alive connection would parse
+    // that remainder as the next request.
+    bool close_after_response = false;
 
     // Whether the client advertised gzip / brotli in Accept-Encoding. Latched at
     // dispatch (the Request is gone by the time the writeable callback runs) and
@@ -143,6 +151,10 @@ struct Router::Impl {
     // paths before static-file resolution (HTTP_URI_PREFIX). Normalized to a
     // leading slash and no trailing slash (e.g. "/mirobody"); empty disables it.
     std::string uri_prefix;
+
+    // Largest request body accepted, in bytes (HTTP_MAX_BODY_BYTES); 0 disables
+    // the bound. See set_max_body_bytes / reject_oversize_body.
+    std::size_t max_body_bytes = 0;
 
     Router* self = nullptr;
 
@@ -434,6 +446,19 @@ std::string client_ip(lws* wsi) {
     return {};
 }
 
+// The declared Content-Length, or -1 when the header is absent or unparsable (a
+// chunked upload declares none). strtoll, not strtol: a 32-bit long would
+// saturate at 2 GB and read a larger declaration as merely "big".
+long long declared_content_length(lws* wsi) {
+    char cl[32] = {0};
+    const int n = lws_hdr_copy(wsi, cl, sizeof(cl), WSI_TOKEN_HTTP_CONTENT_LENGTH);
+    if (n <= 0) return -1;
+    char* endp = nullptr;
+    const long long v = std::strtoll(cl, &endp, 10);
+    if (endp == cl || v < 0) return -1;
+    return v;
+}
+
 // Whether the request carries a body, so the router knows to wait for
 // HTTP_BODY_COMPLETION rather than dispatching at headers time. True when
 // Transfer-Encoding is present (chunked) or Content-Length > 0. A body-less
@@ -441,10 +466,29 @@ std::string client_ip(lws* wsi) {
 // just like GET/DELETE.
 bool request_has_body(lws* wsi) {
     if (lws_hdr_total_length(wsi, WSI_TOKEN_HTTP_TRANSFER_ENCODING) > 0) return true;
-    char cl[32] = {0};
-    int n = lws_hdr_copy(wsi, cl, sizeof(cl), WSI_TOKEN_HTTP_CONTENT_LENGTH);
-    if (n > 0) return std::strtol(cl, nullptr, 10) > 0;
-    return false;
+    return declared_content_length(wsi) > 0;
+}
+
+// Answer 413 for a body over the configured bound and stop reading it. The
+// standard error envelope goes out through the Response object rather than
+// lws_return_http_status, so the configured default headers (the CORS set) ride
+// along -- a browser can only surface "the file is too large" if it is allowed
+// to read the response at all. Whatever was buffered is released immediately,
+// and close_after_response keeps the leftover body from being parsed as the next
+// request. `size` is the offending length (declared or accumulated).
+void reject_oversize_body(lws* wsi, PerHttpSession* session,
+                          std::size_t limit, unsigned long long size) {
+    std::string().swap(session->body_buf);   // hand the pages back now, not at close
+
+    char data[96];
+    std::snprintf(data, sizeof(data), "{\"max_bytes\":%llu}",
+                  static_cast<unsigned long long>(limit));
+    session->response.error(-1, "request body too large", data, 413);
+    session->close_after_response = true;
+    session->response_ready = true;
+    platform::log_warn("http: rejecting %llu-byte body (limit %llu)",
+                       size, static_cast<unsigned long long>(limit));
+    lws_callback_on_writable(wsi);
 }
 
 // Extract just the request method and path (query split off) from the lws
@@ -1157,6 +1201,21 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
             return 0;
         }
 
+        // An upload that declares itself over the bound is refused here, before a
+        // single body byte is buffered. A chunked upload (no Content-Length) and
+        // one whose declaration lies are caught in HTTP_BODY instead, as the bytes
+        // actually arrive.
+        if (impl && impl->max_body_bytes > 0) {
+            const long long declared = declared_content_length(wsi);
+            if (declared > 0 &&
+                static_cast<unsigned long long>(declared) > impl->max_body_bytes) {
+                session->response.set_request(&req);   // names the route in the log
+                reject_oversize_body(wsi, session, impl->max_body_bytes,
+                                     static_cast<unsigned long long>(declared));
+                return 0;
+            }
+        }
+
         // Requests with a body (POST/PUT with content, chunked uploads, or even
         // DELETE with a payload) are dispatched once the body arrives, in
         // HTTP_BODY_COMPLETION. Everything else — GET, DELETE, and body-less
@@ -1222,6 +1281,19 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
 
     case LWS_CALLBACK_HTTP_BODY:
         if (session && in && len) {
+            // Already answered -- a 413 at headers time, whose body the client is
+            // still sending. Drop the bytes instead of buffering a body no handler
+            // will ever read.
+            if (session->response_ready) return 0;
+            if (impl && impl->max_body_bytes > 0 &&
+                session->body_buf.size() + len > impl->max_body_bytes) {
+                // The bound as the body actually arrives: the only check that
+                // catches a chunked upload (which declares no length) or a
+                // Content-Length that understated the body.
+                reject_oversize_body(wsi, session, impl->max_body_bytes,
+                                     static_cast<unsigned long long>(session->body_buf.size()) + len);
+                return 0;
+            }
             session->body_buf.append(static_cast<const char*>(in), len);
         }
         return 0;
@@ -1338,6 +1410,11 @@ int callback_http(lws* wsi, enum lws_callback_reasons reason,
                 return 0;
             }
         }
+
+        // Answered without consuming the request body (the 413 path): close
+        // instead of completing the transaction, so the body still in flight is
+        // never mistaken for the next request on a kept-alive connection.
+        if (session->close_after_response) return -1;
 
         if (lws_http_transaction_completed(wsi)) return -1;
         return 0;
@@ -1543,6 +1620,10 @@ void Router::set_file_mount(std::string url_prefix, storage::Storage* storage, s
 
 void Router::set_uri_prefix(std::string prefix) {
     impl_->uri_prefix = std::move(prefix);
+}
+
+void Router::set_max_body_bytes(std::size_t bytes) {
+    impl_->max_body_bytes = bytes;
 }
 
 void Router::set_document_headers(std::string block) {

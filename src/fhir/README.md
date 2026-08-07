@@ -16,7 +16,7 @@ files) stays in Python; the C++ core only *consumes* the artifacts it produces.
 | Phase | Scope | State |
 | ----- | ----- | ----- |
 | 1 | **Unit normalization** ([units/](units/)) | ✅ done |
-| 2 | **RESTful FHIR R4 server** ([rest.cpp](rest.cpp), [resource.cpp](resource.cpp), [store.cpp](store.cpp)) | ✅ done |
+| 2 | **RESTful FHIR R4 server** ([rest.cpp](rest.cpp), [resource.cpp](resource.cpp), [write.cpp](write.cpp), [store.cpp](store.cpp)) | ✅ done |
 | 3 | **Terminology resolve** — moved to [`src/indicator/`](../indicator/) and **redefined lexical-first** (deterministic match → rerank), replacing the embed→cosine design. The offline lexicon emitter is now C++ too (`cli/indicator build-lexicon`), not Python. | 🚧 in progress (M1) |
 | 4 | **Document → indicators → FHIR** pipeline wiring | ⏳ planned |
 | 5 | concept-graph expansion + taxonomy category view | ⏳ planned |
@@ -104,6 +104,24 @@ write rules:
 
 The server injects `id` (on create) and `meta.versionId` / `meta.lastUpdated`
 into the stored resource.
+
+### Write bookkeeping (`write.cpp`)
+
+`write_resource()` is the single place a validated resource becomes a row: it
+assigns the id (a fresh uuid, or the caller's for an upsert), bumps `version_id`
+off whatever is already stored, stamps `updated_at`, injects `id` + `meta`, and
+upserts. Three paths share it and must agree, or the same resource read back
+through a different door would look like a different resource:
+
+| caller | id | semantics |
+| --- | --- | --- |
+| `POST /fhir/{type}` | server-assigned | create; a client id in the body is ignored |
+| `PUT /fhir/{type}/{id}` | the URL's | upsert, version bumped |
+| `mirobody_health_store` (C ABI) | the caller's, deterministic | on-device ingest; re-syncing a window replaces its readings instead of duplicating them |
+
+Parsing and validation stay with the caller: the REST layer maps issues onto an
+OperationOutcome with per-issue status codes, the C ABI collapses them into one
+error string, and folding either policy in would force the other to unpick it.
 
 ### Persistence (`store.cpp`)
 

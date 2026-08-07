@@ -14,10 +14,12 @@
 #include "platform/log.hpp"
 #include "storage/storage.hpp"
 #include "transcode/file.hpp"
+#include "transcode/parser.hpp"   // cap_text (the shared bound on file text)
 
 #include <rapidjson/document.h>
 
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -70,11 +72,14 @@ Result read_file(const Args& args, const UserInfo& user, const ToolContext& ctx)
     d.AddMember("mime", str(ref.mime_type, a), a);
 
     // Text extracted from the original at upload (image/PDF/...) lives next to
-    // it as <file_key>.txt; prefer it over bytes the model can't use. A missing
-    // text object falls through to the branches below.
+    // it as <file_key>.trans; prefer it over bytes the model can't use. A missing
+    // text object falls through to the branches below. Every user-content fetch
+    // goes through the decrypting seam, so this reads plaintext whether or not
+    // FILE_ENCRYPTION_KEY is configured. Already within file::kMaxTextBytes: the
+    // extraction capped it before storing.
     if (!ref.text_key.empty()) {
         try {
-            const std::string text = ctx.storage->get_object(ref.text_key);
+            const std::string text = ctx.storage->get_object_decrypted(ref.text_key);
             mirobody::platform::log_debug("mcp[read_file]: '%s' -> extracted text, %lu bytes (key=%s)",
                                           ref.filename.c_str(), (unsigned long)text.size(),
                                           ref.text_key.c_str());
@@ -89,24 +94,29 @@ Result read_file(const Args& args, const UserInfo& user, const ToolContext& ctx)
     if (is_text_mime(ref.mime_type)) {
         std::string bytes;
         try {
-            bytes = ctx.storage->get_object(file_key);
+            bytes = ctx.storage->get_object_decrypted(file_key);
         } catch (const mirobody::storage::StorageError& e) {
-            mirobody::platform::log_debug("mcp[read_file]: get_object failed for key %s: %s", file_key.c_str(), e.what());
+            mirobody::platform::log_debug("mcp[read_file]: read failed for key %s: %s", file_key.c_str(), e.what());
             return Result::error(std::string("Failed to read file: ") + e.what());
         }
+        // These bytes ARE the text, so no extraction bounded them: apply the same
+        // cap extraction applies, instead of inlining a whole large upload.
+        const std::string content = mirobody::file::cap_text(std::move(bytes));
         mirobody::platform::log_debug("mcp[read_file]: '%s' -> inline content, %lu bytes (mime=%s)",
-                                      ref.filename.c_str(), (unsigned long)bytes.size(),
+                                      ref.filename.c_str(), (unsigned long)content.size(),
                                       ref.mime_type.c_str());
-        d.AddMember("content", str(bytes, a), a);
+        d.AddMember("content", str(content, a), a);
     } else {
         // No extracted text and not plain text: hand back a temporary signed URL
         // instead of inlining bytes the model can't use (falls back to the
-        // stored URL if signing fails).
+        // stored URL if signing fails). signed_read_url, not presigned_url: with
+        // FILE_ENCRYPTION_KEY on, a bucket-direct URL serves ciphertext no client
+        // can read, so the URL has to point at the decrypting mount.
         std::string url;
         try {
-            url = ctx.storage->presigned_url(file_key, 3600);
+            url = ctx.storage->signed_read_url(file_key, 3600);
         } catch (const mirobody::storage::StorageError&) {
-            mirobody::platform::log_debug("mcp[read_file]: presign failed for key %s; using stored url", file_key.c_str());
+            mirobody::platform::log_debug("mcp[read_file]: signing failed for key %s; using stored url", file_key.c_str());
             url = ref.url;
         }
         mirobody::platform::log_debug("mcp[read_file]: '%s' -> url (mime=%s, not inlined)",

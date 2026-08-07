@@ -136,6 +136,14 @@ export struct RichMessage {
       ForEach(parseBlocks(this.text), (b: RichBlock) => {
         this.block(b)
       }, (b: RichBlock) => RichMessage.blockKey(b))
+      // Nothing has arrived yet: hold the answer's place with the waiting dots.
+      // The send button turns into a stop control at the same moment, but it sits
+      // at the bottom of the screen while the answer will appear here, and the
+      // gap is seconds long whenever the model thinks or calls a tool first.
+      // Kept below the thinking block so the two read in the order they happen.
+      if (this.streaming && this.text.length === 0) {
+        TypingDots({ fontScale: this.fontScale })
+      }
     }
     .alignItems(HorizontalAlign.Start)
     // Definite width so the blocks' percentage sizes (and the code blocks'
@@ -526,5 +534,50 @@ export struct RichMessage {
       return getContext(this).resourceManager.getStringSync($r('app.string.chat_block_generating').id);
     }
     return getContext(this).resourceManager.getStringSync($r('app.string.chat_chart_placeholder').id);
+  }
+}
+
+/**
+ * TypingDots — the waiting indicator shown in the assistant's place from the
+ * moment a turn is sent until its first token.
+ *
+ * Its own @Component rather than a @Builder on RichMessage, because the pulse is
+ * a state CHANGE and only a change animates. A builder would have had to flip a
+ * flag on the enclosing component, where it stays flipped: aboutToAppear runs
+ * before the first render (so the property is already at its end value and
+ * nothing animates), and a flag set on the first turn is still set on the
+ * second, so the dots would sit there frozen. A fresh component per appearance
+ * starts at `lit = false` every time, and onAppear -- which fires AFTER the
+ * first frame -- moves it, which is what ArkUI animates.
+ *
+ * Each dot runs the same cycle offset by its index, so the pulse travels left to
+ * right. Opacity only: nothing here changes layout, so the bubble cannot twitch.
+ */
+@Component
+export struct TypingDots {
+  @Prop fontScale: number = 1;
+  @State private lit: boolean = false;
+
+  build() {
+    Row({ space: 4 }) {
+      ForEach([0, 1, 2], (i: number) => {
+        Circle()
+          .width(6)
+          .height(6)
+          .fill($r('app.color.text_tertiary'))
+          .opacity(this.lit ? 1 : 0.25)
+          .animation({
+            duration: 400,
+            delay: i * 160,
+            curve: Curve.EaseInOut,
+            iterations: -1,
+            playMode: PlayMode.Alternate
+          })
+      }, (i: number) => i.toString())
+    }
+    // About one line of body text, so the swap to real content does not jump.
+    .height(22 * this.fontScale)
+    .alignItems(VerticalAlign.Center)
+    .onAppear(() => { this.lit = true; })
   }
 }

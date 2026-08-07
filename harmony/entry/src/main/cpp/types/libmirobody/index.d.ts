@@ -153,3 +153,28 @@ export const nativeLocalChat: (
   messagesJson: string,
   onEvent: (type: string, content: string) => void
 ) => number;
+
+/**
+ * Store health readings on the device as FHIR Observations. `resourcesJson` is a
+ * JSON ARRAY of FHIR resources; resolves with
+ * `{"stored":<int>,"failed":<int>,"error":"<first failure>"}` and rejects when no
+ * database is configured or the argument is not an array.
+ *
+ * Idempotent on each resource's `id`: give a reading a deterministic id
+ * ("hw.<metric>.<startMillis>", see model/HealthMetrics.ets) and re-syncing an
+ * overlapping window replaces it instead of adding a duplicate. A resource with
+ * no id gets a fresh one, i.e. plain create semantics.
+ *
+ * Runs on a worker (one SQLite write per resource), which is why it is a Promise.
+ * The rows land where the `family_health` MCP tool reads them, so a synced metric
+ * is answerable by the model on the native lane with nothing leaving the device.
+ */
+export const nativeHealthStore: (resourcesJson: string) => Promise<string>;
+
+/**
+ * The most recent stored Observations, newest first, as JSON
+ * `{"total":<int>,"items":[{"code","display","value","unit","time","source"}...]}`.
+ * `count` is clamped to 1..200 (0 => 20). The read-back that lets the settings
+ * card show what a sync actually landed, including across a relaunch.
+ */
+export const nativeHealthRecent: (count: number) => Promise<string>;

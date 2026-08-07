@@ -3,7 +3,7 @@
 // Reference-data ingestion for the lexicon + unit thesaurus. All the vocabulary
 // parsers (LOINC / CVX / UMLS MRCONSO / aliases / ChEBI / MONDO / NCBI taxdump /
 // LPSN / PubChem) and their readers live in sources.cpp; the CLI just parses
-// args and calls these. Offline / dev-time (reads E:/ref, streams multi-GB
+// args and calls these. Offline / dev-time (reads the --ref tree, streams multi-GB
 // files) — not used at runtime.
 
 #include <string>
@@ -14,7 +14,7 @@ namespace mirobody {
 namespace indicator {
 
 struct BuildOptions {
-    std::string ref;      // reference-data root (e.g. E:/ref)
+    std::string ref;      // reference-data root, local and outside the repo (--ref)
     std::string aliases;  // optional concatenated "src<TAB>dst" alias TSV
     std::string lpsn;     // optional LPSN csv path override (else globbed under ref)
     bool pubchem;         // include the (large) PubChem enrichment pass

@@ -75,7 +75,8 @@ ChatService::ChatService(server::Router& router,
     // Packet and handing it to dispatcher_. They register their own routes (SSE:
     // POST /api/chat, WS: GET /api/chat) when started. Uploads are handled by the
     // dispatcher (which owns `storage`), so the transports just carry bytes.
-    transports_.push_back(std::unique_ptr<Transport>(new SseTransport(router, dispatcher_, jwt_)));
+    transports_.push_back(std::unique_ptr<Transport>(
+        new SseTransport(router, dispatcher_, jwt_, cfg.chat.sse_heartbeat_seconds)));
     transports_.push_back(std::unique_ptr<Transport>(new WsTransport(router, dispatcher_, jwt_)));
     // transports_.push_back(std::unique_ptr<Transport>(new MqttTransport(dispatcher_, cfg)));
 

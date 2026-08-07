@@ -14,6 +14,7 @@
 
 #include "chat/agent.hpp"
 
+#include "client/gcp_auth.hpp"   // Vertex: application default credentials
 #include "llm/client.hpp"
 #include "llm/gemini.hpp"
 #include "llm/mirothinker.hpp"
@@ -24,6 +25,8 @@
 #include <ctime>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -149,8 +152,8 @@ std::size_t attach_files_to_turn(std::vector<mirobody::llm::ChatMessage>& messag
         if (!f.data.empty()) {
             mirobody::llm::FilePart fp;
             fp.mime_type = f.mime_type;
-            fp.data      = f.data;
-            messages[ui].files.push_back(fp);
+            fp.data      = f.data;   // shares the upload's bytes; no copy (Blob)
+            messages[ui].files.push_back(std::move(fp));
             ++inlined;
         } else if (!f.url.empty()) {
             note += ": " + f.url;   // reference-only: best we can do is the link
@@ -393,28 +396,200 @@ ClientMap load_clients(const mirobody::Config& cfg) {
               mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt));
     }
 
-    // Gemini -- Google AI Studio. The model differs by target, and the two are
-    // mutually exclusive rather than additive:
+    // Gemini -- AI Studio or Vertex AI, decided by config (see the block below).
     //
-    //   mobile  -> gemini-3.6-flash. gemini-2.5-flash returns 404 on this path in
-    //              practice, so listing it would be a dead row.
-    //   desktop -> gemini-2.5-flash. The HIPAA deployment goes through Vertex AI,
-    //              and Vertex has no gemini-3.6-flash node in North America.
+    // The two surfaces do NOT serve the same models, so they get their own lists.
+    // Offering a row the surface cannot serve is not harmless: it is a live entry
+    // in the end user's model picker that 404s when chosen.
+    //
+    //   AI Studio: gemini-3.6-flash is the current model. gemini-2.5-flash is
+    //     closed to new sign-ups -- a freshly issued key 404s on it, on every
+    //     platform, not just mobile -- but stays listed on desktop because keys
+    //     issued before the cut-off still work. Mobile ships to new users only,
+    //     so there it would be a dead row and is left out.
+    //
+    //   Vertex: gemini-3.5-flash rather than 3.6. 3.6 publishes ONE location,
+    //     `global`, so any deployment pinned to a region cannot reach it at all;
+    //     3.5 serves `global` plus the `us` / `eu` multi-regions and a handful of
+    //     single regions. 2.5 is listed without the desktop-only guard: the
+    //     sign-up cut-off is an AI Studio restriction, not a Vertex one.
+    //
+    // Prices are the STANDARD tier, USD / 1M tokens, since this is the plain
+    // (non-batch) generateContent path. Batch runs at half these numbers
+    // (2.5: 0.15 / 1.25, 3.6: 0.75 / 3.75) -- not what we bill against here.
+    // Vertex charges 3.5 about 10% more away from the `global` endpoint
+    // (1.65 / 9.90 against 1.50 / 9.00), so its row is priced from the location.
+    struct GeminiModel {
+        const char* model;
+        double      input_price;
+        double      output_price;   // includes thinking tokens
+    };
     {
-        mirobody::llm::GeminiOptions opt;
-        opt.api_key = cfg.store.get_str("GOOGLE_API_KEY", cfg.gemini.api_key);
-#if MIROBODY_MOBILE
-        const char* const kGeminiModel = "gemini-3.6-flash";
-#else
-        const char* const kGeminiModel = "gemini-2.5-flash";
+        // Surface selection: Vertex when the deployment names a project AND a
+        // location -- the two things its endpoint URL is built from -- and AI
+        // Studio otherwise. Both, not either: a URL cannot be built from half of
+        // them, and quietly falling back to AI Studio would route a deployment
+        // that meant to stay on Vertex (usually for regulatory reasons) to a
+        // global consumer endpoint instead. A half-set is reported, not absorbed.
+        //
+        // The access token is deliberately NOT part of that decision: in a normal
+        // deployment nobody configures one. Application Default Credentials finds
+        // it (gcp::AccessTokens, the port of google.auth.default() +
+        // creds.refresh()), which on GCP means the instance metadata server.
+        // Requiring a token here would mean requiring an operator to hand-manage
+        // what the platform already provides. Two escape hatches sit ahead of ADC
+        // for deployments that do hand one over:
+        //
+        //   GCP_ACCESS_TOKEN_FILE  a path kept current by something else (a
+        //                          projected service-account token, a sidecar).
+        //                          Re-read per request, so a rotation lands
+        //                          without a restart.
+        //   GCP_ACCESS_TOKEN       the token inline. Read once, at startup: a
+        //                          process's environment cannot be changed from
+        //                          outside, so it only tracks a refresh that
+        //                          restarts us, and past its ~1h expiry every
+        //                          Gemini turn 401s. Handy for a quick
+        //                          `gcloud auth print-access-token` locally.
+        //
+        // Key names are Google's own wherever Google has one -- GOOGLE_CLOUD_*,
+        // GOOGLE_API_KEY, GOOGLE_APPLICATION_CREDENTIALS (read by gcp_auth) -- so
+        // a host already set up for gcloud or the Python SDK needs nothing new,
+        // and one spelling per setting means a half-migrated deployment cannot end
+        // up with the two disagreeing. Earlier revisions also took GCP_PROJECT /
+        // GCP_LOCATION; those are gone, and load_config warns when either is still
+        // set rather than letting the value fall on the floor. There is no official
+        // env var for a raw access token (Google's answer is ADC), so
+        // GCP_ACCESS_TOKEN* are our own names -- one pair, shared with the
+        // embedding lane through gcp::TokenSource.
+        const std::string gcp_token_file = cfg.store.get_str("GCP_ACCESS_TOKEN_FILE");
+        const std::string gcp_token      = cfg.store.get_str("GCP_ACCESS_TOKEN");
+        const std::string gcp_project    = cfg.store.get_str("GOOGLE_CLOUD_PROJECT");
+        const std::string gcp_location   = cfg.store.get_str("GOOGLE_CLOUD_LOCATION");
+        const std::string gemini_key     = cfg.store.get_str("GOOGLE_API_KEY", cfg.gemini.api_key);
+
+        // Host overrides, so a deployment can put a proxy / gateway / mock in
+        // front of Gemini. GEMINI_BASE_URL is the key the other Gemini callers
+        // already honor (the file parser, the embedding client) and it lands on
+        // the typed Config field; GEMINI_AI_STUDIO_BASE_URL / GEMINI_VERTEX_BASE_URL
+        // are cli/gemini.cpp's per-surface names, kept here so the debug CLI and
+        // the server can be pointed at the same host by the same key. Empty
+        // leaves the client on its own default, which is what an unset config
+        // and the stock GEMINI_BASE_URL default both amount to.
+        const std::string ai_studio_base = cfg.store.get_str("GEMINI_AI_STUDIO_BASE_URL",
+                                                             cfg.gemini.base_url);
+        const std::string vertex_base    = cfg.store.get_str("GEMINI_VERTEX_BASE_URL");
+
+        const bool vertex = !gcp_project.empty() && !gcp_location.empty();
+
+        // Per-model location overrides, read once and consulted per row below.
+        // The two Vertex rows NEED this: 3.5 publishes the `us` / `eu` multi-
+        // regions and 2.5 the single ones, with no value serving both, so before
+        // this map one of the two was always a 404 waiting to be picked. See
+        // gcp::vertex_model_location for why the lists are not reconcilable.
+        const std::unordered_map<std::string, std::string> model_locations =
+            cfg.store.get_dict("GOOGLE_CLOUD_MODEL_LOCATIONS");
+
+        // One token source shared by every Gemini client built below, so the
+        // models share a token (and its cache) rather than resolving one each.
+        // It stays alive because each client's closure captures the shared_ptr.
+        // Built only when it will be used: an AI Studio deployment has no reason
+        // to hold one. Resolution order (file, inline, ADC) lives in TokenSource,
+        // so this lane and the embedding lane cannot drift apart.
+        std::shared_ptr<mirobody::gcp::TokenSource> gcp_tokens;
+        if (vertex) {
+            gcp_tokens = std::make_shared<mirobody::gcp::TokenSource>(gcp_token_file, gcp_token);
+        }
+
+        if (vertex && !gcp_token_file.empty() &&
+            mirobody::gcp::read_token_file(gcp_token_file).empty()) {
+            mirobody::platform::log_warn(
+                "agent: Vertex token file '%s' is missing or empty; Gemini turns will fail "
+                "until it is written (it is re-read per request, so no restart is needed)",
+                gcp_token_file.c_str());
+        }
+        if (!vertex && (!gcp_project.empty() || !gcp_location.empty())) {
+            mirobody::platform::log_warn(
+                "agent: incomplete Vertex config (project=%s location=%s); both are "
+                "required, falling back to AI Studio",
+                gcp_project.empty()  ? "unset" : "set",
+                gcp_location.empty() ? "unset" : "set");
+        }
+        if (vertex) {
+            mirobody::platform::log_info("agent: gemini via Vertex AI (project=%s, location=%s, token=%s)",
+                                         gcp_project.c_str(), gcp_location.c_str(),
+                                         gcp_tokens->describe());
+            // Named individually rather than counted: a model reached at some
+            // other location than the one the line above just reported is
+            // exactly what someone reading this log after a 404 needs to see.
+            for (std::unordered_map<std::string, std::string>::const_iterator
+                     it = model_locations.begin(); it != model_locations.end(); ++it) {
+                mirobody::platform::log_info("agent:   location override: %s -> %s",
+                                             it->first.c_str(), it->second.c_str());
+            }
+        } else {
+            mirobody::platform::log_info("agent: gemini via AI Studio");
+        }
+
+        // What makes a row callable differs by surface, so offer() gates on the
+        // credential this mode will actually send. On Vertex the project stands
+        // in for it: the token is resolved per request (and may be ambient), so
+        // there is nothing here to test -- naming a project IS the intent to
+        // call Vertex, and a token that never arrives fails the turn with a
+        // credential error rather than hiding the whole model list.
+        const std::string credential = vertex ? gcp_project : gemini_key;
+
+        // Each surface offers only what it can serve (see the note above the
+        // GeminiModel struct). Built here rather than as a static table because
+        // the Vertex prices depend on the configured location.
+        std::vector<GeminiModel> models;
+        if (vertex) {
+            // 3.5 is ~10% cheaper on `global`, so its row has to be priced from
+            // the location it will actually be REACHED at, not the deployment's.
+            const bool global_endpoint =
+                mirobody::gcp::vertex_model_location(model_locations, "gemini-3.5-flash",
+                                                     gcp_location) == "global";
+            const GeminiModel v[] = {
+                {"gemini-2.5-flash", 0.30, 2.50},
+                {"gemini-3.5-flash", global_endpoint ? 1.50 : 1.65,
+                                     global_endpoint ? 9.00 : 9.90},
+            };
+            models.assign(v, v + sizeof(v) / sizeof(v[0]));
+        } else {
+            const GeminiModel a[] = {
+#if !MIROBODY_MOBILE
+                {"gemini-2.5-flash", 0.30, 2.50},
 #endif
-        opt.model         = kGeminiModel;
-        opt.input_price   = 0.30;   // USD / 1M input tokens
-        opt.output_price  = 2.50;   // USD / 1M output tokens (incl. thinking tokens)
-        opt.tools_json    = gemini_tools;
-        opt.tool_executor = &run_tool_for_user;
-        offer(clients, kGeminiModel, opt.api_key,
-              mirobody::llm::make_client<mirobody::llm::GeminiClient>(opt));
+                {"gemini-3.6-flash", 1.50, 7.50},
+            };
+            models.assign(a, a + sizeof(a) / sizeof(a[0]));
+        }
+        for (std::size_t mi = 0; mi < models.size(); ++mi) {
+            const GeminiModel& m = models[mi];
+            mirobody::llm::GeminiOptions opt;
+            opt.mode = vertex ? mirobody::llm::GeminiMode::Vertex
+                              : mirobody::llm::GeminiMode::AiStudio;
+            if (vertex) {
+                // Captured by shared_ptr: the client outlives this scope and the
+                // closure runs on a turn's thread long after. Resolved per
+                // request, so a rotated token lands without a restart.
+                std::shared_ptr<mirobody::gcp::TokenSource> tokens = gcp_tokens;
+                opt.access_token_provider = [tokens]() { return tokens->token(); };
+                opt.gcp_project     = gcp_project;
+                opt.gcp_location    = mirobody::gcp::vertex_model_location(
+                                          model_locations, m.model, gcp_location);
+                opt.vertex_base_url = vertex_base;
+            } else {
+                opt.api_key            = gemini_key;
+                opt.ai_studio_base_url = ai_studio_base;
+            }
+            opt.model         = m.model;
+            opt.input_price   = m.input_price;
+            opt.output_price  = m.output_price;
+            opt.tools_json    = gemini_tools;
+            opt.tool_executor = &run_tool_for_user;
+            offer(clients, m.model, credential,
+                  mirobody::llm::make_client<mirobody::llm::GeminiClient>(opt));
+        }
     }
 
     // mirothinker-1.7 -- MiroMind OpenAI-compatible endpoint (provider-native

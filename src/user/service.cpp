@@ -283,6 +283,74 @@ std::string url_encode(const std::string& s) {
     return out;
 }
 
+// Only the audit write below needs these; the legacy schema has no log table.
+#if !defined(MIROBODY_DATABASE_PG_LEGACY)
+
+// Whether `s` is a bare dotted-quad IPv4 literal. Rejects leading zeros (which
+// some parsers read as octal) so only one spelling of an address is stored.
+bool is_ipv4_literal(const std::string& s) {
+    int groups = 0;
+    std::size_t i = 0;
+    while (i < s.size()) {
+        const std::size_t start = i;
+        int value = 0;
+        while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) {
+            value = value * 10 + (s[i] - '0');
+            if (++i - start > 3) return false;
+        }
+        if (i == start || value > 255) return false;
+        if (s[start] == '0' && i - start > 1) return false;
+        if (++groups > 4) return false;
+        if (i == s.size()) break;
+        if (s[i] != '.') return false;
+        if (++i == s.size()) return false;          // trailing '.'
+    }
+    return groups == 4;
+}
+
+// Whether `s` is a bare IPv6 literal, including the compressed "::" form and an
+// IPv4-mapped tail (`::ffff:203.0.113.7`). A zone id (`%eth0`) or a "/masklen"
+// suffix falls out as invalid, which is what we want: pg's INET rejects the
+// former and would silently widen the row's meaning on the latter.
+bool is_ipv6_literal(const std::string& s) {
+    if (s.size() < 2 || s.size() > 45 || s.find(':') == std::string::npos) return false;
+    // A lone leading/trailing ':' is only legal as half of an elision.
+    if (s[0] == ':' && s.compare(0, 2, "::") != 0) return false;
+    if (s[s.size() - 1] == ':' && s.compare(s.size() - 2, 2, "::") != 0) return false;
+
+    std::vector<std::string> parts;                 // an empty part marks the elision
+    for (std::size_t start = 0;;) {
+        const std::size_t colon = s.find(':', start);
+        parts.push_back(s.substr(start, colon == std::string::npos ? colon : colon - start));
+        if (colon == std::string::npos) break;
+        start = colon + 1;
+    }
+    // An edge "::" splits into two empty parts; drop one so a single empty part
+    // means "elision here" wherever it sits.
+    if (parts.size() >= 2 && parts[0].empty() && parts[1].empty()) parts.erase(parts.begin());
+    if (parts.size() >= 2 && parts.back().empty() && parts[parts.size() - 2].empty()) parts.pop_back();
+
+    int groups = 0, elisions = 0;                   // an embedded IPv4 fills two groups
+    for (std::size_t k = 0; k < parts.size(); ++k) {
+        const std::string& g = parts[k];
+        if (g.empty()) { ++elisions; continue; }
+        if (g.find('.') != std::string::npos) {
+            if (k + 1 != parts.size() || !is_ipv4_literal(g)) return false;
+            groups += 2;
+            continue;
+        }
+        if (g.size() > 4) return false;
+        for (std::size_t j = 0; j < g.size(); ++j) {
+            if (!std::isxdigit(static_cast<unsigned char>(g[j]))) return false;
+        }
+        ++groups;
+    }
+    if (elisions > 1) return false;
+    return elisions == 1 ? groups < 8 : groups == 8;
+}
+
+#endif  // !MIROBODY_DATABASE_PG_LEGACY
+
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -603,17 +671,25 @@ void UserService::log_login(const server::Request& req, std::int64_t user_id, da
     (void)req; (void)user_id; (void)method;
 #else
     if (user_id <= 0) return;
-    // Empty ip/user_agent -> NULL: the pg `ip` column is INET, whose input
-    // rejects "". Best-effort; a failed audit write must not break the login.
-    auto text_or_null = [](const std::string& s) {
-        return s.empty() ? database::Value(nullptr) : database::Value(s);
-    };
+    // The pg `ip` column is INET, but req.ip is resolved from the proxy headers
+    // X-Forwarded-For / X-Real-IP (server::client_ip), which a client connecting
+    // without a trusted proxy in front sets freely -- and client_ip only uses
+    // "is this public" to *pick* an entry, never to validate one, so an
+    // arbitrary string reaches here. INET rejects it, the INSERT throws, and the
+    // catch below turns one forged header into a lost login record. Store NULL
+    // unless the value parses as a bare IP literal, so the rest of the row
+    // survives. Empty user_agent -> NULL likewise, rather than "".
+    const database::Value ip_value =
+        (is_ipv4_literal(req.ip) || is_ipv6_literal(req.ip)) ? database::Value(req.ip)
+                                                            : database::Value(nullptr);
+    const database::Value ua_value =
+        req.user_agent.empty() ? database::Value(nullptr) : database::Value(req.user_agent);
     try {
         db_.execute(
             "INSERT INTO user_login_logs (user_id, login_method, ip, user_agent, created_at) "
             "VALUES (?, ?, ?, ?, ?);",
-            {user_id, static_cast<int>(method), text_or_null(req.ip),
-             text_or_null(req.user_agent), platform::now_unix_ms()});
+            {user_id, static_cast<int>(method), ip_value, ua_value,
+             platform::now_unix_ms()});
     } catch (const std::exception& e) {
         platform::log_warn("audit: login log failed: %s", e.what());
     }

@@ -110,6 +110,7 @@ int parse_args(int argc, char** argv, Args& out) {
         }
     }
 
+    // Google's own names, the same set the chat CLI and the server read.
     out.opt.api_key            = store.get_str("GOOGLE_API_KEY",                 out.opt.api_key);
     out.opt.access_token       = store.get_str("GCP_ACCESS_TOKEN",               out.opt.access_token);
     out.opt.gcp_project        = store.get_str("GOOGLE_CLOUD_PROJECT",           out.opt.gcp_project);

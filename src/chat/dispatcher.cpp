@@ -113,7 +113,7 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
             meta.filename = att.filename;
             std::string key;
             try {
-                key = storage_->put_user_object(user_id, att.data, ctype, meta);
+                key = storage_->put_user_object(user_id, att.data.str(), ctype, meta);
             } catch (const storage::StorageError& e) {
                 platform::log_error("chat: failed to store upload '%s': %s", att.filename.c_str(), e.what());
                 continue;   // skip this file; keep the turn going
@@ -187,7 +187,7 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
                     out.send(TranscriptEvent(TranscriptEvent::Phase::Done, att.filename, true));
                 } else {
                     out.send(TranscriptEvent(TranscriptEvent::Phase::Begin, att.filename));
-                    const std::string text = parser_->extract_text(att.data, ctype, att.filename);
+                    const std::string text = parser_->extract_text(att.data.str(), ctype, att.filename);
                     const bool extracted = !text.empty();
                     if (extracted) {
                         extracted_text = text;
@@ -260,7 +260,7 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
                         "                     THEN th_files.text_length ELSE EXCLUDED.text_length END,"
                         "  updated_at = now();",
                         {std::to_string(user_id), std::to_string(user_id), att.filename, ctype, key,
-                         storage::sha256_hex(att.data), extracted_text,
+                         storage::sha256_hex(att.data.str()), extracted_text,
                          static_cast<std::int64_t>(extracted_text.size())});
                 } catch (const std::exception& e) {
                     platform::log_warn("chat: th_files record failed for '%s': %s",

@@ -223,6 +223,18 @@ bool Server::start() {
     router_->set_uri_prefix(cfg_.uri_prefix);          // sub-path mount, e.g. /mirobody
     router_->set_default_headers(cfg_.http_headers);   // e.g. CORS from HTTP_HEADERS
     router_->set_http_roots(cfg_.http_roots);          // static files from HTTP_ROOT
+    // The bound on one request body (HTTP_MAX_BODY_BYTES): bodies are buffered
+    // whole before dispatch, so this is what keeps a single upload from pinning
+    // arbitrary memory. 0 disables it.
+    router_->set_max_body_bytes(static_cast<std::size_t>(
+        cfg_.max_request_body_bytes > 0 ? cfg_.max_request_body_bytes : 0));
+    if (cfg_.max_request_body_bytes > 0) {
+        platform::log_info("[6/7] request body limit: %lld bytes",
+                           (long long)cfg_.max_request_body_bytes);
+    } else {
+        platform::log_warn("[6/7] request body limit disabled (HTTP_MAX_BODY_BYTES=0): "
+                           "one upload can buffer without bound");
+    }
     // Serve LocalStorage objects over HTTP at LOCAL_STORAGE_URL_PREFIX. Objects
     // live under LOCAL_STORAGE_DIR (which need NOT be inside HTTP_ROOT) and, when
     // LOCAL_STORAGE_SECRET is set, are gated by the presigned "?expires=&sig="

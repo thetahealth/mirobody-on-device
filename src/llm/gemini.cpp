@@ -1,6 +1,7 @@
 #include "llm/gemini.hpp"
 
 #include "client/curl_tls.hpp"
+#include "client/gcp_auth.hpp"
 #include "llm/sse_parser.hpp"
 #include "platform/log.hpp"
 
@@ -280,7 +281,7 @@ std::string make_content_with_files(const std::string& role, const std::string& 
     if (!content.empty()) write_part_text(w, content);
     for (std::size_t i = 0; i < files.size(); ++i) {
         if (files[i].data.empty()) continue;
-        const std::string b64  = base64_encode_bytes(files[i].data);
+        const std::string b64  = base64_encode_bytes(files[i].data.str());
         const std::string mime = files[i].mime_type.empty()
             ? std::string("application/octet-stream") : files[i].mime_type;
         w.StartObject();
@@ -417,21 +418,34 @@ std::string build_request_body(const GeminiOptions& opt,
 // URL building
 //------------------------------------------------------------------------------
 
+// The Vertex bearer token to send right now: the provider's value when one is
+// set (so a token the deployment rotated under us is picked up without a
+// restart), else the static one captured at construction.
+std::string vertex_token(const GeminiOptions& opt) {
+    return opt.access_token_provider ? opt.access_token_provider() : opt.access_token;
+}
+
 std::string build_url(const GeminiOptions& opt) {
     if (opt.mode == GeminiMode::AiStudio) {
         std::string host = opt.ai_studio_base_url.empty()
             ? std::string{"https://generativelanguage.googleapis.com"}
             : opt.ai_studio_base_url;
-        // .../{api_version}/models/{model}:streamGenerateContent?alt=sse&key={api_key}
+        // .../{api_version}/models/{model}:streamGenerateContent?alt=sse
+        // The API key is NOT here: it rides the x-goog-api-key header (see
+        // run_request), so it cannot leak through anything that records URLs.
         std::string url = host + "/" + opt.api_version + "/models/" + opt.model
-                        + ":streamGenerateContent?alt=sse&key=" + opt.api_key;
+                        + ":streamGenerateContent?alt=sse";
         return url;
     }
     // Vertex: the version is "v1" in practice; AiStudio's "v1beta" default
     // would 404 on Vertex. We pick v1 unconditionally for Vertex.
-    std::string host = opt.vertex_base_url.empty()
-        ? ("https://" + opt.gcp_location + "-aiplatform.googleapis.com")
-        : opt.vertex_base_url;
+    //
+    // The host is not simply the location with "-aiplatform.googleapis.com"
+    // stuck on: "global" and the us / eu multi-regions each have their own
+    // shape, and getting it wrong is a 400 rather than a fallback. gcp::
+    // vertex_host knows all three; the path below is the same for every one.
+    std::string host = opt.vertex_base_url;
+    if (host.empty()) host = gcp::vertex_host(opt.gcp_location);
     std::string url = host
         + "/v1/projects/" + opt.gcp_project
         + "/locations/"   + opt.gcp_location
@@ -512,9 +526,18 @@ RequestOutcome run_request(const GeminiOptions& opt,
     hdrs = curl_slist_append(hdrs, "Accept: text/event-stream");
     std::string auth;
     if (opt.mode == GeminiMode::Vertex) {
-        auth = "Authorization: Bearer " + opt.access_token;
-        hdrs = curl_slist_append(hdrs, auth.c_str());
+        // Resolved per request, not per client: one turn can span several of
+        // these (a tool loop re-queries the model), and the token underneath may
+        // have been rotated since the last one.
+        auth = "Authorization: Bearer " + vertex_token(opt);
+    } else {
+        // AI Studio: the key as a header rather than a ?key= query parameter.
+        // Both authenticate the same, but a URL is the one part of a request
+        // that everything on the path writes down -- proxy and access logs, curl
+        // traces, crash reports -- and a key in it is a key in all of them.
+        auth = "x-goog-api-key: " + opt.api_key;
     }
+    if (!auth.empty()) hdrs = curl_slist_append(hdrs, auth.c_str());
 
     mirobody::client::configure_tls_trust(curl);
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
@@ -577,9 +600,21 @@ bool GeminiClient::ainvoke(const std::vector<ChatMessage>& messages,
             return false;
         }
     } else {
-        if (opt_.access_token.empty()) {
-            emit_error("access_token is required for Gemini Vertex mode "
-                       "(get one via `gcloud auth print-access-token`).");
+        if (vertex_token(opt_).empty()) {
+            // Name every way one could have arrived, because the usual cause is
+            // that NONE was configured on purpose -- the deployment expected
+            // application default credentials to answer and they did not. The
+            // server log carries the reason under "gcp auth:".
+            emit_error("Vertex mode has no access token: application default "
+                       "credentials resolved none (see the 'gcp auth:' lines in the "
+                       "server log, which say which paths were tried), and neither "
+                       "GCP_ACCESS_TOKEN_FILE nor GCP_ACCESS_TOKEN is set. On GCP, attach "
+                       "a service account to the instance. Anywhere else, set "
+                       "GOOGLE_APPLICATION_CREDENTIALS -- in the server process's "
+                       "ENVIRONMENT, not config.yml -- to a service-account key, or to the "
+                       "external_account file that workload identity federation produces "
+                       "(the way to authenticate from AWS or another cloud with no key to "
+                       "store).");
             return false;
         }
         if (opt_.gcp_project.empty() || opt_.gcp_location.empty()) {

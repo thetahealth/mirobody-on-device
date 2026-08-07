@@ -9,8 +9,10 @@
 
 #include <rapidjson/document.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <string>
 #include <thread>
@@ -70,10 +72,41 @@ void set_str(rapidjson::Value& obj, const char* key, const std::string& val,
     }
 }
 
+// An SSE comment: a line starting with ':' carries no event, and every
+// conformant reader drops it before the event layer -- which is what makes it
+// the right keepalive here. It costs no protocol change and no client change:
+// the web, Qt, Harmony and iOS readers all keep only `data:` lines, and Android
+// goes through OkHttp's EventSource, which discards comments outright.
+const char* const kKeepAlive = ": ping\n\n";
+
+// Emit kKeepAlive on `writer` whenever the turn has sent nothing for
+// `interval_ms`, until it ends. A turn is silent for long stretches by design --
+// extracting text from an upload runs a vision model, a thinking model
+// deliberates before its first token -- and nothing between here and the browser
+// can tell a working stream from a dead one except by seeing bytes. This server
+// deliberately disarms its own timeout for streams (server/router.cpp), so these
+// bytes exist for the hops in between, whose idle timeouts are typically 60s.
+//
+// Runs on its own thread: the turn's thread is inside the dispatcher, blocked on
+// exactly the calls this covers. The poll is coarse (200 ms) because it only has
+// to notice the end of a turn promptly; writing is what the interval governs.
+void pump_keepalives(std::shared_ptr<server::StreamWriter> writer, long long interval_ms) {
+    for (;;) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        if (writer->is_finished() || writer->cancelled()) return;
+        if (writer->idle_ms() < interval_ms) continue;
+        // Atomic against the turn ending underneath us: false means the terminal
+        // chunk is already queued, and nothing may follow it.
+        if (!writer->write_unless_finished(kKeepAlive)) return;
+    }
+}
+
 }   // namespace
 
-SseTransport::SseTransport(server::Router& router, Dispatcher& dispatcher, const jwt::Jwt& jwt)
-    : router_(router), dispatcher_(dispatcher), jwt_(jwt) {}
+SseTransport::SseTransport(server::Router& router, Dispatcher& dispatcher, const jwt::Jwt& jwt,
+                           int heartbeat_seconds)
+    : router_(router), dispatcher_(dispatcher), jwt_(jwt),
+      heartbeat_seconds_(heartbeat_seconds) {}
 
 void SseTransport::start() {
     // POST /api/chat — stream a chat response as Server-Sent Events over a single
@@ -130,7 +163,10 @@ bool SseTransport::parse_body(const server::Request& req, Packet& out, server::R
             Attachment att;
             att.filename  = fp.filename;
             att.mime_type = fp.content_type;
-            att.data      = std::move(fp.data);
+            // The one place these bytes are copied into their own buffer -- and
+            // it isn't a copy either: the part's storage is moved in, and every
+            // hop from here on shares it (see mirobody::Blob).
+            att.data      = Blob(std::move(fp.data));
             pkt.add_attachment(std::move(att));
         }
 
@@ -180,10 +216,34 @@ void SseTransport::handle(const server::Request& req, server::Response& res) {
     // the server).
     Dispatcher* dispatcher = &dispatcher_;
     std::shared_ptr<Packet> pktp = std::make_shared<Packet>(std::move(pkt));
+    // Keep the connection warm through the turn's silent stretches. Started
+    // before the turn and left to notice its end on its own: it holds the writer
+    // by shared_ptr, so it is safe whichever thread finishes first.
+    if (heartbeat_seconds_ > 0) {
+        const long long interval_ms = static_cast<long long>(heartbeat_seconds_) * 1000;
+        std::thread(pump_keepalives, writer, interval_ms).detach();
+    }
+
     std::thread([writer, pktp, uid, dispatcher]() {
         writer->begin(200, "text/event-stream");
         SseResponder responder(writer);
-        dispatcher->dispatch(*pktp, uid, responder);
+        // Nothing runs above this frame: an exception that escapes a detached
+        // thread is an uncaught exception, which takes the whole server down.
+        // A turn that fails in a way it did not anticipate -- a decode that
+        // could not allocate, a provider client throwing on malformed input --
+        // must cost this request and no more, so it becomes an in-band error
+        // event and a closed stream, exactly like a failure the turn did handle.
+        try {
+            dispatcher->dispatch(*pktp, uid, responder);
+        } catch (const std::exception& e) {
+            platform::log_error("chat: turn aborted by an unhandled exception: %s", e.what());
+            responder.send(ErrorEvent(std::string("internal error: ") + e.what()));
+            responder.finish();
+        } catch (...) {
+            platform::log_error("chat: turn aborted by an unknown exception");
+            responder.send(ErrorEvent("internal error"));
+            responder.finish();
+        }
     }).detach();
 }
 

@@ -622,6 +622,116 @@ napi_value NativeLocalChat(napi_env env, napi_callback_info info) {
     return out;
 }
 
+//------------------------------------------------------------------------------
+// Health data (on-device ingest)
+//------------------------------------------------------------------------------
+//
+// Both calls hit SQLite, so both return a PROMISE and do the work on a libuv
+// worker (napi_create_async_work) rather than the ArkTS thread: a sync writes one
+// row per reading and a week of samples is hundreds of them, which is exactly the
+// kind of stall that shows up as a frozen list mid-scroll.
+//
+// Why async_work here and a tsfn for chat: a chat turn streams many events back
+// and needs a channel; these produce ONE result, and a promise is what ArkTS
+// wants for that. `user_id` 0 is passed through -- the core resolves it to the
+// device owner (row 1), the same subject a chat turn runs as, which is what makes
+// the family_health tool able to read what a sync wrote.
+
+struct HealthWork {
+    napi_async_work work     = nullptr;
+    napi_deferred   deferred = nullptr;
+    bool            is_store = false;
+    std::string     resources;   // store: the Observations JSON
+    std::int32_t    count    = 0;// recent: how many rows
+    std::string     result;      // the core's JSON answer
+    bool            ok       = false;
+};
+
+// Worker thread: NO napi calls in here, only the C ABI.
+void HealthExecute(napi_env /*env*/, void* data) {
+    HealthWork* w = static_cast<HealthWork*>(data);
+    const char* out = w->is_store
+        ? mirobody_health_store(/*user_id=*/0, w->resources.c_str())
+        : mirobody_health_recent(/*user_id=*/0, w->count);
+    // The buffer is owned by the core and valid only until this thread's next
+    // health call -- copy it here, while we still hold it.
+    if (out != nullptr) {
+        w->result = out;
+        w->ok = true;
+    }
+}
+
+// Back on the ArkTS thread: settle the promise and free the work item.
+void HealthComplete(napi_env env, napi_status status, void* data) {
+    std::unique_ptr<HealthWork> w(static_cast<HealthWork*>(data));
+    if (w->ok && status == napi_ok) {
+        napi_value value = nullptr;
+        napi_create_string_utf8(env, w->result.c_str(), NAPI_AUTO_LENGTH, &value);
+        napi_resolve_deferred(env, w->deferred, value);
+    } else {
+        // NULL from the core means no database configured or unusable input; it
+        // has already logged the specifics. Reject so ArkTS sees a failure rather
+        // than an empty result it would read as "no data".
+        napi_value msg = nullptr, err = nullptr;
+        napi_create_string_utf8(env,
+            w->is_store ? "nativeHealthStore failed (no database, or resources JSON is not an array)"
+                        : "nativeHealthRecent failed (no database configured)",
+            NAPI_AUTO_LENGTH, &msg);
+        napi_create_error(env, nullptr, msg, &err);
+        napi_reject_deferred(env, w->deferred, err);
+    }
+    napi_delete_async_work(env, w->work);
+}
+
+// Queue one HealthWork and hand back its promise.
+napi_value QueueHealthWork(napi_env env, HealthWork* w, const char* name) {
+    napi_value promise = nullptr;
+    if (napi_create_promise(env, &w->deferred, &promise) != napi_ok) {
+        delete w;
+        napi_throw_error(env, nullptr, "napi_create_promise failed");
+        return nullptr;
+    }
+    napi_value work_name = nullptr;
+    napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &work_name);
+    if (napi_create_async_work(env, nullptr, work_name, HealthExecute, HealthComplete,
+                               w, &w->work) != napi_ok) {
+        delete w;
+        napi_throw_error(env, nullptr, "napi_create_async_work failed");
+        return nullptr;
+    }
+    napi_queue_async_work(env, w->work);
+    return promise;
+}
+
+// nativeHealthStore(resourcesJson: string): Promise<string>
+napi_value NativeHealthStore(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value argv[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+    if (argc < 1) {
+        napi_throw_error(env, nullptr, "nativeHealthStore(resourcesJson) needs one argument");
+        return nullptr;
+    }
+    HealthWork* w = new HealthWork();
+    w->is_store = true;
+    w->resources = ToUtf8(env, argv[0]);
+    return QueueHealthWork(env, w, "mirobody_health_store");
+}
+
+// nativeHealthRecent(count: number): Promise<string>
+napi_value NativeHealthRecent(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value argv[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+
+    HealthWork* w = new HealthWork();
+    w->is_store = false;
+    if (argc > 0) {
+        napi_get_value_int32(env, argv[0], &w->count);
+    }
+    return QueueHealthWork(env, w, "mirobody_health_recent");
+}
+
 // nativeVersion(): string -- build stamp, proves the .so is really loaded.
 napi_value NativeVersion(napi_env env, napi_callback_info /*info*/) {
     napi_value out = nullptr;
@@ -651,6 +761,8 @@ napi_value Init(napi_env env, napi_value exports) {
         {"nativeLocalStatus",     nullptr, NativeLocalStatus,     nullptr, nullptr, nullptr, napi_default, nullptr},
         {"nativeLocalChat",       nullptr, NativeLocalChat,       nullptr, nullptr, nullptr, napi_default, nullptr},
         {"nativeLocalSetThreads", nullptr, NativeLocalSetThreads, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"nativeHealthStore",     nullptr, NativeHealthStore,     nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"nativeHealthRecent",    nullptr, NativeHealthRecent,    nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
     return exports;

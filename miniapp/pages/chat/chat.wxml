@@ -44,7 +44,20 @@
       id="msg-{{index}}"
       class="row {{item.role}}">
       <view wx:if="{{item.thinking}}" class="thinking">{{item.thinking}}</view>
-      <view class="bubble {{item.role}}">{{item.content}}</view>
+      <!-- Waiting indicator: three pulsing dots holding the reply's place from
+           the moment the turn is sent until its first token. The send button
+           becomes a stop control at the same time, but that is at the bottom of
+           the screen while the answer appears here, and the gap is seconds long
+           whenever the model thinks or calls a tool first. Only the last row can
+           be the in-flight one. -->
+      <view
+        wx:if="{{streaming && item.role === 'assistant' && !item.content && index === messages.length - 1}}"
+        class="typing">
+        <view class="dot"></view>
+        <view class="dot"></view>
+        <view class="dot"></view>
+      </view>
+      <view wx:else class="bubble {{item.role}}">{{item.content}}</view>
     </view>
   </scroll-view>
 

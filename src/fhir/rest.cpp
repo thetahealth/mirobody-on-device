@@ -3,6 +3,7 @@
 #include "circle/access.hpp"     // can_read_health
 #include "fhir/fhir.hpp"
 #include "fhir/resource.hpp"
+#include "fhir/write.hpp"       // write_resource, iso8601_instant -- shared with the C ABI
 #include "platform/clock.hpp"   // now_unix_ms
 #include "server/auth.hpp"
 
@@ -11,9 +12,6 @@
 #include <rapidjson/writer.h>
 
 #include <cstdlib>   // atoll
-#include <ctime>
-#include <cstdio>
-#include <random>
 #include <string>
 
 namespace mirobody { namespace fhir {
@@ -28,42 +26,6 @@ std::string serialize(const Value& v) {
     rapidjson::Writer<rapidjson::StringBuffer> w(buf);
     v.Accept(w);
     return std::string(buf.GetString(), buf.GetSize());
-}
-
-// ISO-8601 UTC instant for a unix-ms timestamp, e.g. "2026-06-08T11:18:06Z".
-// The fhir_resources lifecycle columns are unix ms (see fhir/store.hpp); this
-// renders one back to the FHIR instant used for meta.lastUpdated and the
-// Last-Modified header (seconds resolution, the FHIR `instant` granularity).
-// Single service thread, so gmtime needs no extra locking beyond the reentrant form.
-std::string iso8601_from_unix_ms(std::int64_t ms) {
-    std::time_t t = static_cast<std::time_t>(ms / 1000);
-    std::tm tmv;
-#ifdef _WIN32
-    gmtime_s(&tmv, &t);
-#else
-    gmtime_r(&t, &tmv);
-#endif
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tmv);
-    return std::string(buf);
-}
-
-// RFC-4122 v4 UUID for server-assigned resource ids. Seeded once; std::random
-// is fine here (ordinary server code, not a workflow script).
-std::string gen_uuid() {
-    static std::mt19937_64 rng((std::random_device()()));
-    std::uniform_int_distribution<std::uint64_t> dist;
-    std::uint64_t a = dist(rng), b = dist(rng);
-    a = (a & 0xFFFFFFFFFFFF0FFFULL) | 0x0000000000004000ULL;  // version 4
-    b = (b & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;  // variant 1
-    char s[37];
-    std::snprintf(s, sizeof(s), "%08x-%04x-%04x-%04x-%012llx",
-                  static_cast<unsigned>(a >> 32),
-                  static_cast<unsigned>((a >> 16) & 0xFFFF),
-                  static_cast<unsigned>(a & 0xFFFF),
-                  static_cast<unsigned>(b >> 48),
-                  static_cast<unsigned long long>(b & 0xFFFFFFFFFFFFULL));
-    return std::string(s);
 }
 
 // Build an OperationOutcome JSON document.
@@ -106,31 +68,6 @@ void respond_json(server::Response& res, int status, const std::string& json) {
     res.content_type(kFhirJsonMime);
     res.body(json);
 }
-
-// Inject the server-owned id + meta (versionId, lastUpdated) into a parsed
-// resource, preserving any existing meta.profile / security / tag.
-void inject_meta(Document& d, const std::string& id, std::int64_t version,
-                 const std::string& last_updated) {
-    Document::AllocatorType& a = d.GetAllocator();
-
-    d.RemoveMember("id");
-    d.AddMember("id", Value(id.c_str(), a), a);
-
-    Value* meta;
-    Value::MemberIterator it = d.FindMember("meta");
-    if (it != d.MemberEnd() && it->value.IsObject()) {
-        meta = &it->value;
-    } else {
-        d.RemoveMember("meta");
-        d.AddMember("meta", Value(rapidjson::kObjectType), a);
-        meta = &d["meta"];
-    }
-    meta->RemoveMember("versionId");
-    meta->AddMember("versionId", Value(std::to_string(version).c_str(), a), a);
-    meta->RemoveMember("lastUpdated");
-    meta->AddMember("lastUpdated", Value(last_updated.c_str(), a), a);
-}
-
 
 }  // namespace
 
@@ -291,19 +228,13 @@ void FhirService::handle_type(const server::Request& req, server::Response& res)
             return;
         }
 
-        StoredResource sr;
-        sr.type = type;
-        sr.id = gen_uuid();              // server-assigned; any client id is ignored
-        sr.version_id = 1;
-        sr.updated_at = platform::now_unix_ms();
-        sr.deleted = false;
-        inject_meta(doc, sr.id, sr.version_id, iso8601_from_unix_ms(sr.updated_at));
-        sr.content = serialize(doc);
-        store_.upsert(subject, sr);
+        // Empty id => server-assigned; any client id in the body is ignored, which
+        // is what makes POST a create rather than the upsert PUT performs below.
+        const WriteResult w = write_resource(store_, subject, type, std::string(), doc);
 
-        res.header("Location", base_url_path_ + "/" + type + "/" + sr.id + "/_history/1");
+        res.header("Location", base_url_path_ + "/" + type + "/" + w.id + "/_history/1");
         res.header("ETag", "W/\"1\"");
-        respond_json(res, 201, sr.content);
+        respond_json(res, 201, w.content);
         return;
     }
 
@@ -375,7 +306,7 @@ void FhirService::handle_instance(const server::Request& req, server::Response& 
             return;
         }
         res.header("ETag", "W/\"" + std::to_string(sr.version_id) + "\"");
-        res.header("Last-Modified", iso8601_from_unix_ms(sr.updated_at));
+        res.header("Last-Modified", iso8601_instant(sr.updated_at));
         respond_json(res, 200, sr.content);
         return;
     }
@@ -402,28 +333,17 @@ void FhirService::handle_instance(const server::Request& req, server::Response& 
             return;
         }
 
-        StoredResource prior;
-        bool exists = store_.get(subject, type, id, prior) && !prior.deleted;
-        std::int64_t version = exists ? prior.version_id + 1 : 1;
+        // Upsert at the URL's id, version bumped from whatever is already there.
+        const WriteResult w = write_resource(store_, subject, type, id, doc);
 
-        StoredResource sr;
-        sr.type = type;
-        sr.id = id;
-        sr.version_id = version;
-        sr.updated_at = platform::now_unix_ms();
-        sr.deleted = false;
-        inject_meta(doc, id, version, iso8601_from_unix_ms(sr.updated_at));
-        sr.content = serialize(doc);
-        store_.upsert(subject, sr);
-
-        res.header("ETag", "W/\"" + std::to_string(version) + "\"");
-        res.header("Last-Modified", iso8601_from_unix_ms(sr.updated_at));
-        if (!exists) {
+        res.header("ETag", "W/\"" + std::to_string(w.version) + "\"");
+        res.header("Last-Modified", iso8601_instant(w.updated_at));
+        if (!w.existed) {
             res.header("Location", base_url_path_ + "/" + type + "/" + id + "/_history/" +
-                                       std::to_string(version));
-            respond_json(res, 201, sr.content);
+                                       std::to_string(w.version));
+            respond_json(res, 201, w.content);
         } else {
-            respond_json(res, 200, sr.content);
+            respond_json(res, 200, w.content);
         }
         return;
     }

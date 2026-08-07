@@ -13,6 +13,7 @@ import { BUILTIN_PROVIDERS, ProviderRecord } from '../model/Providers';
 import { SecureKeyStore } from '../core/SecureKeyStore';
 import { ConfigStore, AddedModel } from '../core/ConfigStore';
 import { discoverModels, DiscoveredModel, DiscoveryResult } from '../core/Transport';
+import { FONT, ICON } from '../model/Typography';
 
 @CustomDialog
 export struct AddModelDialog {
@@ -227,7 +228,7 @@ export struct AddModelDialog {
           // distinguishes free vs paid (else, e.g. Gemini, everything would get flagged).
           if (this.hasAnyFree() && !this.onlyFree && !m.free) {
             Text('!')
-              .fontSize(11)
+              .fontSize(FONT.footnote)
               .fontColor($r('app.color.on_brand'))
               .fontWeight(FontWeight.Bold)
               .backgroundColor($r('app.color.danger'))
@@ -235,7 +236,7 @@ export struct AddModelDialog {
               .padding({ left: 6, right: 6, top: 1, bottom: 1 })
           }
           Text(m.displayName)
-            .fontSize(15)
+            .fontSize(FONT.row)
             .fontWeight(FontWeight.Medium)
             .layoutWeight(1)
         }
@@ -243,12 +244,12 @@ export struct AddModelDialog {
         Row({ space: 8 }) {
           if (m.popularity > 0) {
             Text(this.rs($r('app.string.model_calls'), this.fmtPop(m.popularity)))
-              .fontSize(11)
+              .fontSize(FONT.footnote)
               .fontColor($r('app.color.text_tertiary'))
           }
           if (m.deprecation.length > 0) {
             Text(this.rs($r('app.string.model_retires'), m.deprecation))
-              .fontSize(11)
+              .fontSize(FONT.footnote)
               .fontColor($r('app.color.warn'))
           }
         }
@@ -266,11 +267,11 @@ export struct AddModelDialog {
     Column() {
       Row() {
         Text($r('app.string.model_dialog_title'))
-          .fontSize(18)
+          .fontSize(FONT.title)
           .fontWeight(FontWeight.Bold)
           .layoutWeight(1)
         Text('✕')
-          .fontSize(20)
+          .fontSize(ICON.lg)
           .fontColor($r('app.color.text_tertiary'))
           .padding({ left: 12, top: 2, bottom: 2 })
           .onClick(() => {
@@ -284,7 +285,7 @@ export struct AddModelDialog {
 
       if (this.configured.length === 0) {
         Text($r('app.string.model_no_keys'))
-          .fontSize(13)
+          .fontSize(FONT.label)
           .fontColor($r('app.color.text_tertiary'))
           .width('100%')
           .padding({ top: 12, bottom: 12 })
@@ -311,7 +312,7 @@ export struct AddModelDialog {
           if (this.hasAnyFree()) {
             Toggle({ type: ToggleType.Button, isOn: this.onlyFree }) {
               Text($r('app.string.model_free'))
-                .fontSize(16)
+                .fontSize(FONT.control)
                 .fontColor(this.onlyFree ? $r('app.color.on_brand') : $r('app.color.text_tertiary'))
                 .padding({ left: 16, right: 16 })
             }
@@ -330,7 +331,7 @@ export struct AddModelDialog {
         if (this.loading) {
           Row({ space: 8 }) {
             LoadingProgress().width(22).height(22)
-            Text($r('app.string.model_loading')).fontSize(13).fontColor($r('app.color.text_tertiary'))
+            Text($r('app.string.model_loading')).fontSize(FONT.label).fontColor($r('app.color.text_tertiary'))
           }
           .width('100%')
           .height(380)
@@ -341,11 +342,11 @@ export struct AddModelDialog {
           // rendering an empty box the user can't distinguish from "no models here".
           Column({ space: 10 }) {
             Text($r('app.string.model_fetch_failed'))
-              .fontSize(15)
+              .fontSize(FONT.row)
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.text_primary'))
             Text(this.errText())
-              .fontSize(13)
+              .fontSize(FONT.label)
               .fontColor($r('app.color.text_tertiary'))
               .textAlign(TextAlign.Center)
             Button($r('app.string.model_retry'))
@@ -366,11 +367,11 @@ export struct AddModelDialog {
           if (this.errCode !== 0) {
             Row({ space: 8 }) {
               Text($r('app.string.model_fetch_partial'))
-                .fontSize(12)
+                .fontSize(FONT.caption)
                 .fontColor($r('app.color.notice_fg'))
                 .layoutWeight(1)
               Text($r('app.string.model_retry'))
-                .fontSize(12)
+                .fontSize(FONT.caption)
                 .fontColor($r('app.color.brand_text'))
                 .onClick(() => {
                   this.loadModels();
@@ -390,7 +391,7 @@ export struct AddModelDialog {
                 Text(this.models.length === 0
                   ? $r('app.string.model_empty')
                   : $r('app.string.model_no_match'))
-                  .fontSize(13)
+                  .fontSize(FONT.label)
                   .fontColor($r('app.color.text_tertiary'))
                   .width('100%')
                   .textAlign(TextAlign.Center)

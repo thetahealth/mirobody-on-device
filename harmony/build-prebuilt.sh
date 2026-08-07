@@ -18,6 +18,11 @@
 # Re-running is idempotent: vcpkg skips already-built ports and the destination is
 # refreshed.
 #
+# prebuilt/ holds every prebuilt native artifact, not just these: build-llama.sh
+# assembles the on-device engine into prebuilt/llama-sdk/<abi>/ beside them. This script
+# replaces only its own prebuilt/$ABI, so the two never collide -- but a hand
+# `rm -rf prebuilt` discards both.
+#
 # Usage:  ./build-prebuilt.sh [abi]
 #   abi defaults to arm64-v8a; one of arm64-v8a|x86_64|armeabi-v7a.
 # Env overrides:
@@ -30,8 +35,16 @@ SCRIPT_DIR="$(pwd)"
 
 ABI="${1:-arm64-v8a}"
 
-# Keep the pin in sync with vcpkg.json's "builtin-baseline" (and android/build-prebuilt.*).
-BASELINE="d015e31e90838a4c9dfa3eed45979bc70d9357fc"
+# READ from vcpkg.json's "builtin-baseline" rather than repeated here. The hash used to be
+# duplicated in four scripts (this, .cmd, and both android ones) under a comment asking the
+# reader to keep them in sync by hand -- so bumping the pin in vcpkg.json and missing one
+# meant that platform silently kept building against the old port set.
+VCPKG_JSON="$SCRIPT_DIR/../vcpkg.json"
+BASELINE="$(sed -n 's/.*"builtin-baseline"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' "$VCPKG_JSON")"
+if [ -z "$BASELINE" ]; then
+    echo "no 40-hex \"builtin-baseline\" in \"$VCPKG_JSON\"" >&2
+    exit 1
+fi
 
 # OHOS ABI -> overlay triplet (harmony/vcpkg-triplets/).
 case "$ABI" in
@@ -84,6 +97,8 @@ export OHOS_SDK_ROOT
 echo "ABI=$ABI  triplet=$TRIPLET"
 echo "SDK=$OHOS_SDK_ROOT"
 echo "vcpkg=$VCPKG_ROOT"
+# Printed because it is no longer readable off this script -- it comes from vcpkg.json.
+echo "baseline=$BASELINE"
 
 # --- Bootstrap vcpkg at the pinned baseline -----------------------------------
 if [ ! -d "$VCPKG_ROOT/.git" ]; then

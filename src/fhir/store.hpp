@@ -33,8 +33,10 @@ struct StoredResource {
 
 class FhirStore {
 public:
-    // Borrows `db` (must outlive the store). Creates the fhir_resources table
-    // if it does not exist (portable DDL across the linked SQL backend).
+    // Borrows `db` (must outlive the store). Does NOT create fhir_resources: the
+    // table comes from the schema DDL (res/sql/<dialect>/1_health.sql), applied
+    // by database::apply_schema at startup. Every call here throws if it is
+    // missing, so an embedded host must apply the schema before writing.
     explicit FhirStore(database::Database& db);
 
     FhirStore(const FhirStore&) = delete;

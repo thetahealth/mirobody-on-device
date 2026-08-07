@@ -289,7 +289,24 @@ toff_t tiff_size(thandle_t h) { return static_cast<MemTiff*>(h)->size; }
 int    tiff_map(thandle_t, void**, toff_t*) { return 0; }
 void   tiff_unmap(thandle_t, void*, toff_t) {}
 
-RgbaImage tiff_decode(const std::uint8_t* data, std::size_t len) {
+// Refuse a source whose pixel count would blow up the RGBA decode buffer, before
+// that buffer is allocated. `w`/`h` come from the format's header, so this costs
+// nothing and runs while the image is still just bytes. A zero ceiling, or
+// dimensions we could not read, let the decode proceed as before.
+void guard_decode_size(const Limits& limits, long long w, long long h) {
+    if (limits.max_decode_pixels <= 0 || w <= 0 || h <= 0) return;
+    if (w * h <= limits.max_decode_pixels) return;
+    char msg[192];
+    std::snprintf(msg, sizeof(msg),
+                  "image is %lldx%lld (%.1f MP), over the %.1f MP decode limit "
+                  "(it would need %.0f MB as RGBA)",
+                  w, h, static_cast<double>(w * h) / 1e6,
+                  static_cast<double>(limits.max_decode_pixels) / 1e6,
+                  static_cast<double>(w * h) * 4.0 / (1024.0 * 1024.0));
+    throw ImageError(msg);
+}
+
+RgbaImage tiff_decode(const std::uint8_t* data, std::size_t len, const Limits& limits) {
     // Silence libtiff's default stderr chatter on quirky-but-decodable files.
     TIFFSetWarningHandler(nullptr);
 
@@ -303,6 +320,16 @@ RgbaImage tiff_decode(const std::uint8_t* data, std::size_t len) {
     TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &w);
     TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
     if (w == 0 || h == 0) { TIFFClose(tif); throw ImageError("TIFF decode failed (dimensions)"); }
+
+    // TIFF carries its size in the directory rather than a fixed header offset,
+    // so this is the first point the size is known -- and it is still ahead of
+    // both buffers below (the raster libtiff fills, and our RGBA copy).
+    try {
+        guard_decode_size(limits, w, h);
+    } catch (...) {
+        TIFFClose(tif);
+        throw;
+    }
 
     std::uint16_t extra = 0, *sampleinfo = nullptr;
     bool has_alpha = TIFFGetField(tif, TIFFTAG_EXTRASAMPLES, &extra, &sampleinfo) && extra > 0;
@@ -490,41 +517,55 @@ Transcoded Transcoder::transcode(const std::string& input) const {
     const int    min_side   = limits_.min_side;
     const long long max_px  = limits_.max_pixels;
 
-    auto dims_ok = [&](int w, int h) {
+    // long long, not int: these also take raw header values, which are only
+    // known to fit an int once the decode guard below has bounded them.
+    auto dims_ok = [&](long long w, long long h) {
         if (w < min_side || h < min_side) return false;
-        if (static_cast<long long>(w) * h > max_px) return false;
-        double aspect = static_cast<double>(std::max(w, h)) / std::min(w, h);
+        if (w * h > max_px) return false;
+        double aspect = static_cast<double>(std::max(w, h)) / static_cast<double>(std::min(w, h));
         return aspect <= max_aspect;
     };
 
-    // Fast path: an already-compliant JPEG/PNG/WebP is returned verbatim. Probe
-    // dimensions from the header only — no full decode.
-    if ((fmt == Format::Jpeg || fmt == Format::Png || fmt == Format::WebP) &&
-        len <= limits_.max_bytes) {
-        int w = 0, h = 0;
-        bool probed = false;
-        if (fmt == Format::Jpeg) {
-            probed = jpeg_probe(data, len, w, h);
-        } else if (fmt == Format::Png) {
-            // IHDR width/height are the two big-endian u32s at byte offset 16.
-            if (len >= 24) {
-                w = (data[16] << 24) | (data[17] << 16) | (data[18] << 8) | data[19];
-                h = (data[20] << 24) | (data[21] << 16) | (data[22] << 8) | data[23];
-                probed = true;
-            }
-        } else {  // WebP
-            probed = WebPGetInfo(data, len, &w, &h) != 0;
+    // Read the dimensions out of the header -- no decode, no allocation. This
+    // runs for EVERY input, not just a fast-path candidate: it is what gates the
+    // decode below, and an image too large to decode is exactly the one the fast
+    // path rejects and hands to the decoder. Held as long long because a header
+    // is free to claim anything; the narrowing to int later is safe on its own
+    // terms (only the fast path narrows, and only after dims_ok has bounded the
+    // product by max_pixels).
+    long long pw = 0, ph = 0;
+    bool probed = false;
+    if (fmt == Format::Jpeg) {
+        int jw = 0, jh = 0;
+        probed = jpeg_probe(data, len, jw, jh);
+        pw = jw; ph = jh;
+    } else if (fmt == Format::Png) {
+        // IHDR width/height are the two big-endian u32s at byte offset 16.
+        if (len >= 24) {
+            pw = (static_cast<long long>(data[16]) << 24) | (data[17] << 16) |
+                 (data[18] << 8) | data[19];
+            ph = (static_cast<long long>(data[20]) << 24) | (data[21] << 16) |
+                 (data[22] << 8) | data[23];
+            probed = true;
         }
-        if (probed && dims_ok(w, h)) {
-            Transcoded out;
-            out.bytes = std::string(input);
-            out.content_type = mime_type(fmt);
-            out.width = w;
-            out.height = h;
-            out.format = fmt;
-            out.changed = false;
-            return out;
-        }
+    } else if (fmt == Format::WebP) {
+        int ww = 0, wh = 0;
+        probed = WebPGetInfo(data, len, &ww, &wh) != 0;
+        pw = ww; ph = wh;
+    }
+    // TIFF has no fixed header slot for this; its gate is inside tiff_decode.
+    if (probed) guard_decode_size(limits_, pw, ph);
+
+    // Fast path: an already-compliant JPEG/PNG/WebP is returned verbatim.
+    if (probed && len <= limits_.max_bytes && dims_ok(pw, ph)) {
+        Transcoded out;
+        out.bytes = std::string(input);
+        out.content_type = mime_type(fmt);
+        out.width = static_cast<int>(pw);
+        out.height = static_cast<int>(ph);
+        out.format = fmt;
+        out.changed = false;
+        return out;
     }
 
     // Re-encode path: decode to RGBA.
@@ -533,7 +574,7 @@ Transcoded Transcoder::transcode(const std::string& input) const {
         case Format::Jpeg: img = jpeg_decode(data, len); break;
         case Format::Png:  img = png_decode(data, len);  break;
         case Format::WebP: img = webp_decode(data, len); break;
-        case Format::Tiff: img = tiff_decode(data, len); break;
+        case Format::Tiff: img = tiff_decode(data, len, limits_); break;
         default:           throw ImageError("unreachable");
     }
     if (img.w <= 0 || img.h <= 0) throw ImageError("decoded image has no pixels");

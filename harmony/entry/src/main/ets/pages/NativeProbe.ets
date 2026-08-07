@@ -23,6 +23,7 @@ import { NativeCore } from '../core/NativeCore';
 import { LocalModelStore, LocalModel, DownloadDir, LOCAL_PROVIDER_ID } from '../core/LocalModelStore';
 import { ConfigStore, ActiveSelection } from '../core/ConfigStore';
 import { ChatMessage } from '../model/Chat';
+import { FONT } from '../model/Typography';
 
 interface ProbeLine {
   type: string;
@@ -45,7 +46,7 @@ struct NativeProbe {
     try {
       this.status = mirobody.nativeVersion();
       await NativeCore.ensureReady(getContext(this) as common.UIAbilityContext);
-      const listed = mirobody.nativeGetProviders();
+      const listed: string = mirobody.nativeGetProviders();
       this.providers = listed.length > 0 ? listed.split('\n') : [];
       this.status += this.providers.length > 0
         ? ` | ${this.providers.length} provider(s)`
@@ -71,7 +72,7 @@ struct NativeProbe {
     this.startedAt = new Date().getTime();
 
     const messages: ChatMessage[] = [{ role: 'user', content: '用一句话介绍你自己' }];
-    const turnId = mirobody.nativeChat(this.providers[0], JSON.stringify(messages),
+    const turnId: number = mirobody.nativeChat(this.providers[0], JSON.stringify(messages),
       (type: string, content: string) => {
         this.lines = this.lines.concat({
           type: type,
@@ -118,7 +119,7 @@ struct NativeProbe {
   private nnrtDevices(): void {
     this.lines = [];
     this.startedAt = new Date().getTime();
-    const json = mirobody.nativeNnrtDevices();
+    const json: string = mirobody.nativeNnrtDevices();
     this.log('nnrt', json);
     // Spelled out rather than left to the reader: `type: 3` is the whole point.
     this.log('verdict', json.indexOf('"type":3') >= 0
@@ -127,7 +128,7 @@ struct NativeProbe {
 
     // The ceiling no accelerator can lift. Reported next to the NNRt answer
     // because on its own "the NPU is reachable" reads as encouragement.
-    const bw = mirobody.nativeMemBandwidth();
+    const bw: string = mirobody.nativeMemBandwidth();
     this.log('bandwidth', bw);
     const m = bw.match(/"allThreadGbs":([0-9.]+)/);
     if (m !== null && m.length > 1) {
@@ -304,7 +305,7 @@ struct NativeProbe {
       this.running = true;
       this.log('model', m.displayName + ' @ ' + m.path);
       const messages: ChatMessage[] = [{ role: 'user', content: '用一句话介绍你自己' }];
-      const turnId = mirobody.nativeLocalChat(m.path, JSON.stringify(messages),
+      const turnId: number = mirobody.nativeLocalChat(m.path, JSON.stringify(messages),
         (type: string, content: string) => {
           this.log(type, content);
           if (type === 'end' || type === 'aborted') {
@@ -319,26 +320,26 @@ struct NativeProbe {
   build() {
     Column() {
       Text('Native core probe')
-        .fontSize(20)
+        .fontSize(FONT.headline)
         .fontWeight(FontWeight.Bold)
         .width('100%')
         .padding({ left: 20, right: 20, top: 16, bottom: 16 })
         .border({ width: { bottom: 0.5 }, color: $r('app.color.border') })
 
       Text(this.status)
-        .fontSize(13)
+        .fontSize(FONT.label)
         .fontColor(this.status.indexOf('FAILED') >= 0 ? $r('app.color.danger') : $r('app.color.text_secondary'))
         .width('100%')
         .padding({ left: 20, right: 20, top: 12, bottom: 12 })
 
       Row({ space: 12 }) {
         Button('init + providers')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor($r('app.color.brand'))
           .layoutWeight(1)
           .onClick(() => this.init())
         Button(this.running ? 'cancel' : 'chat')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor(this.running ? $r('app.color.danger') : $r('app.color.success'))
           .layoutWeight(1)
           .onClick(() => this.chat())
@@ -350,17 +351,17 @@ struct NativeProbe {
       // "model outside app storage" design.
       Row({ space: 12 }) {
         Button('probe paths')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor($r('app.color.brand'))
           .layoutWeight(1)
           .onClick(() => this.probePaths())
         Button('import .gguf')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor($r('app.color.brand'))
           .layoutWeight(1)
           .onClick(() => this.importModel())
         Button('nnrt devices')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor($r('app.color.brand'))
           .layoutWeight(1)
           .onClick(() => this.nnrtDevices())
@@ -370,17 +371,17 @@ struct NativeProbe {
 
       Row({ space: 12 }) {
         Button('pick download dir')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor($r('app.color.brand'))
           .layoutWeight(1)
           .onClick(() => this.pickDir())
         Button(this.running ? 'cancel' : 'local chat')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor(this.running ? $r('app.color.danger') : $r('app.color.success'))
           .layoutWeight(1)
           .onClick(() => this.localChat())
         Button('thread scan')
-          .fontSize(14)
+          .fontSize(FONT.body)
           .backgroundColor($r('app.color.brand'))
           .enabled(!this.running)
           .layoutWeight(1)
@@ -391,7 +392,7 @@ struct NativeProbe {
 
       if (this.providers.length > 0) {
         Text(this.providers.join('  ·  '))
-          .fontSize(12)
+          .fontSize(FONT.caption)
           .fontColor($r('app.color.brand_text'))
           .width('100%')
           .padding({ left: 20, right: 20, bottom: 8 })
@@ -402,16 +403,16 @@ struct NativeProbe {
           ListItem() {
             Row({ space: 10 }) {
               Text('+' + line.atMs + 'ms')
-                .fontSize(12)
+                .fontSize(FONT.caption)
                 .fontColor($r('app.color.text_tertiary'))
                 .width(76)
               Text(line.type)
-                .fontSize(12)
+                .fontSize(FONT.caption)
                 .fontColor(line.type === 'end' ? $r('app.color.success')
                   : (line.type === 'error' || line.type === 'aborted') ? $r('app.color.danger_text') : $r('app.color.brand_text'))
                 .width(92)
               Text(line.content)
-                .fontSize(13)
+                .fontSize(FONT.label)
                 .fontColor($r('app.color.text_primary'))
                 .layoutWeight(1)
             }

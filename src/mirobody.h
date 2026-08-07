@@ -214,6 +214,63 @@ const void* mirobody_read_file(
     int want_text,
     size_t* out_len);
 
+//------------------------------------------------------------------------------
+// Health data (on-device ingest)
+//------------------------------------------------------------------------------
+//
+// A serverless FHIR write + read-back path for a host that reads the platform's
+// own health store and has nowhere to POST it: the HarmonyOS client, whose whole
+// premise is that no Mirobody server exists (harmony/README.md). Where the
+// Android app reads Health Connect / Huawei Health Kit and POSTs Observations to
+// the server's /fhir endpoint, this stores them in the SAME fhir_resources table
+// on the device, so the `family_health` MCP tool — which the embedded build runs
+// for every turn — can answer questions about the user's own data with nothing
+// leaving the phone.
+//
+// Both calls need the database the embedded host configured (SQLITE_PATH +
+// SQL_DIR via mirobody_set_config, exactly as the chat tools do) and apply the
+// DDL on first use. `user_id` <= 0 means the device owner (row 1) in the mobile
+// build, matching mirobody_chat's anonymous turns.
+//
+// Callable from any thread: the two share one connection of their own behind one
+// lock, rather than the chat services' (database::Database is not thread-safe).
+// It is the same database FILE, so a turn's family_health tool sees what a sync
+// just wrote. Under SQLite's WAL that read never blocks; a sync landing exactly
+// during a turn's own write can still lose a write-write race, reported as this
+// call's "error" instead of being retried silently.
+
+// Store a JSON array of FHIR resources (Observations, from a platform health
+// store) for `user_id`. Returns a JSON summary, or NULL on a hard failure (no
+// database, unparseable argument):
+//   {"stored":<int>,"failed":<int>,"error":"<first failure, or empty>"}
+//
+// IDEMPOTENT BY CLIENT-SUPPLIED ID, and that is the point: give each reading a
+// deterministic `id` derived from its (metric, instant) — the HarmonyOS client
+// uses "hw.<metric>.<startMillis>" — and re-syncing an overlapping window
+// REPLACES those readings instead of duplicating them. A resource with no id
+// gets a fresh server-assigned one, i.e. plain POST semantics, so a caller that
+// has no stable key still works (it just cannot re-sync cleanly).
+//
+// An entry that fails validation is counted in "failed" and skipped; one bad
+// reading never aborts the batch. The buffer is owned by mirobody and valid
+// until this thread's next health call — copy it.
+const char* mirobody_health_store(long long user_id, const char* resources_json);
+
+// The caller's most recent Observations, flattened for display:
+//   {"total":<int>,"items":[{"code","display","value","unit","time","source"}...]}
+// `code` is the LOINC code, `time` the effective instant (or period start), and
+// `value`/`unit` come from valueQuantity; a resource carrying none of that is
+// listed with empty fields rather than dropped. `total` counts every live
+// Observation, not just the page. `count` is clamped to 1..200 (default 20).
+//
+// Two orderings, on purpose: the newest `count` rows by WRITE time are selected
+// (that is the store's index), then the page is returned sorted by READING time,
+// newest first. Without the second step a batch written in one sync -- all sharing
+// an instant -- would come back grouped by resource id, i.e. by metric name.
+//
+// Same buffer ownership as above. NULL on error.
+const char* mirobody_health_recent(long long user_id, int count);
+
 #ifdef __cplusplus
 }
 #endif

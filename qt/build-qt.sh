@@ -87,6 +87,11 @@ ensure_llama() {
     local cache="$HOME/.cache/mirobody"
     LLAMA_SRC="${LLAMA_SRC:-$cache/llama.cpp}"
     LLAMA_CPP_DIR="$cache/llama-sdk-$BACKEND"
+    # Reuse is by PRESENCE, so a cached SDK outlives the checkout it came from -- and the
+    # clone below only runs when there is no checkout at all, it never updates one.
+    # src/llm/local.cpp needs the API at upstream 935cad649 (2026-08-04) or newer; an older
+    # cache reaches the root CMakeLists, which checks llama.h for it and says so. Pass
+    # `clean` to discard the cache.
     if [ -z "$CLEAN" ] && { [ -f "$LLAMA_CPP_DIR/lib/libllama.so" ] || [ -f "$LLAMA_CPP_DIR/lib/libllama.dylib" ]; }; then
         echo "[build-qt] reusing cached llama SDK: $LLAMA_CPP_DIR"; return 0
     fi

@@ -1,5 +1,6 @@
 #include "llm/embedding.hpp"
 
+#include "client/gcp_auth.hpp"   // Vertex: application default credentials
 #include "client/http_client.hpp"
 #include "platform/log.hpp"
 
@@ -55,40 +56,56 @@ std::string trim_trailing_slash(std::string s) {
     return s;
 }
 
-// gemini provider routes through Vertex AI when GOOGLE_GENAI_USE_VERTEXAI is
-// truthy, mirroring the Python helper.
-bool vertex_enabled(const Config& cfg) {
-    std::string v = cfg.store.get_str("GOOGLE_GENAI_USE_VERTEXAI", "0");
-    std::transform(v.begin(), v.end(), v.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return v == "1" || v == "true";
-}
-
 Provider make_provider(const Config& cfg, const std::string& name) {
     Provider p;
     if (name == "gemini") {
         const std::string model = "gemini-embedding-001";
 
-        // Vertex AI: OAuth Bearer auth, one input per :predict request. The
-        // access token is pre-fetched (e.g. `gcloud auth print-access-token`),
-        // as the existing GeminiClient Vertex mode expects -- no in-process ADC.
-        if (vertex_enabled(cfg)) {
-            const std::string token   = cfg.store.get_str("VERTEX_ACCESS_TOKEN");
-            const std::string project = cfg.store.get_str("GCP_PROJECT",
-                                          cfg.store.get_str("GOOGLE_CLOUD_PROJECT"));
-            const std::string location = cfg.store.get_str("VERTEX_LOCATION", "us-central1");
+        // Vertex AI: OAuth Bearer auth, one input per :predict request.
+        //
+        // Selected exactly as the chat lane selects it (res/agents/baseline.cpp):
+        // a project AND a location, the two things the endpoint URL is built
+        // from. There is no separate on/off switch -- one Vertex configuration
+        // decides both lanes, so a deployment cannot end up with its chat on
+        // Vertex and its embeddings quietly still going to the consumer endpoint.
+        // Neither key may carry a default for that reason: a defaulted location
+        // would make "both set" true whenever a project was named.
+        //
+        // Google's own names -- the same pair the chat lane reads. This lane's old
+        // VERTEX_LOCATION / VERTEX_ACCESS_TOKEN / VERTEX_BASE_URL are gone, as are
+        // the GCP_PROJECT / GCP_LOCATION fallbacks both lanes used to take: they
+        // named concepts that already had names, and two spellings of one setting
+        // is how a deployment ends up half-configured.
+        const std::string project  = cfg.store.get_str("GOOGLE_CLOUD_PROJECT");
+        const std::string location = cfg.store.get_str("GOOGLE_CLOUD_LOCATION");
+        if (!project.empty() && !location.empty()) {
+            // The token resolves exactly as the chat lane's does -- token file,
+            // inline token, then ADC -- through the one class that knows that
+            // order. Held across calls so ADC's cache survives; the config it is
+            // built from does not change while the process runs.
+            static gcp::TokenSource tokens(cfg.store.get_str("GCP_ACCESS_TOKEN_FILE"),
+                                           cfg.store.get_str("GCP_ACCESS_TOKEN"));
+            const std::string token = tokens.token();
             if (token.empty()) {
-                p.error = "gemini embedding (vertex): VERTEX_ACCESS_TOKEN not set";
+                p.error = "gemini embedding (vertex): no access token -- application default "
+                          "credentials resolved none, and no GCP_ACCESS_TOKEN(_FILE) is set";
                 return p;
             }
-            if (project.empty()) {
-                p.error = "gemini embedding (vertex): GCP_PROJECT not set";
-                return p;
-            }
+            // The pair above is the surface switch and stays deployment-wide.
+            // WHERE this model is reached is a separate question, because the
+            // embedding models publish locations disjoint from the chat models'
+            // -- gemini-embedding-001 serves the US single regions and no
+            // multi-region at all, so the `us` that a chat deployment wants is
+            // exactly the value that 404s here. One shared resolver, so this
+            // lane and the chat lane cannot disagree about a model's location.
+            const std::string model_location = gcp::vertex_model_location(
+                cfg.store.get_dict("GOOGLE_CLOUD_MODEL_LOCATIONS"), model, location);
+
+            // Region, us / eu multi-region and "global" each spell the host
+            // differently; gcp::vertex_host is the one place that knows how.
             const std::string base = trim_trailing_slash(
-                cfg.store.get_str("VERTEX_BASE_URL",
-                                  "https://" + location + "-aiplatform.googleapis.com"));
-            p.url = base + "/v1/projects/" + project + "/locations/" + location
+                cfg.store.get_str("GEMINI_VERTEX_BASE_URL", gcp::vertex_host(model_location)));
+            p.url = base + "/v1/projects/" + project + "/locations/" + model_location
                   + "/publishers/google/models/" + model + ":predict";
             p.headers.push_back("Authorization: Bearer " + token);
             p.batch_limit = 1;   // Vertex :predict accepts one input per request

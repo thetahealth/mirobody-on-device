@@ -1,7 +1,8 @@
 // Golden-set accuracy harness for the terminology resolver.
 //
 // Skips unless BOTH env vars are set (the lexicon artifact and golden TSV are
-// not committed — building the artifact needs E:/ref reference data):
+// not committed — building the artifact needs a local reference tree, see
+// src/indicator/README.md):
 //   INDICATOR_LEXICON  -> path to fhir_lexicon.bin
 //   INDICATOR_GOLDEN   -> path to tests/indicator/golden.tsv
 //

@@ -27,8 +27,17 @@ cd /d "%~dp0"
 set "ABI=%~1"
 if "%ABI%"=="" set "ABI=arm64-v8a"
 
-rem Keep the pin in sync with vcpkg.json's "builtin-baseline".
-set "BASELINE=d015e31e90838a4c9dfa3eed45979bc70d9357fc"
+rem READ from vcpkg.json's "builtin-baseline" rather than repeated here -- it used to be
+rem duplicated across this, .sh and both harmony scripts under a comment asking the reader
+rem to keep them in sync by hand. tokens=4 delims=" splits
+rem `  "builtin-baseline": "<hash>",` so that token 4 is the hash.
+set "VCPKG_JSON=%~dp0..\vcpkg.json"
+set "BASELINE="
+for /f tokens^=4^ delims^=^" %%A in ('findstr /c:"builtin-baseline" "%VCPKG_JSON%"') do set "BASELINE=%%A"
+if not defined BASELINE (
+    echo no "builtin-baseline" in "%VCPKG_JSON%">&2
+    exit /b 1
+)
 rem Must match the ndkVersion pinned in app\build.gradle.kts so the prebuilt deps and
 rem the app share one libc++ (c++_shared) ABI; prefer this exact version, else newest.
 set "PINNED_NDK=27.0.12077973"
@@ -71,7 +80,7 @@ if not defined NDK_HOME goto :ndk_missing
 if not exist "%NDK_HOME%\build\cmake\android.toolchain.cmake" goto :ndk_missing
 rem Work around spaces in the NDK path. openssl's autoconf/make build invokes $(CC)
 rem unquoted, so a profile like "C:\Users\A B" fails with
-rem "/bin/sh: C:/Users/Feng: No such file or directory". The NDK's android.toolchain
+rem "/bin/sh: C:/Users/A: No such file or directory" -- truncated at the space. The
 rem .cmake resolves 8.3 short names and junctions back to the real spaced location,
 rem so only a *physical* copy at a space-free path works: mirror the NDK once under
 rem the (space-free) vcpkg root and build against the mirror.
@@ -101,6 +110,8 @@ set "ANDROID_NDK_HOME=!NDK_HOME!"
 echo ABI=%ABI%  triplet=%TRIPLET%
 echo NDK=%NDK_HOME%
 echo vcpkg=%VCPKG_ROOT%
+rem Printed because it is no longer readable off this script -- it comes from vcpkg.json.
+echo baseline=%BASELINE%
 
 rem --- Bootstrap vcpkg at the pinned baseline -----------------------------------
 if not exist "%VCPKG_ROOT%\.git" (

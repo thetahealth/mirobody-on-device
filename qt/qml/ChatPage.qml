@@ -60,21 +60,60 @@ Item {
             cacheBuffer: 4000
             boundsBehavior: Flickable.StopAtBounds
 
-            // Follow the streaming reply's tail only while the user is parked at the
-            // bottom. A manual drag/flick detaches the follow so they can scroll up
-            // mid-reply without being yanked back; it re-arms when they leave the view
-            // at the end, or when a new turn starts.
+            // Sticky bottom, mirroring Index.ets: follow the growing tail only while
+            // the user is parked at the end, and let go the moment they scroll away so
+            // reading back never fights the stream. Re-arms by itself when they return
+            // to the bottom, and on every new turn.
             property bool followTail: true
+
+            /**
+             * One handler covers every way the log gets taller: a turn appended, the
+             * streaming row growing token by token, the composer growing under it, the
+             * window resized. All of them move the bottom, and contentHeight/height are
+             * where that shows up.
+             *
+             * DEFERRED on purpose. positionViewAtEnd() called straight out of a delegate's
+             * geometry change runs against the pre-change layout, so it lands one growth
+             * step short -- measured against a 30-turn transcript, the newest line sat a
+             * constant ~18px (one line) below the fold for the whole reply, and the
+             * repeated mid-layout calls also corrupted the view's own height estimates.
+             * Qt.callLater runs it after layout settles and collapses a burst of deltas
+             * into a single scroll.
+             */
+            onContentHeightChanged: if (followTail) Qt.callLater(stickToEnd)
+            onHeightChanged: if (followTail) Qt.callLater(stickToEnd)
+            function stickToEnd() { if (followTail) positionViewAtEnd(); }
+
+            /**
+             * Whether the newest row is fully in view -- the question the re-arm needs
+             * answered, asked directly.
+             *
+             * NOT Flickable's atYEnd: positionViewAtEnd() parks the last row's bottom edge
+             * on the viewport bottom and leaves `bottomMargin` of content area below it,
+             * so atYEnd reads false even while we are pinned. Using it as the re-arm test
+             * meant a single wheel notch stopped the follow for the rest of the session.
+             * A null item means the tail is not even realized, i.e. far off-screen.
+             */
+            function atBottom() {
+                var it = itemAtIndex(count - 1);
+                return it ? it.y + it.height <= contentY + height + 2 : false;
+            }
+
+            // Only a finger/wheel gesture may detach the follow; positionViewAtEnd()
+            // sets the position outright and emits no movement signals, so it cannot
+            // undo the stick it just honored.
             onMovementStarted: followTail = false
-            onMovementEnded: followTail = atYEnd
+            onMovementEnded: followTail = atBottom()
 
             delegate: MessageDelegate {
                 width: ListView.view.width - 32
                 onStatsClicked: function (cost) { chatPage.showCost(cost); }
-                onContentGrew: if (index >= log.count - 1 && log.followTail) log.positionViewAtEnd();
             }
 
-            onCountChanged: { followTail = true; positionViewAtEnd(); }
+            // A new turn is always something the user just asked for, so it re-arms the
+            // follow even if they had scrolled up to read. Also covers a cleared thread
+            // and a session restored from history (both reset the model).
+            onCountChanged: { followTail = true; Qt.callLater(stickToEnd); }
 
             // Empty state (chat.js showEmpty): the incognito privacy screen when
             // incognito, otherwise the plain "start a conversation" hero.

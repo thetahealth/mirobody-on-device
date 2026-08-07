@@ -14,11 +14,14 @@ namespace mirobody { namespace llm {
 // only the endpoint + auth differ:
 //
 //   AiStudio: https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent
-//             auth = ?key={api_key}   (Google AI Studio API key)
+//             auth = x-goog-api-key: {api_key}   (Google AI Studio API key)
 //
-//   Vertex  : https://{location}-aiplatform.googleapis.com/v1/projects/{project}
+//   Vertex  : https://{vertex host}/v1/projects/{project}
 //             /locations/{location}/publishers/google/models/{model}:streamGenerateContent
 //             auth = Authorization: Bearer {access_token}   (ADC / gcloud)
+//
+//             The host is one of three shapes depending on the location -- see
+//             gcp::vertex_host. The path is the same for all three.
 //
 // NOTE: this is *not* the same path as `_ainvoke_interactions` in
 // pub/agents/base/clients.py. That code targets Google's experimental
@@ -30,7 +33,7 @@ namespace mirobody { namespace llm {
 // needed on Gemini.
 enum class GeminiMode {
     AiStudio,   // generativelanguage.googleapis.com, API-key auth
-    Vertex,     // {region}-aiplatform.googleapis.com, OAuth bearer auth
+    Vertex,     // *.aiplatform.googleapis.com, OAuth bearer auth
 };
 
 struct GeminiOptions {
@@ -44,6 +47,18 @@ struct GeminiOptions {
     // Tokens are short-lived (~60 min); refresh between long runs.
     std::string access_token;
 
+    // Vertex mode: the current access token, resolved once per HTTP request.
+    // Set this instead of `access_token` in a long-running process whose token
+    // the deployment rotates under it -- a sidecar or kubelet rewriting a token
+    // file, say. A token captured at construction is dead within the hour, and a
+    // process's environment cannot be changed from outside, so re-reading it at
+    // the point of use is the only way a rotation reaches an already-running
+    // client. Returning "" is treated exactly like an empty `access_token`: the
+    // turn fails with a missing-credential error rather than an opaque 401.
+    // Called on the turn's thread; keep it cheap and non-blocking (a small file
+    // read). Ignored when unset, and ignored entirely in AiStudio mode.
+    std::function<std::string()> access_token_provider;
+
     // Required in Vertex mode, ignored in AiStudio mode.
     std::string gcp_project;
     std::string gcp_location = "us-central1";
@@ -51,7 +66,7 @@ struct GeminiOptions {
     // Optional overrides for the API host. Sensible defaults are picked per
     // mode if left empty.
     std::string ai_studio_base_url;     // default: https://generativelanguage.googleapis.com
-    std::string vertex_base_url;        // default: https://{location}-aiplatform.googleapis.com
+    std::string vertex_base_url;        // default: gcp::vertex_host(gcp_location)
     std::string api_version = "v1beta"; // AiStudio: v1beta; Vertex: v1
 
     std::string model = "gemini-2.5-flash";

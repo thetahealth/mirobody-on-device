@@ -6,18 +6,28 @@
     // harmony/prebuilt/<abi> -- run `build-prebuilt.cmd <abi>` first. Add
     // "x86_64" here (and run the script for it) to also target the emulator.
     //
-    // LLAMA_CPP_DIR turns on the on-device LLM (src/llm/local.cpp) and is the
-    // ONLY switch for it: absent, the core compiles its stub and the app still
-    // builds. Build the SDK with `build-llama.cmd <abi> <backend>` (macOS/Linux:
-    // `./build-llama.sh`), which writes to D:\opt\llama-sdk-ohos-<abi>-<backend>
-    // (~/opt/... on POSIX); the value below is that path and is machine-local, so
-    // expect to repoint it rather than to inherit it.
+    // The on-device LLM (src/llm/local.cpp) needs NOTHING here. Run
+    // `build-llama.cmd <abi>` (or ./build-llama.sh) and CMakeLists.txt picks the SDK
+    // up from harmony/prebuilt/llama-sdk/<abi> by itself, exactly as it picks the C++ deps
+    // up from harmony/prebuilt/<abi>. No SDK there is the supported off state: the core
+    // compiles its stub and the app still builds, with on-device chat reporting
+    // itself unavailable.
     //
-    // Use the `cpu` backend. `vulkan` builds and runs but lost on every axis on a
-    // Kirin 9020 and costs ~50 MB of shader binary -- numbers in build-llama.cmd.
+    // Only an SDK assembled somewhere else (LLAMA_SDK_DIR) needs naming here:
+    //
+    //     "arguments": "-DLLAMA_CPP_DIR=<llama-sdk-dir>"
+    //
+    // hvigor does not expand environment variables in this string and splits it on
+    // spaces, so that has to be a literal path with no spaces in it -- and it is
+    // machine-local in a TRACKED file, which is exactly what the default location
+    // exists to avoid. Prefer the default.
+    //
+    // CPU only, deliberately: llama.cpp's vulkan backend lost on every axis measured
+    // on a Kirin 9020 and cost ~50 MB of shader binary, so it is gone rather than
+    // switched off. Numbers and reasoning in build-llama.cmd's header.
     "externalNativeOptions": {
       "path": "./src/main/cpp/CMakeLists.txt",
-      "arguments": "-DLLAMA_CPP_DIR=D:/opt/llama-sdk-ohos-arm64-v8a-cpu",
+      "arguments": "",
       "cppFlags": "",
       "abiFilters": [
         "arm64-v8a"

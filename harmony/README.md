@@ -7,9 +7,14 @@
 > git update-index --skip-worktree harmony/build-profile.json5
 > ```
 >
-> DevEco writes your local signing certificate paths and passwords into that **tracked**
-> file, and the flag lives in `.git/index`, so it does not survive a clone. Skip this and
-> the signing material shows up as a committable change. Details in [Signing](#3-signing).
+> That file is **tracked** but takes machine-local values — the signing certificate paths
+> and passwords DevEco writes for you (details in [Signing](#3-signing)) — and the flag
+> lives in `.git/index`, so it does not survive a clone. Skip this and the signing block
+> shows up as a committable change; set the flag **before** editing, not after.
+>
+> `entry/build-profile.json5` needs no such treatment: the on-device LLM SDK is found by
+> repo-relative path, so nothing machine-local goes in it (see
+> [On-device engine](#2-on-device-engine-optional)).
 
 The HarmonyOS Next client — an **ArkTS / ArkUI (stage model)** app, the Huawei counterpart
 of the Kotlin/Compose app under [`android/`](../android). It ships the same chat surface as
@@ -22,6 +27,7 @@ the web client in [`htdoc/`](../htdoc), and it embeds the C++ core
 - **UI:** ArkUI declarative (ArkTS), one `@Entry` page + a nav drawer, hand-rolled markdown renderer
 - **Storage:** `@kit.ArkData` preferences (config, sessions) + **ASSET Kit** (API keys)
 - **Native:** NAPI bridge → `mirobody_core` (SQLite profile) → optional llama.cpp for on-device inference
+- **Health:** **Health Service Kit** (`@kit.HealthServiceKit`) → FHIR Observations in the app's own SQLite
 - **Permissions:** `ohos.permission.INTERNET`, `ohos.permission.FILE_ACCESS_PERSIST`
 
 ## What is different about this client
@@ -36,7 +42,8 @@ locally. Everything that depended on a server is therefore absent by design:
 | Backend | `BASE_URL` + email/Google sign-in → `/api/chat` | none — no URL setting, no sign-in, no JWT |
 | Provider list | `POST /api/providers` | built-in BYOK registry + the user's keys |
 | History | `GET /api/history` (server) | local only ([`SessionStore.ets`](entry/src/main/ets/core/SessionStore.ets)) |
-| Health / care circle / BLE | yes | no (they are server- and account-shaped features) |
+| Health data | read the phone's store → `POST /fhir` | read 华为运动健康 → the app's OWN FHIR store, on device ([Health data](#health-data)) |
+| Care circle / EHR / BLE | yes | no (account- and server-shaped: sharing needs someone to share *with*) |
 | Languages | 8–10 | 2 (简体中文 / English) |
 
 See [`docs/privacy-tiers.md`](../docs/privacy-tiers.md) for the lane model this implements.
@@ -49,7 +56,7 @@ harmony/
   build-profile.json5             signing + products; tracked — set skip-worktree right after
                                   cloning, DevEco writes signing material into it (see Signing)
   entry/
-    build-profile.json5           externalNativeOptions: abiFilters + -DLLAMA_CPP_DIR
+    build-profile.json5           externalNativeOptions: abiFilters (no local paths)
     src/main/module.json5         abilities, permissions, pages
     src/main/cpp/
       CMakeLists.txt              libmirobody.so = NAPI bridge + c_api.cpp + mirobody_core
@@ -65,15 +72,21 @@ harmony/
       core/SecureKeyStore.ets     ASSET Kit, alias byok.key.<providerId>
       core/ConfigStore.ets        selection, user-added models, failure counters
       core/SessionStore.ets       local chat history (index + msg.<id>)
+      core/HealthSource.ets       Health Service Kit: authorize + read the 8 metrics
+      core/HealthRepository.ets   readings -> FHIR Observations -> the on-device store
       core/Markdown.ets           markdown -> RichBlock[] built for streaming
       core/RenderHost.ets         LaTeX -> SVG, ECharts -> PNG via one hidden Web
-      components/                 drawer, key manager, add-models, settings, RichMessage
+      model/HealthMetrics.ets     metric registry: the LOINC + UCUM coding per metric
+      components/                 drawer, key manager, add-models, settings, health, RichMessage
       pages/Index.ets             the app; pages/NativeProbe.ets  dev probe (temporary)
     src/main/resources/rawfile/
       render/                     render.html + tex-svg.js + echarts.min.js
       sql/                        copy of res/sql/sqlite — DDL the embedded core needs
-  build-prebuilt.cmd / .sh        cross-compile the core's C++ deps per ABI  -> prebuilt/
-  build-llama.cmd  / .sh          cross-compile llama.cpp -> an SDK dir the app links
+  prebuilt/                       ALL prebuilt native artifacts, gitignored, two producers:
+    <abi>/                          the core's C++ deps      <- build-prebuilt.cmd / .sh
+    llama-sdk/<abi>/                the on-device engine     <- build-llama.cmd / .sh
+  build-prebuilt.cmd / .sh        cross-compile the core's C++ deps per ABI (vcpkg)
+  build-llama.cmd  / .sh          cross-compile llama.cpp per ABI (CPU only)
   vcpkg-triplets/                 overlay triplets that make vcpkg target OHOS
   icon/                           gen_icon.py — app / layered / splash icons (see icon/README.md)
 ```
@@ -129,6 +142,47 @@ instead). Removing a model from the app never deletes the file.
 On-device models appear in the same composer dropdown as cloud models, so the picker and the
 turn code carry no lane special-cases.
 
+## Health data
+
+华为运动健康 (Huawei Health) is a **local data source** here, not a sync client. The one
+health row in the drawer opens
+[`HealthDataDialog`](entry/src/main/ets/components/HealthDataDialog.ets); the path is:
+
+```
+Health Service Kit ─▶ HealthSource ─▶ FHIR Observations ─▶ nativeHealthStore
+   (@kit.HealthServiceKit)                                       │
+                                                     fhir_resources (app SQLite)
+                                                                  │
+                              family_health MCP tool ◀────────────┘  (native lane turns)
+```
+
+The last hop is the point of the whole thing: [`family_health`](../res/mcp_tools/family_health.cpp)
+is compiled into this build and reads the caller's Observations, and the embedded core runs
+anonymous turns as the device owner (row 1) — so once a sync has landed, the model can answer
+"how did I sleep this week" from local rows. No prompt injection, and nothing about the user's
+health rides along in requests where they did not ask a health question.
+
+- **Eight metrics, all read-only** (`writeDataTypes` stays empty, so the app can never write
+  into the user's Huawei Health record): daily steps · sleep duration · resting HR · heart rate
+  · SpO₂ · weight · blood pressure · body temperature. Each carries a LOINC + UCUM coding from
+  [`model/HealthMetrics.ets`](entry/src/main/ets/model/HealthMetrics.ets), which also documents
+  what is **deliberately not mapped** and why (calories/distance: the SDK does not say kcal vs
+  cal; height: no unit at all; HRV/stress: no defensible code; workouts: a round of their own).
+- **Daily vs instantaneous.** Steps / sleep / resting HR are one reading per day (the Kit's
+  `aggregateData` offers no daily *mean* for heart rate, so a daily HR figure would have to be
+  a max or a min coded as a spot measurement — deferred instead). The rest are raw samples read
+  newest-first and **capped at 200 per metric per sync**, because a week of raw heart rate is
+  thousands of rows.
+- **Re-syncing is safe.** Every reading gets a deterministic FHIR id
+  (`hw.<metric>.<startMillis>`), and [`mirobody_health_store`](../src/mirobody.h) upserts on it,
+  so overlapping windows replace their own rows instead of accumulating duplicates.
+- **Gated on AppGallery Connect.** Health Service Kit hands over nothing until the app has the
+  Kit enabled with its read scopes **approved** (enterprise developer, privacy policy, stated
+  purpose), the device has 运动健康 installed and signed in, and the user grants the sheet. Until
+  then `canIUse` / `healthStore.init` / `getAuthorizations` fail and the card reports itself
+  unauthorized with the Kit's own error code — the same inert-until-entitled shape Android's
+  `HmsHealthSource` has. Nothing else in the app is affected.
+
 ## The native module
 
 `libmirobody.so` is the NAPI bridge, the C ABI ([`src/platform/c_api.cpp`](../src/platform/c_api.cpp))
@@ -141,8 +195,11 @@ re-extracted into the sandbox on every launch (keep it in sync with
 The ArkTS-visible surface is documented in
 [`cpp/types/libmirobody/index.d.ts`](entry/src/main/cpp/types/libmirobody/index.d.ts):
 `nativeVersion`, `nativeSetConfig`, `nativeReloadProviders`, `nativeGetProviders`,
-`nativeChat` / `nativeChatCancel`, and for the local lane `nativeLocalStatus`,
-`nativeLocalSetThreads`, `nativeLocalChat`. Three probes exist because the questions they
+`nativeChat` / `nativeChatCancel`, for the local lane `nativeLocalStatus`,
+`nativeLocalSetThreads`, `nativeLocalChat`, and for health data
+`nativeHealthStore` / `nativeHealthRecent` — the only two that return a **Promise**,
+because they hit SQLite and a week of samples is hundreds of rows (chat streams
+many events and needs a channel; these produce one result). Three probes exist because the questions they
 answer cannot be answered from a spec sheet: `nativeProbePath` (can native `mmap` this URI's
 path?), `nativeNnrtDevices` (is the NPU reachable by a third-party app at all?), and
 `nativeMemBandwidth` (the memory-wall ceiling on decode — `/proc/cpuinfo` is unreadable to an
@@ -167,24 +224,31 @@ targeting OHOS through vcpkg needs three non-obvious workarounds.
 ### 2. On-device engine (optional)
 
 ```cmd
-build-llama.cmd arm64-v8a cpu         :: -> D:\opt\llama-sdk-ohos-arm64-v8a-cpu
+build-llama.cmd arm64-v8a             :: -> prebuilt\llama-sdk\arm64-v8a\{include,lib}
 ```
 ```sh
-./build-llama.sh arm64-v8a cpu        # -> ~/opt/llama-sdk-ohos-arm64-v8a-cpu
+./build-llama.sh arm64-v8a            # -> prebuilt/llama-sdk/arm64-v8a/{include,lib}
 ```
 
-`-DLLAMA_CPP_DIR` in [`entry/build-profile.json5`](entry/build-profile.json5) is the **only**
-switch for the on-device lane: absent, the core compiles its stub and the app still builds,
-with on-device chat reporting itself unavailable. That path is machine-local — expect to
-repoint it rather than inherit it.
+**Running the script IS the switch** — there is nothing to configure.
+`prebuilt/llama-sdk/<abi>` is resolved by repo-relative path in
+[`entry/src/main/cpp/CMakeLists.txt`](entry/src/main/cpp/CMakeLists.txt), exactly as
+`prebuilt/<abi>` is; build it and the lane is on, `rm -rf` it and the core compiles its stub
+and the app still builds with on-device chat reporting itself unavailable. That is why
+nothing machine-local lands in the tracked `entry/build-profile.json5`. `-DLLAMA_CPP_DIR`
+still overrides, for an SDK assembled elsewhere via `LLAMA_SDK_DIR` — but hvigor neither
+expands environment variables in that string nor tolerates spaces in it, so prefer the
+default.
 
-**Use the `cpu` backend.** The `vulkan` one builds and genuinely runs (it registers an iGPU),
-but lost on every axis measured on a Kirin 9020 and costs ~50 MB of SPIR-V in the HAP; the
-numbers, and why the cause is structural rather than a tuning miss, are in the header of
-[`build-llama.cmd`](build-llama.cmd). The script also passes `GGML_CPU_ARM_ARCH` explicitly,
-because a cross build with no `-march` silently lands on baseline armv8-a — CMake's
-compile-and-run feature probes cannot work when cross-compiling, so ggml quietly drops the
-i8mm / dotprod / fp16 / SVE kernels the device actually has.
+**CPU only** — there is no backend option. `vulkan` did build and genuinely run (it
+registered an iGPU on a Kirin 9020) but lost on every axis measured and cost ~50 MB of
+SPIR-V in the HAP, so the plumbing was removed rather than left switched off; the numbers,
+and why the cause is structural rather than a tuning miss, are in the header of
+[`build-llama.cmd`](build-llama.cmd) — re-measure against them before reviving it for a
+different SoC. The script also passes `GGML_CPU_ARM_ARCH` explicitly, because a cross build
+with no `-march` silently lands on baseline armv8-a — CMake's compile-and-run feature probes
+cannot work when cross-compiling, so ggml quietly drops the i8mm / dotprod / fp16 / SVE
+kernels the device actually has.
 
 ### 3. Signing
 
@@ -215,6 +279,32 @@ git update-index --no-skip-worktree harmony/build-profile.json5
 git update-index --skip-worktree harmony/build-profile.json5
 ```
 
+**When a `git pull` aborts on this file.** Any upstream change to those shared settings lands
+on every clone that set the flag, as:
+
+```
+error: Your local changes to the following files would be overwritten by merge:
+        harmony/build-profile.json5
+```
+
+`git status` and `git diff` both report clean — skip-worktree tells *them* not to look at the
+working tree, while merge still refuses to clobber it — so there is nothing to stash and the
+message reads as a lie. Lift the flag, keep your signing block aside, merge, put it back:
+
+```sh
+cp harmony/build-profile.json5 /tmp/signing-backup.json5   # outside the repo, so it stays untracked
+git update-index --no-skip-worktree harmony/build-profile.json5
+git checkout -- harmony/build-profile.json5
+git pull
+# paste your signingConfigs block back from the backup, then re-hide it:
+git update-index --skip-worktree harmony/build-profile.json5
+```
+
+`git ls-files -v harmony/ | grep -v '^H '` lists every flag actually set, which is worth a look
+first: an old clone may still carry one on `entry/build-profile.json5` from when that file held
+a machine-local `-DLLAMA_CPP_DIR`. It no longer does, so drop that one with `--no-skip-worktree`
+rather than restoring it — see [Machine-local, not in git](#machine-local-not-in-git).
+
 `local.properties` (`sdk.dir` / `nodejs.dir`) is likewise gitignored and must point at your
 own DevEco install.
 
@@ -224,7 +314,9 @@ DevEco Studio is the normal path. From the command line, with DevEco's bundled h
 IDE:
 
 ```sh
-DES="/d/Huawei/DevEco Studio"
+# DEVECO_HOME if you set it, else the same default the build scripts use. cygpath -u
+# because PATH below needs a POSIX path: a `C:\...` entry would split on its own colon.
+DES="$(cygpath -u "${DEVECO_HOME:-$PROGRAMFILES/Huawei/DevEco Studio}")"
 export PATH="$DES/tools/node:$PATH"
 export DEVECO_SDK_HOME="$DES/sdk"
 cd harmony
@@ -268,10 +360,13 @@ and read the device probes. Remove it once the native transport has proven out o
 ## Machine-local, not in git
 
 `build-profile.json5`'s signing block (tracked file, hidden behind skip-worktree — see
-Signing), `prebuilt/` (cross-compiled deps), `.llama-build/` (~24 MB llama.cpp build cache),
-`local.properties`, `oh_modules/`, `**/build`, `.hvigor/`, `.cxx/`. The assembled llama.cpp
-SDK lives outside the repo entirely (`D:\opt\llama-sdk-ohos-*`, `~/opt/...`).
+Signing), `prebuilt/` (**everything** prebuilt: `<abi>/` cross-compiled deps and
+`llama-sdk/<abi>/` the on-device engine), `.llama-build/` (~24 MB llama.cpp build cache),
+`local.properties`, `oh_modules/`, `**/build`, `.hvigor/`, `.cxx/`.
 
-One tracked file still carries a machine-local value: `entry/build-profile.json5`'s
-`-DLLAMA_CPP_DIR`. It is a path, not a secret, but it will show up dirty on every other
-machine — repoint it and leave it uncommitted.
+All of it is gitignored, in-tree, and re-derivable by re-running the script that made it —
+which is also what `git clean -xdf` costs you here. The two producers never collide:
+`build-prebuilt` replaces only its own `prebuilt/<abi>`. `LLAMA_SDK_DIR` can move the llama
+SDK out of the tree, at the price of having to name it with `-DLLAMA_CPP_DIR` in the tracked
+`entry/build-profile.json5`; the default exists so that no path ever has to go there.
+Nothing else in `entry/build-profile.json5` is machine-local, so it needs no skip-worktree.

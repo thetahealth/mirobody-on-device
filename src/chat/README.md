@@ -34,6 +34,10 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
 - **`transport/sse.{hpp,cpp}`** — `SseTransport` + `SseResponder`. `POST /api/chat`
   → a `kOpChat` `Packet`, attaching any uploaded file bytes as Packet attachments
   (the dispatcher stores them, not the transport) → **Server-Sent Events**.
+  An upload's size is bounded before it ever reaches here: the router caps the
+  whole request body at `HTTP_MAX_BODY_BYTES` (32 MiB by default) and answers
+  `413`, since the body is buffered whole and each attachment is then copied
+  down this chain — see [src/config/README.md](../config/README.md#request-body-limit).
 - **`transport/ws.{hpp,cpp}`** — `WsTransport` + `WsResponder`. `GET /api/chat` →
   **WebSocket** (JWT-guarded handshake); each frame becomes a `kOpLive` `Packet`,
   run on a worker thread. Owns the per-connection `LiveSession` state.

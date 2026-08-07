@@ -130,7 +130,9 @@ ChatParams ChatParams::parse(const Packet& pkt, std::int64_t user_id) {
     // the dispatcher stored them) onto the matching file refs by filename, so an
     // agent can inline file content (e.g. Gemini inlineData) instead of passing a
     // URL the model can't fetch. Reference-only files (no attachment) keep empty
-    // data and fall back to the URL.
+    // data and fall back to the URL. The bytes are shared, not copied: the packet
+    // is const here, so an owning buffer could only be duplicated (see
+    // mirobody::Blob).
     const std::vector<Attachment>& atts = pkt.attachments();
     for (std::size_t k = 0; k < atts.size(); ++k) {
         for (std::size_t j = 0; j < areq.files.size(); ++j) {

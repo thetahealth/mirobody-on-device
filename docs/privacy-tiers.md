@@ -467,7 +467,8 @@ an `adapter:<name>` lane record rather than `openai-chat`.
 **PHI and BAAs.** For a deployment handling PHI under HIPAA, none of the public consumer
 endpoints above are BAA-covered. Either keep the turn on the local / home-server lane
 (nothing leaves), or point the lane at a BAA-eligible enterprise surface — Google Gemini
-via **Vertex AI** (`VERTEX_*`) or OpenAI via **Azure OpenAI** (`AZURE_OPENAI_*`), both
+via **Vertex AI** (`GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION`, credentials via ADC)
+or OpenAI via **Azure OpenAI** (`AZURE_OPENAI_*`), both
 already supported server-side. See [README → Compliance](../README.md#compliance--hipaa--gdpr).
 
 ### Request contract

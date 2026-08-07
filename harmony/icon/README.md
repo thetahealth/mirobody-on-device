@@ -1,11 +1,12 @@
 # App icon generator
 
-`gen_icon.py` renders the Mirobody app icon — a brand-blue (`#3F7FC1` family) gradient
-rounded tile with a white heartbeat/ECG pulse — and writes all icon assets in place:
+`gen_icon.py` renders the HarmonyOS icon assets — the Mirobody brand mark on a white
+rounded tile, the same mark and proportions android's adaptive icon and the Qt desktop
+icon use — and writes them in place:
 
-- `AppScope/resources/base/media/app_icon.png` — desktop icon (rounded tile + pulse)
-- `entry/.../media/background.png` — layered-icon background (full-bleed gradient; system masks it)
-- `entry/.../media/foreground.png` — layered-icon foreground (transparent + centered pulse)
+- `AppScope/resources/base/media/app_icon.png` — launcher icon (rounded tile + mark)
+- `entry/.../media/background.png` — layered-icon background (solid white; system masks it)
+- `entry/.../media/foreground.png` — layered-icon foreground (transparent + centered mark)
 - `entry/.../media/startIcon.png` — splash icon (same tile)
 
 ## Run
@@ -14,5 +15,8 @@ rounded tile with a white heartbeat/ECG pulse — and writes all icon assets in 
 python gen_icon.py     # needs Pillow (PIL)
 ```
 
-Tweak `TOP`/`BOT` (gradient blues), `pulse_points()` (the ECG shape), or `width_ratio`
-(stroke thickness) at the top of the script, then re-run. Output is 1024×1024.
+The mark's geometry, colors, and proportions are NOT here — they live in
+`tools/brandmark.py`, shared with `qt/icon/gen_icon.py`, so a change reaches every
+client instead of only this one. The paths there are copied from
+`htdoc/src/assets/mirobody.svg`, the single source (see `docs/colors-and-fonts.md` S5).
+Output is 1024×1024.

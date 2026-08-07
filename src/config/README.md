@@ -30,6 +30,7 @@ project's format):
 HTTP_HOST: 0.0.0.0
 HTTP_PORT: 8080
 HTTP_URI_PREFIX: ''      # optional sub-path mount, e.g. '/mirobody'; see below
+HTTP_MAX_BODY_BYTES: 33554432   # 32 MiB, the default; caps one upload. See below
 
 LOG_LEVEL: info
 
@@ -68,6 +69,40 @@ to `/mirobody`:
 **without stripping** the prefix — the server expects to receive the full path.
 For local `webpack serve` dev, keep `HTTP_URI_PREFIX` empty (the dev-server proxy
 forwards unprefixed paths).
+
+### Request body limit
+
+`HTTP_MAX_BODY_BYTES` caps a single request body on **every** route; the default
+is **33554432 (32 MiB)** and `0` removes the bound. It is the limit a chat file
+upload actually hits, and the only thing bounding one: a body is buffered whole
+in memory before it is dispatched, an upload's bytes are then copied down the
+attachment chain, and inlining them into a model request base64-expands them by
+a third — so one request costs several times this value at peak.
+
+Enforced in two places (see `Router::set_max_body_bytes`):
+
+- **At headers time**, against `Content-Length` — an oversized upload is refused
+  before a single body byte is buffered.
+- **As the body arrives**, against the running total — the only check that
+  catches a chunked upload (which declares no length) or a `Content-Length` that
+  understated the body.
+
+Either way the response is `413` with the standard envelope, carrying the limit
+so a client can report it:
+
+```json
+{ "code": -1, "msg": "request body too large", "data": { "max_bytes": 33554432 } }
+```
+
+The connection is then closed rather than kept alive — the client is still
+sending a body nobody is reading, and the remainder would otherwise be parsed as
+the next request.
+
+**Raising it.** Keep it comfortably under the model providers' own inline caps
+(Gemini rejects a request whose inline payload exceeds 20 MB), and remember a
+reverse proxy has its own limit — nginx `client_max_body_size`, or the ingress
+equivalent. The smaller of the two wins, so raise both or the proxy will reject
+the upload first, with its own error page instead of the JSON envelope above.
 
 ## Object storage
 

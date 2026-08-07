@@ -28,10 +28,11 @@ setlocal EnableExtensions EnableDelayedExpansion
 ::   build-qt.cmd vulkan deploy    on-device, GPU via Vulkan
 ::
 :: Env overrides:
-::   QT_PREFIX   Qt msvc kit dir     (default: D:\Qt\6.11.1\msvc2022_64)
-::   VS_DIR      Visual Studio root  (default: C:\Program Files\Microsoft Visual Studio\18\Community)
-::   NINJA       ninja.exe path      (default: D:\Qt\Tools\Ninja\ninja.exe)
-::   LLAMA_SRC       llama.cpp checkout (default: D:\opt\llama.cpp; cloned if missing)
+::   QT_ROOT     Qt install root      (default: %SystemDrive%\Qt; scanned for a kit)
+::   QT_PREFIX   Qt msvc kit dir      (default: newest %QT_ROOT%\6.*\msvc*)
+::   VS_DIR      Visual Studio root   (default: %ProgramFiles%\Microsoft Visual Studio\18\Community)
+::   NINJA       ninja.exe path       (default: %QT_ROOT%\Tools\Ninja\ninja.exe)
+::   LLAMA_SRC       llama.cpp checkout (default: llama.cpp beside the repo; cloned if missing)
 ::   LLAMA_CPP_DIR   use a prebuilt llama.cpp SDK (include/,lib/,bin/) instead of building one
 
 :: This script lives in qt/. QT_SRC is its own dir; the build output goes to the
@@ -69,20 +70,33 @@ if defined _CHECK ( call :detect_env & exit /b 0 )
 if not defined _BACKEND echo [build-qt] Tip: run "build-qt.cmd check" to see on-device (GPU) options.
 
 :: --- Qt kit ---
-if not defined QT_PREFIX set "QT_PREFIX=D:\Qt\6.11.1\msvc2022_64"
+:: Nothing is baked in: the install root and the version installed are both per-machine.
+:: QT_PREFIX names the kit outright; failing that, scan the newest 6.x under QT_ROOT for
+:: an msvc kit, newest kit first. Same idiom as the DevEco/Vulkan scans in
+:: harmony\build-llama.cmd -- discover, then say what was searched if it comes up empty.
+if not defined QT_ROOT set "QT_ROOT=%SystemDrive%\Qt"
+if not defined QT_PREFIX for /f "delims=" %%V in ('dir /b /ad /o-n "%QT_ROOT%\6.*" 2^>nul') do (
+    if not defined QT_PREFIX for /f "delims=" %%K in ('dir /b /ad /o-n "%QT_ROOT%\%%V\msvc*" 2^>nul') do (
+        if not defined QT_PREFIX if exist "%QT_ROOT%\%%V\%%K\lib\cmake\Qt6\Qt6Config.cmake" set "QT_PREFIX=%QT_ROOT%\%%V\%%K"
+    )
+)
 if not exist "%QT_PREFIX%\lib\cmake\Qt6\Qt6Config.cmake" (
-    echo [build-qt] Qt kit not found at "%QT_PREFIX%". Set QT_PREFIX to your Qt msvc kit.
+    echo [build-qt] Qt kit not found. Searched "%QT_ROOT%\6.*\msvc*".
+    echo [build-qt] Set QT_PREFIX to your Qt msvc kit, or QT_ROOT to your Qt install root.
     exit /b 1
 )
+echo [build-qt] Qt kit: %QT_PREFIX%
 
 :: --- MSVC toolchain (vcvars puts cl.exe on PATH; needed for llama.cpp too) ---
-if not defined VS_DIR set "VS_DIR=C:\Program Files\Microsoft Visual Studio\18\Community"
+if not defined VS_DIR set "VS_DIR=%ProgramFiles%\Microsoft Visual Studio\18\Community"
 set "VCVARS=%VS_DIR%\VC\Auxiliary\Build\vcvarsall.bat"
 if not exist "%VCVARS%" (
     echo [build-qt] vcvarsall.bat not found at "%VCVARS%". Set VS_DIR to your VS root.
     exit /b 1
 )
-if not defined NINJA set "NINJA=D:\Qt\Tools\Ninja\ninja.exe"
+:: Qt's own Ninja if the installer placed one; otherwise the copy vcvars puts on PATH.
+if not defined NINJA if exist "%QT_ROOT%\Tools\Ninja\ninja.exe" set "NINJA=%QT_ROOT%\Tools\Ninja\ninja.exe"
+if not defined NINJA set "NINJA=ninja.exe"
 call "%VCVARS%" amd64 >nul
 if errorlevel 1 ( echo [build-qt] vcvars failed. & exit /b 1 )
 
@@ -135,8 +149,16 @@ goto :eof
 :: ---------------------------------------------------------------------------
 :ensure_llama
 if defined LLAMA_CPP_DIR ( echo [build-qt] using preset LLAMA_CPP_DIR=%LLAMA_CPP_DIR% & exit /b 0 )
-if not defined LLAMA_SRC set "LLAMA_SRC=D:\opt\llama.cpp"
-set "LLAMA_CPP_DIR=D:\opt\llama-sdk-%_BACKEND%"
+rem Beside the repo, and resolved the same way harmony\build-llama.cmd and
+rem fine-tuning\train_units.py resolve it -- one checkout serves all three.
+if not defined LLAMA_SRC for %%I in ("%PROJECT_DIR%\..") do set "LLAMA_SRC=%%~fI\llama.cpp"
+:: Outside the repo -- it is a large build product, not a source artifact. LLAMA_CPP_DIR
+:: (checked just above) points at an existing SDK instead.
+set "LLAMA_CPP_DIR=%USERPROFILE%\opt\llama-sdk-%_BACKEND%"
+rem Reuse is by PRESENCE, so a cached SDK outlives the checkout it came from -- and this
+rem script never updates an existing llama.cpp clone either. src/llm/local.cpp needs the
+rem API at upstream 935cad649 (2026-08-04) or newer; an older cache reaches the root
+rem CMakeLists, which checks llama.h for it and says so. Pass `clean` to discard the cache.
 if not defined _CLEAN if exist "%LLAMA_CPP_DIR%\lib\llama.lib" (
     echo [build-qt] reusing cached llama SDK: %LLAMA_CPP_DIR%
     exit /b 0
@@ -237,5 +259,5 @@ echo                         cuda = NVIDIA, needs the CUDA Toolkit, fastest on N
 echo   clean            wipe caches / force rebuild (needed to turn on-device OFF)
 echo   deploy           run windeployqt so the exe is double-clickable
 echo.
-echo Env overrides: QT_PREFIX, VS_DIR, NINJA, LLAMA_SRC, LLAMA_CPP_DIR.
+echo Env overrides: QT_ROOT, QT_PREFIX, VS_DIR, NINJA, LLAMA_SRC, LLAMA_CPP_DIR.
 exit /b 0

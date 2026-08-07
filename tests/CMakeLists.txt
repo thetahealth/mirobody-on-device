@@ -3,6 +3,7 @@ include(Catch)
 
 add_executable(mirobody_tests
     cache/cache_test.cpp
+    client/gcp_auth_test.cpp
     jwt/google_test.cpp
     jwt/jwt_test.cpp
     utils/fernet_test.cpp
@@ -23,14 +24,18 @@ add_executable(mirobody_tests
     chat/agent_test.cpp
     chat/event_test.cpp
     chat/history_test.cpp
+    chat/params_test.cpp
     chat/persist_test.cpp
     circle/access_test.cpp
+    server/stream_writer_test.cpp
     storage/sign_test.cpp
     storage/storage_test.cpp
     transcode/image_test.cpp
     transcode/document_test.cpp
+    transcode/parser_test.cpp
     fhir/units_test.cpp
     fhir/resource_test.cpp
+    fhir/write_test.cpp
     indicator/normalize_test.cpp
     indicator/resolve_test.cpp
 )

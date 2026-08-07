@@ -11,7 +11,7 @@
 :: %VCPKG_ARCH%-windows (build), -windows-static (build-shared),
 :: -windows-static-md (build-python).
 
-if not defined VS_DIR set "VS_DIR=C:\Program Files\Microsoft Visual Studio\18\Community"
+if not defined VS_DIR set "VS_DIR=%ProgramFiles%\Microsoft Visual Studio\18\Community"
 if not defined NINJA set "NINJA=%VS_DIR%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe"
 
 :: Host arch, normalized to amd64 | arm64 | x86.

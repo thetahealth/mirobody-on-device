@@ -206,11 +206,30 @@ TEST_CASE("a provider is offered exactly when it has a credential", "[agent]") {
         const char* model;
         std::string credential;   // resolved the same way baseline.cpp resolves it
     };
-    const Expect expected[] = {
-        {"gpt-5-nano",       cfg.openai.api_key},
-        {"gemini-2.5-flash", cfg.store.get_str("GOOGLE_API_KEY", cfg.gemini.api_key)},
-        {"mirothinker-1.7",  cfg.store.get_str("MIROTHINKER_API_KEY")},
-    };
+    std::vector<Expect> expected;
+    expected.push_back({"gpt-5-nano",      cfg.openai.api_key});
+    expected.push_back({"mirothinker-1.7", cfg.store.get_str("MIROTHINKER_API_KEY")});
+
+    // The Gemini rows depend on the surface, so the expectation has to as well --
+    // and for the same reason the comment above gives, the surface is read from
+    // the environment here rather than pinned: a machine exporting
+    // GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION genuinely IS a Vertex
+    // deployment, and would be offered the Vertex model list. Pinning either
+    // side would pass on one machine and fail on the other.
+    const std::string project  = cfg.store.get_str("GOOGLE_CLOUD_PROJECT");
+    const std::string location = cfg.store.get_str("GOOGLE_CLOUD_LOCATION");
+    if (!project.empty() && !location.empty()) {
+        // Vertex: the project stands in for the credential (the token is
+        // resolved per request and may be ambient), and 3.5 replaces 3.6, which
+        // publishes only the `global` location.
+        expected.push_back({"gemini-2.5-flash", project});
+        expected.push_back({"gemini-3.5-flash", project});
+    } else {
+        // AI Studio: both rows ride the one key on desktop; mobile lists only 3.6.
+        const std::string key = cfg.store.get_str("GOOGLE_API_KEY", cfg.gemini.api_key);
+        expected.push_back({"gemini-2.5-flash", key});
+        expected.push_back({"gemini-3.6-flash", key});
+    }
 
     const std::vector<std::string> names = agent_registry().provider_names(true);
     for (const Expect& e : expected) {

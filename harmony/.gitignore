@@ -10,13 +10,14 @@
 **/build
 /.hvigor
 .cxx
-# Cross-compiled C++ dependencies for the embedded core (build-prebuilt.cmd/.sh)
+# Every prebuilt native artifact, from two producers: <abi>/ is the embedded core's
+# cross-compiled C++ dependencies (build-prebuilt.cmd/.sh), llama-sdk/<abi>/ is the
+# on-device engine (build-llama.cmd/.sh). One rule, because "prebuilt" naming anything
+# less than all of them is how a reader ends up assuming the engine is in there.
 /prebuilt
 # llama.cpp cross-build tree for the on-device engine (build-llama.cmd/.sh). Cached and
 # reused across runs, hence kept in-tree rather than in a temp dir; ~24 MB of objects.
 # `**/build` above does not catch it — the name neither equals nor starts with "build".
-# The assembled SDK it copies out to lives outside the repo (D:\opt\llama-sdk-ohos-*,
-# ~/opt/llama-sdk-ohos-* on macOS/Linux).
 /.llama-build
 /.clangd
 /.clang-format

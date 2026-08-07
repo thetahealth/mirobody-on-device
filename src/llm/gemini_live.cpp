@@ -1,5 +1,6 @@
 #include "llm/gemini_live.hpp"
 
+#include "client/gcp_auth.hpp"
 #include "client/websocket_client.hpp"
 #include "platform/log.hpp"
 
@@ -278,8 +279,10 @@ std::string build_ws_url(const GeminiLiveOptions& opt) {
         return host + "/ws/google.ai.generativelanguage." + opt.api_version
              + ".GenerativeService.BidiGenerateContent?key=" + opt.api_key;
     }
+    // Same three host shapes as the REST lane -- region, us / eu multi-region,
+    // global -- just over wss. See gcp::vertex_host.
     std::string host = opt.vertex_base_url.empty()
-        ? ("wss://" + opt.gcp_location + "-aiplatform.googleapis.com")
+        ? gcp::vertex_host(opt.gcp_location, "wss")
         : opt.vertex_base_url;
     return host + "/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent";
 }

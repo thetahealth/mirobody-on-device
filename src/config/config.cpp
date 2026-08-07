@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -247,6 +248,10 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.listen_addr        = store.get_str("HTTP_HOST", cfg.listen_addr);
     cfg.listen_port        = static_cast<std::uint16_t>(store.get_int("HTTP_PORT", cfg.listen_port));
     cfg.uri_prefix         = normalize_uri_prefix(store.get_str("HTTP_URI_PREFIX", cfg.uri_prefix));
+    // Negative is meaningless; treat it as "no bound" like 0 rather than letting
+    // it wrap into a huge size_t at the router.
+    cfg.max_request_body_bytes = store.get_int("HTTP_MAX_BODY_BYTES", cfg.max_request_body_bytes);
+    if (cfg.max_request_body_bytes < 0) cfg.max_request_body_bytes = 0;
     cfg.public_base_url    = store.get_str("PUBLIC_BASE_URL", cfg.public_base_url);
     while (!cfg.public_base_url.empty() && cfg.public_base_url.back() == '/')
         cfg.public_base_url.pop_back();   // trim trailing '/' so links join cleanly
@@ -406,6 +411,9 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
 
     cfg.chat.rate_max_per_window = static_cast<int>(store.get_int("CHAT_RATE_MAX",        cfg.chat.rate_max_per_window));
     cfg.chat.rate_window_seconds = static_cast<int>(store.get_int("CHAT_RATE_WINDOW_SEC", cfg.chat.rate_window_seconds));
+    cfg.chat.sse_heartbeat_seconds = static_cast<int>(
+        store.get_int("CHAT_SSE_HEARTBEAT_SEC", cfg.chat.sse_heartbeat_seconds));
+    if (cfg.chat.sse_heartbeat_seconds < 0) cfg.chat.sse_heartbeat_seconds = 0;   // negative == off
 
     cfg.circle.max_circles_per_user   = static_cast<int>(store.get_int("CIRCLE_MAX_PER_USER",      cfg.circle.max_circles_per_user));
     cfg.circle.max_members_per_circle = static_cast<int>(store.get_int("CIRCLE_MAX_MEMBERS",       cfg.circle.max_members_per_circle));
@@ -548,6 +556,26 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.clickhouse.encryption_key = store.get_str ("CLICKHOUSE_ENCRYPTION_KEY", cfg.clickhouse.encryption_key);
     cfg.clickhouse.min_connection = static_cast<int>(store.get_int("CLICKHOUSE_MIN_CONNECTION", cfg.clickhouse.min_connection));
     cfg.clickhouse.max_connection = static_cast<int>(store.get_int("CLICKHOUSE_MAX_CONNECTION", cfg.clickhouse.max_connection));
+
+    // Keys this server used to read and no longer does. Saying so once at startup
+    // is the difference between a five-minute fix and an afternoon: a Vertex
+    // deployment whose project now resolves to nothing looks exactly like one that
+    // was never configured for Vertex at all, and the log otherwise says only that
+    // it stayed on AI Studio.
+    {
+        struct Retired { const char* key; const char* use; };
+        const Retired retired[] = {
+            {"GCP_PROJECT",  "GOOGLE_CLOUD_PROJECT"},
+            {"GCP_LOCATION", "GOOGLE_CLOUD_LOCATION"},
+        };
+        for (std::size_t i = 0; i < sizeof(retired) / sizeof(retired[0]); ++i) {
+            if (!store.get_str(retired[i].key).empty()) {
+                platform::log_warn("config: %s is set but is no longer read -- rename it to %s. "
+                                   "Until then this setting has no effect.",
+                                   retired[i].key, retired[i].use);
+            }
+        }
+    }
 
     cfg.store = std::move(store);
     return cfg;

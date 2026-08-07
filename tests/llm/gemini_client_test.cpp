@@ -65,7 +65,11 @@ TEST_CASE("gemini vertex: missing access_token short-circuits", "[gemini]") {
     REQUIRE_FALSE(ok);
     REQUIRE(events.size() == 1);
     REQUIRE(events[0].type == EventType::Error);
-    REQUIRE(events[0].content.find("access_token") != std::string::npos);
+    // What matters is WHICH thing the error blames -- the token, not the project
+    // (the next case pins the other side). Matching the whole phrase would pin
+    // the wording instead, and the wording is meant to change as the ways of
+    // supplying a token do.
+    REQUIRE(events[0].content.find("token") != std::string::npos);
 }
 
 //------------------------------------------------------------------------------
@@ -84,6 +88,67 @@ TEST_CASE("gemini vertex: missing project/location short-circuits", "[gemini]") 
     REQUIRE(events.size() == 1);
     REQUIRE(events[0].type == EventType::Error);
     REQUIRE(events[0].content.find("gcp_project") != std::string::npos);
+}
+
+//------------------------------------------------------------------------------
+
+// The rotation seam: a deployment refreshes the Vertex token under a running
+// process, so the token must be resolved at the point of use, not captured when
+// the client was built. These pin that the provider is what is consulted -- with
+// no `access_token` set at all, only the provider can satisfy (or fail) the
+// check, and each turn must ask it again.
+
+TEST_CASE("gemini vertex: the token provider supplies the credential", "[gemini]") {
+    GeminiOptions opt;
+    opt.mode         = GeminiMode::Vertex;
+    opt.gcp_project  = "";   // missing: fails AFTER the token check
+    opt.gcp_location = "us-central1";
+    opt.access_token = "";   // nothing captured -- the provider is the only source
+    opt.access_token_provider = []() { return std::string{"ya29.rotated"}; };
+    GeminiClient c{std::move(opt)};
+
+    std::vector<Event> events;
+    const bool ok = c.ainvoke({{"user", "hi"}}, "", collect_into(events));
+
+    REQUIRE_FALSE(ok);
+    REQUIRE(events.size() == 1);
+    // Got past the token check on the provider's value alone: the complaint is
+    // about the project, not the credential.
+    REQUIRE(events[0].content.find("gcp_project") != std::string::npos);
+    REQUIRE(events[0].content.find("access_token") == std::string::npos);
+}
+
+TEST_CASE("gemini vertex: an empty provider result reads as a missing token", "[gemini]") {
+    GeminiOptions opt;
+    opt.mode         = GeminiMode::Vertex;
+    opt.gcp_project  = "my-proj";
+    opt.gcp_location = "us-central1";
+    opt.access_token_provider = []() { return std::string{}; };   // e.g. the token file is not there yet
+    GeminiClient c{std::move(opt)};
+
+    std::vector<Event> events;
+    const bool ok = c.ainvoke({{"user", "hi"}}, "", collect_into(events));
+
+    REQUIRE_FALSE(ok);
+    REQUIRE(events.size() == 1);
+    REQUIRE(events[0].type == EventType::Error);
+    REQUIRE(events[0].content.find("token") != std::string::npos);
+}
+
+TEST_CASE("gemini vertex: the token is re-read for every turn", "[gemini]") {
+    // The property that makes rotation work: one client, asked again each turn.
+    int calls = 0;
+    GeminiOptions opt;
+    opt.mode         = GeminiMode::Vertex;
+    opt.gcp_project  = "";   // short-circuit after the token check, so no network
+    opt.gcp_location = "us-central1";
+    opt.access_token_provider = [&calls]() { calls ++; return std::string{"ya29.fake"}; };
+    GeminiClient c{std::move(opt)};
+
+    std::vector<Event> events;
+    for (int i = 0; i < 3; i ++) { c.ainvoke({{"user", "hi"}}, "", collect_into(events)); }
+
+    REQUIRE(calls == 3);
 }
 
 //------------------------------------------------------------------------------

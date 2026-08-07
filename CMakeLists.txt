@@ -299,6 +299,7 @@ set(MIROBODY_CORE_SOURCES
     src/transcode/parser.cpp
     src/oauth/pkce.cpp
     src/client/http_client.cpp
+    src/client/gcp_auth.cpp
     src/storage/storage.cpp
     src/storage/sign.cpp
     src/storage/aws_s3.cpp
@@ -318,6 +319,7 @@ set(MIROBODY_CORE_SOURCES
     src/fhir/fhir.cpp
     src/fhir/resource.cpp
     src/fhir/store.cpp
+    src/fhir/write.cpp
     src/indicator/normalize.cpp
     src/indicator/word.cpp
     src/indicator/lexicon.cpp
@@ -436,6 +438,32 @@ if(MIROBODY_ONDEVICE_LLM)
     if(NOT EXISTS "${LLAMA_CPP_DIR}/include/llama.h")
         message(FATAL_ERROR "llama.h not found under ${LLAMA_CPP_DIR}/include.")
     endif()
+    # The SDK's API LEVEL, not just its presence. src/llm/local.cpp passes the n_vocab
+    # first argument that upstream 935cad649 (2026-08-04, "move n_vocab from
+    # llama_sampler_data to penalty_sampler", #26520) restored to
+    # llama_sampler_init_penalties; the four-argument form had stood since 644fd71b4
+    # (2024-12-16). Against an older SDK everything else compiles and only that one call
+    # fails, as "no matching function ... requires 5 arguments, but 4 were provided" --
+    # which reads like a bug in our code rather than a stale dependency.
+    #
+    # Worth a check rather than trusting the checkout, because a stale SDK outlives its
+    # source: qt/build-qt.* reuse an assembled SDK whenever the archive is merely
+    # present, and neither that script nor harmony/build-llama.* updates an existing
+    # llama.cpp clone. Whitespace is flattened first so the match does not depend on how
+    # the declaration happens to be wrapped.
+    file(READ "${LLAMA_CPP_DIR}/include/llama.h" _llama_h)
+    string(REGEX REPLACE "[ \t\r\n]+" "" _llama_h_flat "${_llama_h}")
+    if(NOT _llama_h_flat MATCHES "llama_sampler_init_penalties\\(int32_tn_vocab")
+        message(FATAL_ERROR
+            "The llama.cpp SDK at ${LLAMA_CPP_DIR} is older than this repo needs: its "
+            "llama_sampler_init_penalties has no n_vocab parameter, so src/llm/local.cpp "
+            "will not compile against it.\n"
+            "Rebuild the SDK from a llama.cpp at 935cad649 (2026-08-04) or newer -- "
+            "`git -C <llama.cpp> pull`, then re-run the build script for this frontend "
+            "with `clean` so the cached SDK is discarded rather than reused.")
+    endif()
+    unset(_llama_h)
+    unset(_llama_h_flat)
     target_compile_definitions(mirobody_core PUBLIC MIROBODY_ONDEVICE_LLM)
     target_include_directories(mirobody_core PRIVATE "${LLAMA_CPP_DIR}/include")
     # llama first: with static archives the linker resolves left to right, and

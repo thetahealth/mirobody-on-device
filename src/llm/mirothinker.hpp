@@ -1,5 +1,6 @@
 #pragma once
 
+#include "compat/cxx11.hpp"   // Blob
 #include "llm/event.hpp"
 
 #include <cstddef>
@@ -19,7 +20,10 @@ namespace llm {
 // as the provider requires. Clients that don't support inlining ignore these.
 struct FilePart {
     std::string mime_type;   // e.g. "image/png"; empty => application/octet-stream
-    std::string data;        // raw bytes
+    // The raw bytes, shared with whoever attached them (see mirobody::Blob) --
+    // the caller builds these parts from a const request, so owning a copy here
+    // duplicated the whole file for the length of the call.
+    Blob data;
 };
 
 struct ChatMessage {

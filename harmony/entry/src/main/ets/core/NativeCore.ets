@@ -136,7 +136,7 @@ export class NativeCore {
 
   /** Re-read the provider set from the core. */
   private static refresh(): void {
-    const listed = mirobody.nativeGetProviders();
+    const listed: string = mirobody.nativeGetProviders();
     const next = new Set<string>();
     if (listed.length > 0) {
       for (const line of listed.split('\n')) {
@@ -214,7 +214,7 @@ export class NativeCore {
       // a call's queryArguments immediately follows its queryTitle, so tracking
       // the last title is enough to recognize a render_chart call.
       let lastTool = '';
-      const turnId = mirobody.nativeChat(shortName(model), JSON.stringify(wire),
+      const turnId: number = mirobody.nativeChat(shortName(model), JSON.stringify(wire),
         (type: string, content: string) => {
           if (type === 'reply') {
             cb.onDelta(content);
@@ -281,7 +281,7 @@ export class NativeCore {
       }
 
       let errored = false;
-      const turnId = mirobody.nativeLocalChat(modelPath, JSON.stringify(wire),
+      const turnId: number = mirobody.nativeLocalChat(modelPath, JSON.stringify(wire),
         (type: string, content: string) => {
           if (type === 'reply') {
             cb.onDelta(content);

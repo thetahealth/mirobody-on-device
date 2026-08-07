@@ -18,6 +18,11 @@ rem
 rem Re-running is idempotent: vcpkg skips already-built ports and the destination is
 rem refreshed.
 rem
+rem prebuilt\ holds every prebuilt native artifact, not just these: build-llama.cmd
+rem assembles the on-device engine into prebuilt\llama-sdk\<abi>\ beside them. This
+rem script replaces only its own prebuilt\%ABI%, so the two never collide -- but a
+rem hand `rmdir prebuilt` discards both.
+rem
 rem Usage:  build-prebuilt.cmd [abi]
 rem   abi defaults to arm64-v8a; one of arm64-v8a^|x86_64^|armeabi-v7a.
 rem Env overrides:
@@ -29,8 +34,19 @@ cd /d "%~dp0"
 set "ABI=%~1"
 if "%ABI%"=="" set "ABI=arm64-v8a"
 
-rem Keep the pin in sync with vcpkg.json's "builtin-baseline" (and android\build-prebuilt.*).
-set "BASELINE=d015e31e90838a4c9dfa3eed45979bc70d9357fc"
+rem READ from vcpkg.json's "builtin-baseline" rather than repeated here. The hash used to
+rem be duplicated in four scripts (this, .sh, and both android ones) under a comment asking
+rem the reader to keep them in sync by hand -- so bumping the pin in vcpkg.json and missing
+rem one meant that platform silently kept building against the old port set.
+rem tokens=4 delims=" splits `  "builtin-baseline": "<hash>",` into ["  "]["builtin-baseline"]
+rem [": "][<hash>], so token 4 is the hash.
+set "VCPKG_JSON=%~dp0..\vcpkg.json"
+set "BASELINE="
+for /f tokens^=4^ delims^=^" %%A in ('findstr /c:"builtin-baseline" "%VCPKG_JSON%"') do set "BASELINE=%%A"
+if not defined BASELINE (
+    echo no "builtin-baseline" in "%VCPKG_JSON%">&2
+    exit /b 1
+)
 
 rem OHOS ABI -> overlay triplet (harmony\vcpkg-triplets\).
 if /I "%ABI%"=="arm64-v8a"   ( set "TRIPLET=arm64-ohos" ) else ^
@@ -48,8 +64,8 @@ rem OHOS_SDK_ROOT must name the directory CONTAINING native\ (vcpkg's
 rem scripts\toolchains\ohos.cmake appends \native itself).
 if not defined OHOS_SDK_ROOT (
     for %%D in (
-        "D:\Huawei\DevEco Studio\sdk\default\openharmony"
-        "C:\Program Files\Huawei\DevEco Studio\sdk\default\openharmony"
+        "%DEVECO_HOME%\sdk\default\openharmony"
+        "%ProgramFiles%\Huawei\DevEco Studio\sdk\default\openharmony"
         "%LOCALAPPDATA%\OpenHarmony\Sdk\default\openharmony"
     ) do (
         if not defined OHOS_SDK_ROOT if exist "%%~D\native\build\cmake\ohos.toolchain.cmake" set "OHOS_SDK_ROOT=%%~D"
@@ -67,7 +83,7 @@ if not exist "%OHOS_SDK_ROOT%\native\build\cmake\ohos.toolchain.cmake" (
 rem --- Space-free SDK path (mandatory) -----------------------------------------
 rem OpenSSL's generated Makefile hands the compiler path and --sysroot to /bin/sh
 rem unquoted, so a space anywhere in the SDK path breaks the build with
-rem "/bin/sh: D:/Huawei/DevEco: No such file or directory". Unlike the Android
+rem "/bin/sh: .../Huawei/DevEco: No such file or directory". Unlike the Android
 rem script -- which mirrors the whole NDK with robocopy -- a directory junction is
 rem enough here and costs nothing. Detect a space via substitution: !VAR: =! strips
 rem spaces, so a differing result means VAR had one.
@@ -95,6 +111,8 @@ if not "!SDK_NOSP!"=="!OHOS_SDK_ROOT!" (
 echo ABI=%ABI%  triplet=!TRIPLET!
 echo SDK=!OHOS_SDK_ROOT!
 echo vcpkg=!VCPKG_ROOT!
+rem Printed because it is no longer readable off this script -- it comes from vcpkg.json.
+echo baseline=!BASELINE!
 
 rem --- Bootstrap vcpkg at the pinned baseline -----------------------------------
 if not exist "!VCPKG_ROOT!\.git" (

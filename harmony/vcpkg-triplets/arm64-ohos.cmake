@@ -9,7 +9,7 @@
 # Drop this file once the pinned tool resolves OHOS natively.
 #
 # Requires OHOS_SDK_ROOT to point at the SDK root that CONTAINS `native/`, e.g.
-#   D:/Huawei/DevEco Studio/sdk/default/openharmony
+#   C:/Program Files/Huawei/DevEco Studio/sdk/default/openharmony
 # scripts/toolchains/ohos.cmake appends /native and includes the SDK's own
 # build/cmake/ohos.toolchain.cmake from there.
 

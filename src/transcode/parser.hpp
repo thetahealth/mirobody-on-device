@@ -11,12 +11,16 @@
 //
 // Two backends are provided, selected by config (FILE_PARSER = "gemini" |
 // "qwen"); each makes a single, self-contained HTTP call to its provider:
-//   - gemini : Google AI Studio generateContent, model gemini-3.5-flash
-//   - qwen   : DashScope OpenAI-compatible chat/completions, model qwen-3.7-plus
+//   - gemini : Google AI Studio generateContent (x-goog-api-key auth), model
+//              gemini-3.6-flash (override: FILE_PARSER_GEMINI_MODEL)
+//   - qwen   : DashScope OpenAI-compatible chat/completions, model qwen3.7-plus
+//              (override: FILE_PARSER_QWEN_MODEL). Must name a vision-capable
+//              model: the request carries the file as an image part.
 //
 // Parsers are stateless and safe to share across threads (each call uses its own
 // HTTP client); construct one at startup via make_parser and borrow it.
 
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -49,5 +53,20 @@ public:
 // A parser whose provider credentials are unset is still returned; it logs and
 // yields "" at call time.
 std::unique_ptr<Parser> make_parser(const Config& cfg);
+
+//------------------------------------------------------------------------------
+
+// Upper bound, in bytes, on the text of one user file that reaches a model, and
+// the truncation enforcing it. Every Parser caps what it extracts, so a stored
+// `<file_key>.trans` sidecar is already within the bound. A file whose bytes ARE
+// its text (text/*, JSON, CSV, ...) skips extraction entirely, so a read path
+// serving those bytes applies the cap itself -- otherwise a large text upload
+// reaches a context the extracted kind cannot.
+const std::size_t kMaxTextBytes = 100000;
+
+// `s` truncated to kMaxTextBytes with "\n...[truncated]" appended, or unchanged
+// when it already fits. The cut keeps whole UTF-8 sequences, and the marker lets
+// a reader tell a cut document from a short one.
+std::string cap_text(std::string s);
 
 }}

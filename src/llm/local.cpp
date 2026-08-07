@@ -467,11 +467,19 @@ bool LocalClient::ainvoke(const std::vector<ChatMessage>& messages,
      * optimal the model emits it forever; that is exactly the "春季花港观鱼" loop.
      * Penalizing the last repeat_last_n tokens makes the second lap cheaper to leave
      * than to continue.
+     *
+     * REQUIRES llama.cpp at 935cad649 (2026-08-04) or newer: "llama : move n_vocab from
+     * llama_sampler_data to penalty_sampler (#26520)" put n_vocab back into this
+     * signature, where the four-argument form had stood since 644fd71b4 (2024-12-16).
+     * Against an older checkout this is the ONLY call in the file that fails to compile,
+     * and it fails as "no matching function ... requires 5 arguments, but 4 were
+     * provided". llama_vocab_n_tokens is what upstream's own common/sampling.cpp passes.
      */
     llama_sampler* smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
     if ((impl_->opt.repeat_penalty > 1.0f || impl_->opt.presence_penalty > 0.0f)
         && impl_->opt.repeat_last_n != 0) {
         llama_sampler_chain_add(smpl, llama_sampler_init_penalties(
+            llama_vocab_n_tokens(vocab),
             impl_->opt.repeat_last_n, impl_->opt.repeat_penalty,
             /*penalty_freq=*/0.0f, impl_->opt.presence_penalty));
     }

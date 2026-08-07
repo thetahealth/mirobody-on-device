@@ -22,7 +22,10 @@ class Packet;
 class SseTransport : public Transport {
 public:
     // `router`/`dispatcher`/`jwt` are borrowed and must outlive the transport.
-    SseTransport(server::Router& router, Dispatcher& dispatcher, const jwt::Jwt& jwt);
+    // `heartbeat_seconds` is how long a turn may send nothing before a keepalive
+    // comment goes out (0 disables it); see ChatConfig::sse_heartbeat_seconds.
+    SseTransport(server::Router& router, Dispatcher& dispatcher, const jwt::Jwt& jwt,
+                 int heartbeat_seconds = 15);
 
     const char* name() const override { return "sse"; }
     void        start() override;   // registers POST /api/chat
@@ -38,6 +41,7 @@ private:
     server::Router& router_;
     Dispatcher&     dispatcher_;
     const jwt::Jwt& jwt_;
+    int             heartbeat_seconds_;
 };
 
 }}

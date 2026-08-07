@@ -21,7 +21,12 @@ include_directories(${NATIVERENDER_ROOT_PATH})
 
 # entry/src/main/cpp -> main -> src -> entry -> harmony -> repo root
 get_filename_component(MIROBODY_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../.." ABSOLUTE)
-set(MIROBODY_PREBUILT "${MIROBODY_REPO_ROOT}/harmony/prebuilt/${OHOS_ARCH}")
+# harmony/prebuilt/ is the one home for prebuilt native artifacts, from two producers:
+# <abi>/ for the core's vcpkg dependencies (build-prebuilt) and llama-sdk/<abi>/ for the
+# on-device engine (build-llama, resolved further down). Named once here so the shared
+# parent is visible in the code and not just implied by two similar strings.
+set(MIROBODY_PREBUILT_ROOT "${MIROBODY_REPO_ROOT}/harmony/prebuilt")
+set(MIROBODY_PREBUILT      "${MIROBODY_PREBUILT_ROOT}/${OHOS_ARCH}")
 
 if(NOT EXISTS "${MIROBODY_PREBUILT}/lib")
     message(FATAL_ERROR
@@ -48,12 +53,40 @@ set(MIROBODY_BUILD_JNI          OFF    CACHE BOOL   "" FORCE)
 # refuses to exec a standalone binary anyway (SELinux denies the shell domain
 # execute on data_local_tmp), so in-process is the only way to run a model here.
 #
-# Point at an SDK dir with -DLLAMA_CPP_DIR (include/llama.h + lib/libllama.a +
-# the ggml archives). Absent, the core compiles its stub and the app still builds
-# with on-device chat reporting itself unavailable.
+# The SDK is discovered the same way the prebuilt tree above is -- by repo-relative
+# path, under the same prebuilt/ parent, at prebuilt/llama-sdk/<abi>, where
+# harmony/build-llama.cmd (or .sh) assembles it. So building it IS turning the lane on,
+# and there is no machine-local absolute path to paste into this tracked
+# build-profile.json5 and then keep out of commits.
+# Absent, the core compiles its stub and the app still builds, with on-device chat
+# reporting itself unavailable -- the supported off state.
+#
+# An explicit -DLLAMA_CPP_DIR still wins, for an SDK assembled elsewhere (LLAMA_SDK_DIR).
+# Probing include/llama.h rather than the directory: a half-assembled SDK should fail
+# loudly in the root CMakeLists, which checks the archives too, not be silently ignored.
+if(NOT DEFINED LLAMA_CPP_DIR)
+    set(_llama_sdk "${MIROBODY_PREBUILT_ROOT}/llama-sdk/${OHOS_ARCH}")
+    # Re-configure when the SDK appears or goes away. Without this the probe only runs on
+    # a configure that something ELSE triggered: deleting the SDK left a generated
+    # build.ninja still naming libllama.a as a link input, so an incremental build died
+    # with a raw `ninja: error: ... missing and no known rule to make it` instead of
+    # turning the lane off. Both paths are listed because the marker file covers removal
+    # of a built SDK and the parent directory covers one appearing where there was none.
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                 "${MIROBODY_PREBUILT_ROOT}/llama-sdk"
+                 "${_llama_sdk}/include/llama.h")
+    if(EXISTS "${_llama_sdk}/include/llama.h")
+        set(LLAMA_CPP_DIR "${_llama_sdk}")
+    endif()
+endif()
 if(DEFINED LLAMA_CPP_DIR)
     set(MIROBODY_ONDEVICE_LLM ON CACHE BOOL "" FORCE)
     message(STATUS "mirobody_napi: on-device LLM from ${LLAMA_CPP_DIR}")
+else()
+    # FORCEd OFF, not just left alone: now that the presence of the SDK is the switch,
+    # deleting it must actually turn the lane off. Without this the cached ON from an
+    # earlier configure survives and the root CMakeLists fails demanding LLAMA_CPP_DIR.
+    set(MIROBODY_ONDEVICE_LLM OFF CACHE BOOL "" FORCE)
 endif()
 
 add_subdirectory("${MIROBODY_REPO_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/mirobody-core")

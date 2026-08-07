@@ -383,6 +383,118 @@
     {
       "name": "incognito_note",
       "value": "隐私模式:本轮对话不会保存到记录"
+    },
+    {
+      "name": "health_dialog_title",
+      "value": "华为运动健康"
+    },
+    {
+      "name": "health_intro",
+      "value": "读取运动健康里的数据,只存在本机(不上传服务器),对话时模型可直接引用。"
+    },
+    {
+      "name": "health_unavailable",
+      "value": "本机不支持健康服务(Health Service Kit)"
+    },
+    {
+      "name": "health_authorized",
+      "value": "已授权 %d 项"
+    },
+    {
+      "name": "health_not_authorized",
+      "value": "尚未授权"
+    },
+    {
+      "name": "health_authorize",
+      "value": "去授权"
+    },
+    {
+      "name": "health_metrics",
+      "value": "同步哪些数据"
+    },
+    {
+      "name": "health_metric_steps",
+      "value": "步数(每日)"
+    },
+    {
+      "name": "health_metric_sleep",
+      "value": "睡眠时长"
+    },
+    {
+      "name": "health_metric_rhr",
+      "value": "静息心率"
+    },
+    {
+      "name": "health_metric_hr",
+      "value": "心率"
+    },
+    {
+      "name": "health_metric_spo2",
+      "value": "血氧饱和度"
+    },
+    {
+      "name": "health_metric_weight",
+      "value": "体重"
+    },
+    {
+      "name": "health_metric_bp",
+      "value": "血压"
+    },
+    {
+      "name": "health_metric_temp",
+      "value": "体温"
+    },
+    {
+      "name": "health_window",
+      "value": "时间范围"
+    },
+    {
+      "name": "health_window_7",
+      "value": "7 天"
+    },
+    {
+      "name": "health_window_30",
+      "value": "30 天"
+    },
+    {
+      "name": "health_window_90",
+      "value": "90 天"
+    },
+    {
+      "name": "health_sync_btn",
+      "value": "立即同步"
+    },
+    {
+      "name": "health_sync_btn_busy",
+      "value": "同步中…"
+    },
+    {
+      "name": "health_syncing",
+      "value": "正在读取运动健康…"
+    },
+    {
+      "name": "health_sync_ok",
+      "value": "已同步 %d 条"
+    },
+    {
+      "name": "health_sync_empty",
+      "value": "这个范围内没有可同步的数据"
+    },
+    {
+      "name": "health_never_synced",
+      "value": "从未同步"
+    },
+    {
+      "name": "health_last_sync_n",
+      "value": "上次同步 %s · %d 条"
+    },
+    {
+      "name": "health_stored_count",
+      "value": "本机已存 %d 条"
+    },
+    {
+      "name": "health_stored_empty",
+      "value": "本机还没有健康数据"
     }
   ]
 }

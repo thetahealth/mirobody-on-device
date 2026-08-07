@@ -29,8 +29,15 @@ REPO_ROOT="$(cd .. && pwd)"
 
 ABI="${1:-arm64-v8a}"
 
-# Keep the pin in sync with vcpkg.json's "builtin-baseline".
-BASELINE="d015e31e90838a4c9dfa3eed45979bc70d9357fc"
+# READ from vcpkg.json's "builtin-baseline" rather than repeated here -- it used to be
+# duplicated across this, .cmd and both harmony scripts under a comment asking the reader to
+# keep them in sync by hand.
+VCPKG_JSON="$REPO_ROOT/vcpkg.json"
+BASELINE="$(sed -n 's/.*"builtin-baseline"[[:space:]]*:[[:space:]]*"\([0-9a-f]\{40\}\)".*/\1/p' "$VCPKG_JSON")"
+if [ -z "$BASELINE" ]; then
+    echo "no 40-hex \"builtin-baseline\" in \"$VCPKG_JSON\"" >&2
+    exit 1
+fi
 # Must match the ndkVersion pinned in app/build.gradle.kts so the prebuilt deps and
 # the app share one libc++ (c++_shared) ABI; prefer this exact version, else newest.
 PINNED_NDK="27.0.12077973"
@@ -73,6 +80,8 @@ export ANDROID_NDK_HOME="$NDK_HOME"
 echo "ABI=$ABI  triplet=$TRIPLET"
 echo "NDK=$NDK_HOME"
 echo "vcpkg=$VCPKG_ROOT"
+# Printed because it is no longer readable off this script -- it comes from vcpkg.json.
+echo "baseline=$BASELINE"
 
 # --- Bootstrap vcpkg at the pinned baseline -----------------------------------
 if [ ! -d "$VCPKG_ROOT/.git" ]; then

@@ -4,10 +4,12 @@
 #include "chat/event/event.hpp"
 #include "chat/packet.hpp"
 #include "chat/transport/responder.hpp"
+#include "platform/log.hpp"
 
 #include <rapidjson/document.h>
 
 #include <cstring>
+#include <exception>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -151,9 +153,24 @@ void WsTransport::start() {
 
             std::thread([state, dispatcher, pkt]() {
                 WsResponder responder(state);
-                // The live socket carries no per-request identity; live turns
-                // don't use it (live_response ignores user/session/timezone).
-                dispatcher->dispatch(*pkt, 0, responder);
+                // Nothing runs above this frame: an exception escaping a
+                // detached thread takes the whole server down, and it would
+                // also strand `busy` (this socket would refuse every later
+                // frame). Report it in band and let the reset below run.
+                try {
+                    // The live socket carries no per-request identity; live turns
+                    // don't use it (live_response ignores user/session/timezone).
+                    dispatcher->dispatch(*pkt, 0, responder);
+                } catch (const std::exception& e) {
+                    platform::log_error("chat: live turn aborted by an unhandled exception: %s",
+                                        e.what());
+                    responder.send(ErrorEvent(std::string("internal error: ") + e.what()));
+                    responder.finish();
+                } catch (...) {
+                    platform::log_error("chat: live turn aborted by an unknown exception");
+                    responder.send(ErrorEvent("internal error"));
+                    responder.finish();
+                }
 
                 std::lock_guard<std::mutex> lk(state->mu);
                 state->busy = false;

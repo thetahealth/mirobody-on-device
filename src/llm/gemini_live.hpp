@@ -22,7 +22,7 @@ namespace mirobody { namespace llm {
 //             .BidiGenerateContent?key={api_key}
 //             setup.model = "models/{model}"
 //
-//   Vertex  : wss://{location}-aiplatform.googleapis.com
+//   Vertex  : wss://{vertex host}   (gcp::vertex_host, three shapes by location)
 //             /ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent
 //             auth = Authorization: Bearer {access_token}
 //             setup.model = "projects/{project}/locations/{location}
@@ -34,7 +34,7 @@ namespace mirobody { namespace llm {
 // request/response shape of the other llm:: clients.
 enum class GeminiLiveMode {
     AiStudio,   // generativelanguage.googleapis.com, API-key auth
-    Vertex,     // {region}-aiplatform.googleapis.com, OAuth bearer auth
+    Vertex,     // *.aiplatform.googleapis.com, OAuth bearer auth
 };
 
 struct GeminiLiveOptions {
@@ -53,7 +53,7 @@ struct GeminiLiveOptions {
     // Optional host overrides (wss://...). Sensible defaults are picked per mode
     // when left empty.
     std::string ai_studio_base_url;     // default: wss://generativelanguage.googleapis.com
-    std::string vertex_base_url;        // default: wss://{location}-aiplatform.googleapis.com
+    std::string vertex_base_url;        // default: gcp::vertex_host(gcp_location, "wss")
     std::string api_version = "v1beta"; // AiStudio service-name version
 
     // Live models differ from the streamGenerateContent ones. AiStudio's common

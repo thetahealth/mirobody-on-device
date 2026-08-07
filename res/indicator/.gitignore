@@ -1,2 +1,3 @@
-# Built terminology artifact — large, rebuilt from E:/ref via `indicator build-lexicon`.
+# Built terminology artifact — large, rebuilt from the local `--ref` root via
+# `indicator build-lexicon` (see src/indicator/README.md).
 fhir_lexicon.bin

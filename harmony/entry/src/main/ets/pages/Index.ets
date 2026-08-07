@@ -10,9 +10,12 @@ import { ConfigStore, ActiveSelection, AddedModel } from '../core/ConfigStore';
 import { ProviderManagerDialog } from '../components/ProviderManagerDialog';
 import { AddModelDialog } from '../components/AddModelDialog';
 import { LanguageDialog, FontSizeDialog, ThemeDialog } from '../components/AppSettingsDialogs';
+import { HealthDataDialog } from '../components/HealthDataDialog';
+import { HealthRepository } from '../core/HealthRepository';
 import { LocalModelStore, LocalModel, LOCAL_PROVIDER_ID } from '../core/LocalModelStore';
 import { HistoryDrawer } from '../components/HistoryDrawer';
 import { SessionStore, SessionMeta } from '../core/SessionStore';
+import { FONT, ICON } from '../model/Typography';
 
 // User-added models grouped under one provider header in the dropdown.
 interface ProviderGroup {
@@ -55,6 +58,9 @@ struct Index {
   // conversation belongs to; it is minted on first send rather than at startup so an
   // app that is opened and closed without a message leaves nothing behind.
   @State private showDrawer: boolean = false;
+  // Last health sync (epoch ms, 0 = never), read when the drawer opens so its
+  // health row can carry the same kind of hint the settings rows do.
+  @State private healthLastSync: number = 0;
   @State private sessions: SessionMeta[] = [];
   @State private sessionId: string = '';
   /**
@@ -107,6 +113,24 @@ struct Index {
   private themeController: CustomDialogController = new CustomDialogController({
     builder: ThemeDialog(),
     autoCancel: true,
+    alignment: DialogAlignment.Center,
+    backgroundBlurStyle: BlurStyle.COMPONENT_ULTRA_THICK,
+    cornerRadius: 16,
+    width: '90%'
+  });
+
+  private healthController: CustomDialogController = new CustomDialogController({
+    builder: HealthDataDialog({
+      onDone: () => {
+        this.refreshHealthHint();
+      }
+    }),
+    autoCancel: true,
+    // Dismissed by backdrop / back key: refresh the drawer's hint too, since a
+    // sync may well have happened before the user tapped outside.
+    cancel: () => {
+      this.refreshHealthHint();
+    },
     alignment: DialogAlignment.Center,
     backgroundBlurStyle: BlurStyle.COMPONENT_ULTRA_THICK,
     cornerRadius: 16,
@@ -374,14 +398,14 @@ struct Index {
         Column() {
           ForEach(this.groups(), (g: ProviderGroup) => {
             Text(g.label)
-              .fontSize(12)
+              .fontSize(FONT.caption)
               .fontColor($r('app.color.text_tertiary'))
               .width('100%')
               .padding({ left: 16, right: 16, top: 10, bottom: 4 })
             ForEach(g.models, (m: AddedModel) => {
               Row() {
                 Text(m.displayName)
-                  .fontSize(15)
+                  .fontSize(FONT.row)
                   .layoutWeight(1)
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -390,7 +414,7 @@ struct Index {
                     this.selectModel(m.providerId, m.id);
                   })
                 Button({ type: ButtonType.Circle }) {
-                  Text('－').fontSize(18).fontColor($r('app.color.on_brand')).fontWeight(FontWeight.Bold)
+                  Text('－').fontSize(ICON.md).fontColor($r('app.color.on_brand')).fontWeight(FontWeight.Bold)
                 }
                 .width(28)
                 .height(28)
@@ -425,7 +449,7 @@ struct Index {
         .margin({ top: 6, bottom: 2 })
       if (this.hasAnyKey) {
         Row() {
-          Text($r('app.string.chat_menu_config_model')).fontSize(15).fontColor($r('app.color.brand_text'))
+          Text($r('app.string.chat_menu_config_model')).fontSize(FONT.row).fontColor($r('app.color.brand_text'))
         }
         .width('100%')
         .padding(16)
@@ -436,7 +460,7 @@ struct Index {
         })
       }
       Row() {
-        Text($r('app.string.chat_menu_config_cloud')).fontSize(15).fontColor($r('app.color.brand_text'))
+        Text($r('app.string.chat_menu_config_cloud')).fontSize(FONT.row).fontColor($r('app.color.brand_text'))
       }
       .width('100%')
       .padding(16)
@@ -446,7 +470,7 @@ struct Index {
       })
       // No key needed for this one, so it is never gated.
       Row() {
-        Text($r('app.string.chat_menu_import_local')).fontSize(15).fontColor($r('app.color.brand_text'))
+        Text($r('app.string.chat_menu_import_local')).fontSize(FONT.row).fontColor($r('app.color.brand_text'))
       }
       .width('100%')
       .padding(16)
@@ -512,7 +536,13 @@ struct Index {
 
   private async openDrawer(): Promise<void> {
     this.sessions = await SessionStore.list(this.ctx());
+    await this.refreshHealthHint();
     this.showDrawer = true;
+  }
+
+  /** Read the last health-sync time for the drawer's row hint (0 = never). */
+  private async refreshHealthHint(): Promise<void> {
+    this.healthLastSync = await HealthRepository.lastSync(this.ctx());
   }
 
   /**
@@ -910,7 +940,7 @@ struct Index {
       // the same shape the web client's bar has.
       Row() {
         SymbolGlyph($r('sys.symbol.line_3_horizontal'))
-          .fontSize(24)
+          .fontSize(ICON.xxl)
           .fontColor([$r('app.color.text_primary')])
           .margin({ right: 14 })
           .onClick(() => {
@@ -919,7 +949,7 @@ struct Index {
         // Serif, as the web wordmark is: it is the brand here, not a screen title, and
         // the app ships no other brand mark in the bar to carry that on its own.
         Text($r('app.string.app_name'))
-          .fontSize(20)
+          .fontSize(FONT.headline)
           .fontFamily('serif')
           .fontWeight(600)
           .fontColor($r('app.color.text_primary'))
@@ -934,10 +964,10 @@ struct Index {
       if (this.incognito) {
         Row() {
           SymbolGlyph($r('sys.symbol.eye_slash'))
-            .fontSize(14)
+            .fontSize(ICON.sm)
             .fontColor([$r('app.color.notice_fg')])
           Text($r('app.string.incognito_note'))
-            .fontSize(12)
+            .fontSize(FONT.caption)
             .fontColor($r('app.color.notice_fg'))
             .margin({ left: 8 })
             .layoutWeight(1)
@@ -949,7 +979,7 @@ struct Index {
 
       if (this.laneNotice.length > 0) {
         Text(this.laneNotice)
-          .fontSize(12)
+          .fontSize(FONT.caption)
           .fontColor($r('app.color.notice_fg'))
           .backgroundColor($r('app.color.notice_bg'))
           .width('100%')
@@ -964,7 +994,11 @@ struct Index {
           }
         }, (msg: ChatMessage, index: number) => index.toString() + msg.role)
 
-        if (this.streaming.length > 0 || this.streamingThinking.trim().length > 0) {
+        // `busy` and not just "has text yet": the bubble has to exist from the
+        // moment the turn is sent, because the wait BEFORE the first token is
+        // exactly what its waiting dots are there to cover (extraction from an
+        // upload runs a vision model; a thinking model deliberates first).
+        if (this.busy || this.streaming.length > 0 || this.streamingThinking.trim().length > 0) {
           ListItem() {
             this.streamingBubble()
           }
@@ -1019,7 +1053,7 @@ struct Index {
             // final one and wiring it later moves nothing on screen.
             Button({ type: ButtonType.Circle }) {
               SymbolGlyph($r('sys.symbol.paperclip'))
-                .fontSize(18)
+                .fontSize(ICON.md)
                 .fontColor([$r('app.color.text_tertiary')])
             }
             .width(40)
@@ -1035,7 +1069,7 @@ struct Index {
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Text(' ▾')
-                  .fontSize(12)
+                  .fontSize(ICON.xs)
                   .fontColor($r('app.color.text_tertiary'))
               }
               // Clamp to the slot so a long model name ellipsizes instead of shoving
@@ -1054,10 +1088,10 @@ struct Index {
               if (this.busy) {
                 Stack({ alignContent: Alignment.Center }) {
                   LoadingProgress().width(30).height(30).color($r('app.color.on_brand'))
-                  Text('■').fontSize(12).fontColor($r('app.color.on_brand'))
+                  Text('■').fontSize(ICON.xs).fontColor($r('app.color.on_brand'))
                 }
               } else {
-                Text('↑').fontSize(20).fontColor($r('app.color.on_brand'))
+                Text('↑').fontSize(ICON.lg).fontColor($r('app.color.on_brand'))
               }
             }
             .width(40)
@@ -1127,6 +1161,8 @@ struct Index {
         onLanguage: () => { this.langController.open(); },
         onFontSize: () => { this.fontController.open(); },
         onTheme: () => { this.themeController.open(); },
+        healthLastSync: this.healthLastSync,
+        onHealthData: () => { this.healthController.open(); },
         onNativeProbe: () => { router.pushUrl({ url: 'pages/NativeProbe' }); }
       })
     }

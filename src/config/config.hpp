@@ -231,6 +231,18 @@ struct EmailConfig {
 struct ChatConfig {
     int rate_max_per_window = 0;     // agent/live turns per user per window (0 = unlimited)
     int rate_window_seconds = 60;    // length of that window, in seconds
+
+    // How long the /api/chat SSE stream may go without sending anything before a
+    // keepalive comment is emitted (0 = never). A turn has genuinely silent
+    // stretches -- text extraction from an upload runs a vision model
+    // (FILE_PARSER_TIMEOUT_MS allows it five minutes), and a thinking model
+    // deliberates before its first token -- and a connection that carries no
+    // bytes for that long is cut by whatever sits in the middle: nginx's
+    // proxy_read_timeout is 60s by default, tunnels and load balancers are
+    // similar. This server does not time the stream out itself (see the
+    // NO_PENDING_TIMEOUT note in server/router.cpp), so the keepalive exists for
+    // the hops in between. Keep it well under the strictest one.
+    int sse_heartbeat_seconds = 15;
 };
 
 //------------------------------------------------------------------------------
@@ -257,6 +269,19 @@ struct Config {
     // on load to a leading-slash, no-trailing-slash form. Empty (the default)
     // serves everything at the root, exactly as if unset.
     std::string uri_prefix;
+
+    // Largest request body this server accepts, in bytes, from HTTP_MAX_BODY_BYTES
+    // (0 = unbounded). The bound the upload path relies on: a body is buffered
+    // whole in memory before dispatch, and a chat upload's bytes are then copied
+    // down the attachment chain and base64-expanded into the model request, so
+    // the peak cost of one request is several times this value. Enforced by the
+    // router for every route -- at headers time from Content-Length, and again as
+    // the body arrives (a chunked upload declares no length, and a declared one
+    // can lie); over it, the request is answered 413 and the connection closed.
+    // The default leaves room for a photo or a scanned PDF while keeping a single
+    // request far below the providers' own inline caps (Gemini rejects a request
+    // whose inline payload exceeds 20 MB).
+    std::int64_t max_request_body_bytes = 32 * 1024 * 1024;   // 32 MiB
 
     // Public origin of this server / its web app, e.g. "https://app.example.com"
     // (no trailing slash), from PUBLIC_BASE_URL. Used to build absolute links in

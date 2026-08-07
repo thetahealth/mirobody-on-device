@@ -26,7 +26,7 @@ const std::vector<std::pair<std::string, std::string> >& ucum_family_ordered() {
         {"mmol/mol", "SRto"},
 
         // ── Substance rate (SRat) ──
-        {"mmol/d", "SRat"}, {"umol/d", "SRat"},
+        {"mmol/d", "SRat"}, {"umol/d", "SRat"}, {"meq/d", "SRat"},
         {"mmol/(24.h)", "SRat"}, {"umol/(24.h)", "SRat"}, {"nmol/(24.h)", "SRat"},
         {"pmol/(24.h)", "SRat"}, {"mmol/(12.h)", "SRat"}, {"mmol/(8.h)", "SRat"},
         {"mmol/(6.h)", "SRat"}, {"umol/(12.h)", "SRat"}, {"umol/(8.h)", "SRat"},
@@ -105,7 +105,7 @@ const std::vector<std::pair<std::string, std::string> >& ucum_family_ordered() {
 
         // ── Substance content (SCnt) ──
         {"mmol/kg", "SCnt"}, {"umol/kg", "SCnt"}, {"nmol/g", "SCnt"},
-        {"umol/g", "SCnt"}, {"mmol/g", "SCnt"},
+        {"umol/g", "SCnt"}, {"mmol/g", "SCnt"}, {"meq/kg", "SCnt"},
 
         // ── Arbitrary concentration (ACnc) ──
         {"[IU]/L", "ACnc"}, {"[IU]/mL", "ACnc"}, {"[IU]/dL", "ACnc"},
@@ -133,7 +133,10 @@ const std::vector<std::pair<std::string, std::string> >& ucum_family_ordered() {
         {"{score}", "Score"},
 
         // ── Number areic (Naric) ──
-        {"/HPF", "Naric"}, {"/LPF", "Naric"}, {"/[HPF]", "Naric"}, {"/[LPF]", "Naric"},
+        // Bracketed only: bare "HPF"/"LPF" are not UCUM units, so a FHIR
+        // consumer validating against UCUM rejects "/HPF". The unbracketed
+        // spellings live in tokens.cpp as aliases of these.
+        {"/[HPF]", "Naric"}, {"/[LPF]", "Naric"},
 
         // ── Fractions ──
         {"%", "MFr"}, {"[ppm]", "VFr"}, {"[ppb]", "VFr"}, {"[ppth]", "VFr"},

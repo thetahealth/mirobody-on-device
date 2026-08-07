@@ -9,6 +9,7 @@
 #include "storage/sign.hpp"        // base64_encode
 #include "storage/storage.hpp"     // Storage, StorageError
 #include "transcode/file.hpp"
+#include "transcode/parser.hpp"   // cap_text (the shared bound on file text)
 
 #include <openssl/rand.h>
 
@@ -20,6 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace mirobody { namespace mcp {
@@ -611,8 +613,12 @@ void McpService::handle(const server::Request& req, server::Response& res) {
                 send_error(res, id, -32603, e.what());
                 return;
             }
+            // A file whose bytes ARE its text never went through extraction, so
+            // nothing has bounded it yet: apply the same cap a Parser applies to
+            // what it extracts, instead of handing a multi-megabyte upload to a
+            // model whole. (The .trans branch above is capped at write time.)
             const ResourceResult rr = is_text_mime(ref.mime_type)
-                ? ResourceResult::text(bytes, ref.mime_type)
+                ? ResourceResult::text(file::cap_text(std::move(bytes)), ref.mime_type)
                 : ResourceResult::blob(storage::base64_encode(bytes), ref.mime_type);
             log.succeeded();
             send_result(res, id, build_read_result(uri, ref.mime_type, rr));

@@ -15,6 +15,7 @@
 // existing llm::EventHandler callback -- there are no coroutines in C++11, so
 // the handler IS the stream, the same model the llm clients already use.
 
+#include "compat/cxx11.hpp"      // Blob
 #include "config/config.hpp"
 #include "llm/client.hpp"
 #include "llm/event.hpp"
@@ -45,7 +46,12 @@ struct AgentFile {
     std::string mime_type;
     std::string file_key;
     std::string url;
-    std::string data;        // raw bytes when uploaded inline this turn; empty for reference-only
+    // Raw bytes when the file was uploaded inline this turn; empty for a
+    // reference-only file (an earlier upload, reachable by url / file_key). A
+    // shared handle, not a copy: the agent receives the request by const
+    // reference and hands these same bytes to the provider client, so owning
+    // them by value cost a full copy at both hops. See mirobody::Blob.
+    Blob data;
 };
 
 // Everything an agent needs to produce a response. The flattened C++ analog of

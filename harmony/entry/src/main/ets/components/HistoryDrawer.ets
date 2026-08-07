@@ -11,8 +11,9 @@
  *
  * Two departures from htdoc remain, both because harmony has no server and no account
  * (it talks straight to each provider's baseUrl):
- *   - no Health & data group and no account rows. Care circle / EHR / devices / sign
- *     out are all server screens harmony does not have.
+ *   - no account rows, and of the web client's Health & data group only the one row
+ *     that needs no server: 华为运动健康 as a local data source (components/
+ *     HealthDataDialog.ets). Care circle / EHR / devices / sign out stay absent.
  *   - no Backend row. BYOK has no single backend; per-provider base_url is set in the
  *     cloud-service manager instead.
  *
@@ -23,6 +24,7 @@
 import { SessionMeta } from '../core/SessionStore';
 import { i18n } from '@kit.LocalizationKit';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
+import { FONT, ICON } from '../model/Typography';
 
 @Component
 export struct HistoryDrawer {
@@ -49,7 +51,11 @@ export struct HistoryDrawer {
   onLanguage: () => void = () => {};
   onFontSize: () => void = () => {};
   onTheme: () => void = () => {};
+  onHealthData: () => void = () => {};
   onNativeProbe: () => void = () => {};
+
+  /** Epoch ms of the last health sync, 0 when never — the health row's hint. */
+  @Prop healthLastSync: number;
 
   /** Live settings values, shown as each row's trailing hint so the current choice is
    *  readable without opening the dialog. Both are the same AppStorage keys the
@@ -104,6 +110,14 @@ export struct HistoryDrawer {
     return this.rs(labels[best]);
   }
 
+  /** Last sync, in the same relative-then-absolute shape session rows use. */
+  private healthHint(): string {
+    if (this.healthLastSync <= 0) {
+      return this.rs($r('app.string.health_never_synced'));
+    }
+    return this.stamp(this.healthLastSync);
+  }
+
   private themeHint(): string {
     if (this.colorModePref === ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT) {
       return this.rs($r('app.string.theme_light'));
@@ -123,7 +137,7 @@ export struct HistoryDrawer {
   private navRow(label: ResourceStr, hint: string, tap: () => void) {
     Row() {
       Text(label)
-        .fontSize(15)
+        .fontSize(FONT.row)
         .fontColor($r('app.color.text_primary'))
         .layoutWeight(1)
         .maxLines(1)
@@ -131,7 +145,7 @@ export struct HistoryDrawer {
         .textAlign(TextAlign.Start)
       if (hint.length > 0) {
         Text(hint)
-          .fontSize(12)
+          .fontSize(FONT.caption)
           .fontColor($r('app.color.text_tertiary'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -175,14 +189,14 @@ export struct HistoryDrawer {
     Row() {
       Column() {
         Text(s.title.length > 0 ? s.title : this.rs($r('app.string.drawer_untitled')))
-          .fontSize(15)
+          .fontSize(FONT.row)
           .fontColor($r('app.color.text_primary'))
           .maxLines(2)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
           .textAlign(TextAlign.Start)
         Text(this.stamp(s.updatedAt) + ' · ' + this.rs($r('app.string.drawer_msg_count'), s.count))
-          .fontSize(12)
+          .fontSize(FONT.caption)
           .fontColor($r('app.color.text_tertiary'))
           .margin({ top: 4 })
           .width('100%')
@@ -194,7 +208,7 @@ export struct HistoryDrawer {
       // Per-row delete, as on the web. The host asks for confirmation -- a mis-tap
       // here would otherwise destroy a conversation with no undo.
       SymbolGlyph($r('sys.symbol.trash'))
-        .fontSize(18)
+        .fontSize(ICON.md)
         .fontColor([$r('app.color.text_tertiary')])
         .margin({ left: 8 })
         .onClick(() => {
@@ -229,13 +243,13 @@ export struct HistoryDrawer {
         // read rather than a list they pick from, and a screen needs a visible way out.
         Row() {
           SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(22)
+            .fontSize(ICON.xl)
             .fontColor([$r('app.color.text_secondary')])
             .onClick(() => {
               this.onClose();
             })
           Text($r('app.string.drawer_menu_title'))
-            .fontSize(16)
+            .fontSize(FONT.control)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
             .margin({ left: 8 })
@@ -248,10 +262,10 @@ export struct HistoryDrawer {
         Row() {
           Row() {
             SymbolGlyph($r('sys.symbol.plus_circle'))
-              .fontSize(20)
+              .fontSize(ICON.lg)
               .fontColor([$r('app.color.brand_text')])
             Text($r('app.string.drawer_new_chat'))
-              .fontSize(15)
+              .fontSize(FONT.row)
               .fontColor($r('app.color.brand_text'))
               .margin({ left: 8 })
               .maxLines(1)
@@ -268,10 +282,10 @@ export struct HistoryDrawer {
           // miss (and invisible to anyone who cannot distinguish the two hues).
           Row() {
             SymbolGlyph($r('sys.symbol.eye_slash'))
-              .fontSize(18)
+              .fontSize(ICON.md)
               .fontColor([this.incognito ? $r('app.color.on_brand') : $r('app.color.text_secondary')])
             Text($r('app.string.drawer_incognito'))
-              .fontSize(14)
+              .fontSize(FONT.body)
               .fontColor(this.incognito ? $r('app.color.on_brand') : $r('app.color.text_secondary'))
               .margin({ left: 6 })
               .maxLines(1)
@@ -297,7 +311,7 @@ export struct HistoryDrawer {
         if (this.sessions.length === 0) {
           Column() {
             Text($r('app.string.drawer_empty'))
-              .fontSize(14)
+              .fontSize(FONT.body)
               .fontColor($r('app.color.text_tertiary'))
               .textAlign(TextAlign.Center)
           }
@@ -341,6 +355,14 @@ export struct HistoryDrawer {
           this.onClose();
           this.onTheme();
         })
+        // The one health row. Unlike the web client's "Health & data" group this is
+        // not a gateway to server screens (care circle, EHR, devices are still
+        // absent here) -- it is a local data source: read 华为运动健康, keep it on
+        // the device, let the model use it.
+        this.navRow($r('app.string.health_dialog_title'), this.healthHint(), () => {
+          this.onClose();
+          this.onHealthData();
+        })
         // Temporary: step-0 native bridge probe. Remove with pages/NativeProbe.ets
         // once the real native chat lane is wired.
         this.navRow('Native probe', '', () => {
@@ -351,7 +373,7 @@ export struct HistoryDrawer {
         Divider().strokeWidth(0.5).color($r('app.color.border'))
         Row() {
           Text($r('app.string.drawer_local_only'))
-            .fontSize(11)
+            .fontSize(FONT.footnote)
             .fontColor($r('app.color.text_tertiary'))
             .layoutWeight(1)
         }

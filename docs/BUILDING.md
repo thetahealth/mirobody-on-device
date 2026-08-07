@@ -165,7 +165,7 @@ toolchain; all are optional. Set them once in your user environment (PowerShell
 
 | Variable     | Required? | Points at                                        | Example                                                                                  |
 | ------------ | --------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `VS_DIR`     | optional  | Visual Studio install root (contains `VC\...`)     | `C:\Program Files\Microsoft Visual Studio\18\Community` - script default if unset.       |
+| `VS_DIR`     | optional  | Visual Studio install root (contains `VC\...`)     | `%ProgramFiles%\Microsoft Visual Studio\18\Community` - script default if unset.       |
 | `VCPKG_ROOT` | optional  | vcpkg checkout (contains `scripts\buildsystems`) | `C:\Tools\vcpkg` - only set if you went with step 2. Otherwise vcvars points at VS-bundled.    |
 | `NINJA`      | optional  | `ninja.exe` path                                 | `C:\Tools\ninja\ninja.exe` - defaults to the copy under `%VS_DIR%\Common7\IDE\...\Ninja\`. |
 | `MIROBODY_VCPKG_CACHE` | optional | shared vcpkg binary cache dir          | `\\nas\team\vcpkg-cache` - reused across machines and build dirs (created if missing); lets a fresh build pull prebuilt packages instead of compiling from source. |
@@ -185,6 +185,10 @@ Override these via the environment rather than editing the script. To switch
 ```powershell
 [Environment]::SetEnvironmentVariable("VCPKG_ROOT", $null, "User")
 ```
+
+The optional lanes (Qt client, Android, HarmonyOS, on-device LLM, terminology and
+fine-tuning tooling) take a few more, listed together under
+[Environment variables](#environment-variables) below.
 
 #### 4. Build
 
@@ -312,6 +316,56 @@ Output: `build/mirobody` (or `build-legacy/mirobody`, … per backend).
 
 `SIGINT` / `SIGTERM` (or Ctrl-C / Ctrl-Break on Windows) trigger a graceful
 shutdown.
+
+## Environment variables
+
+The desktop build needs at most the four in
+[Set environment variables](#3-set-environment-variables) above, and often none.
+Everything below belongs to an *optional* lane — the Qt client, Android,
+HarmonyOS, the on-device LLM, or the terminology / fine-tuning tooling — and tells
+that lane where you installed its toolchain or put its reference data.
+
+**No script hardcodes a drive letter.** Each discovers what it can from the
+standard install locations, and when it can't, it fails naming the variable to
+set. So set only the lanes you actually build, and only when the default is
+wrong for your machine.
+
+| Variable | Lane | Points at | Default if unset |
+| -------- | ---- | --------- | ---------------- |
+| `QT_ROOT` | Qt desktop | Qt install root, scanned for `6.*\msvc*` | `%SystemDrive%\Qt` |
+| `QT_PREFIX` | Qt desktop | one specific Qt kit; skips the scan | the scan's newest hit |
+| `ANDROID_HOME` | Android | Android SDK root | `%LOCALAPPDATA%\Android\Sdk` |
+| `NDK_HOME` / `ANDROID_NDK_HOME` | Android | NDK for cross-compiling the deps (`.cmd` / `.sh` respectively) | the pinned NDK under `$ANDROID_HOME\ndk`, else the newest installed there |
+| `MIROBODY_NDK_PATH` | Android | space-free NDK mirror for Gradle | the mirror `build-app.cmd` makes |
+| `GRADLE_BIN` | Android | `gradle` launcher (the one on PATH is usually too old) | the pinned Gradle under `%USERPROFILE%\.gradle\` |
+| `DEVECO_HOME` | HarmonyOS | DevEco Studio install root | `%ProgramFiles%\Huawei\DevEco Studio` |
+| `OHOS_SDK_ROOT` | HarmonyOS | the SDK dir *containing* `native\`; skips the DevEco probe | derived from `DEVECO_HOME` |
+| `LLAMA_SRC` | on-device LLM | llama.cpp checkout — one clone serves Qt, HarmonyOS and fine-tuning | `llama.cpp` beside the repo. `build-qt` clones it if missing; `harmony\build-llama` never does — it prints the `git clone` line and stops, so the checkout the device numbers were measured against stays pinned |
+| `LLAMA_SDK_DIR` | on-device LLM (HarmonyOS) | where to assemble the cross-built SDK. Moving it off the default means naming it with `-DLLAMA_CPP_DIR` in `harmony\entry\build-profile.json5`, which the default exists to avoid | `harmony\prebuilt\llama-sdk\<abi>` — under the same `prebuilt\` parent as the vcpkg deps, found there by the module's CMake |
+| `LLAMA_CPP_DIR` | on-device LLM (Qt) | an already-built SDK; skips building one | built into `%USERPROFILE%\opt\llama-sdk-<backend>` on Windows, the build cache dir on POSIX |
+| `GLSLC` | Qt `vulkan` backend | `glslc.exe` | `%VULKAN_SDK%\Bin`, else newest under `VK_ROOT` |
+| `VK_ROOT` | Qt `vulkan` backend | root holding versioned Vulkan SDK installs | `%SystemDrive%\VulkanSDK` |
+| `MIROBODY_REF` | terminology | raw reference-data root for `indicator build-lexicon` / `build-units` | **none** - pass `--ref`, or the command exits 2 |
+| `REF_ROOT` | fine-tuning | the same root, for `fine-tuning/units/gen.py` | **none** - pass `--ref`, or the script exits |
+| `LF_HOME` | fine-tuning | LlamaFactory checkout | `LlamaFactory` beside the repo |
+| `LLAMA_BIN` | fine-tuning | dir holding `llama-quantize` | searched: a downloaded release beside the repo, then a build tree under `LLAMA_SRC`, then PATH |
+| `SAVE_DIR` | fine-tuning | trainer `output_dir` | `<LF_HOME>\saves\...` |
+| `OUT_DIR` | fine-tuning | where the built GGUFs land | `~\models` |
+
+`VULKAN_SDK` and `CUDA_PATH` are *read*, not set by you — their installers export
+them, and those two backends refuse to build without them.
+
+Non-path knobs live where they apply rather than here:
+`MIROBODY_DATABASE_BACKEND` under [Dependencies](#dependencies), `MIROBODY_CONFIG`
+under [Runtime](#runtime), `MIROBODY_VCPKG_CACHE` under
+[Set environment variables](#3-set-environment-variables), and
+`BASE_MODEL` / `QUANTS` / `LLAMA_RELEASE` / `LLAMA_BACKEND` / `TORCH_INDEX` /
+`GITHUB_TOKEN` in `python fine-tuning/train_units.py --help`.
+
+Each lane's own README repeats the two or three variables it needs, in context:
+[`qt/`](../qt/README.md), [`android/`](../android/README.md),
+[`harmony/`](../harmony/README.md), [`src/indicator/`](../src/indicator/README.md),
+[`docs/fine-tuning.md`](fine-tuning.md).
 
 ## Building - Android
 

@@ -62,13 +62,29 @@ void print_usage(const char* prog) {
         "  %s build-units [--ref DIR] [--out TSV] [--abbrev TSV]\n"
         "  %s words [--in TSV] [--out TSV] [--col N] [--min-count N]\n"
         "  %s synonyms [--in TSV] [--out TSV] [--lex LEX_DIR] [--min-support N] [--max-tokens N] [--max-group N]\n"
-        "  %s resolve [--lexicon PATH] [--top-k K] [--systems LOINC,SNOMED_CT] <term>...\n",
+        "  %s resolve [--lexicon PATH] [--top-k K] [--systems LOINC,SNOMED_CT] <term>...\n"
+        "\n"
+        "--ref falls back to $MIROBODY_REF. There is no built-in default: the raw\n"
+        "reference releases live outside the repo, wherever you extracted them.\n",
         prog, prog, prog, prog, prog);
+}
+
+// The reference-data root is machine-local, so nothing is worth baking in: --ref
+// wins, then $MIROBODY_REF, and the build commands refuse to guess past that.
+std::string ref_from_env() {
+    const char* env = std::getenv("MIROBODY_REF");
+    return env ? env : "";
+}
+
+bool have_ref(const std::string& ref, const char* cmd) {
+    if (!ref.empty()) return true;
+    std::fprintf(stderr, "%s: no reference-data root. Pass --ref DIR or set MIROBODY_REF.\n", cmd);
+    return false;
 }
 
 int cmd_build_lexicon(const std::vector<std::string>& args) {
     BuildOptions opt;
-    opt.ref = "E:/ref";
+    opt.ref = ref_from_env();
     std::string out = "res/indicator/fhir_lexicon.bin", dump, dump_by_code;
     for (size_t i = 0; i < args.size(); ++i) {
         if (args[i] == "--ref" && i + 1 < args.size()) opt.ref = args[++i];
@@ -79,6 +95,7 @@ int cmd_build_lexicon(const std::vector<std::string>& args) {
         else if (args[i] == "--dump" && i + 1 < args.size()) dump = args[++i];
         else if (args[i] == "--dump-by-code" && i + 1 < args.size()) dump_by_code = args[++i];
     }
+    if (!have_ref(opt.ref, "build-lexicon")) return 2;
 
     LexiconBuilder b;
     build_lexicon(b, opt);
@@ -101,12 +118,13 @@ int cmd_build_lexicon(const std::vector<std::string>& args) {
 }
 
 int cmd_build_units(const std::vector<std::string>& args) {
-    std::string ref = "E:/ref", out = "build/units.tsv", abbrev;
+    std::string ref = ref_from_env(), out = "build/units.tsv", abbrev;
     for (size_t i = 0; i < args.size(); ++i) {
         if (args[i] == "--ref" && i + 1 < args.size()) ref = args[++i];
         else if (args[i] == "--out" && i + 1 < args.size()) out = args[++i];
         else if (args[i] == "--abbrev" && i + 1 < args.size()) abbrev = args[++i];
     }
+    if (!have_ref(ref, "build-units")) return 2;
     return build_units(ref, out, abbrev);
 }
 

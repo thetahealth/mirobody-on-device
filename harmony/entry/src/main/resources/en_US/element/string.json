@@ -383,6 +383,118 @@
     {
       "name": "incognito_note",
       "value": "Incognito — this conversation will not be saved"
+    },
+    {
+      "name": "health_dialog_title",
+      "value": "Huawei Health"
+    },
+    {
+      "name": "health_intro",
+      "value": "Read your Huawei Health data. It stays on this device (never uploaded) and the model can use it in a conversation."
+    },
+    {
+      "name": "health_unavailable",
+      "value": "Health Service Kit is not available on this device"
+    },
+    {
+      "name": "health_authorized",
+      "value": "%d metric(s) authorized"
+    },
+    {
+      "name": "health_not_authorized",
+      "value": "Not authorized yet"
+    },
+    {
+      "name": "health_authorize",
+      "value": "Authorize"
+    },
+    {
+      "name": "health_metrics",
+      "value": "What to sync"
+    },
+    {
+      "name": "health_metric_steps",
+      "value": "Steps (daily)"
+    },
+    {
+      "name": "health_metric_sleep",
+      "value": "Sleep duration"
+    },
+    {
+      "name": "health_metric_rhr",
+      "value": "Resting heart rate"
+    },
+    {
+      "name": "health_metric_hr",
+      "value": "Heart rate"
+    },
+    {
+      "name": "health_metric_spo2",
+      "value": "Blood oxygen"
+    },
+    {
+      "name": "health_metric_weight",
+      "value": "Weight"
+    },
+    {
+      "name": "health_metric_bp",
+      "value": "Blood pressure"
+    },
+    {
+      "name": "health_metric_temp",
+      "value": "Body temperature"
+    },
+    {
+      "name": "health_window",
+      "value": "Window"
+    },
+    {
+      "name": "health_window_7",
+      "value": "7 days"
+    },
+    {
+      "name": "health_window_30",
+      "value": "30 days"
+    },
+    {
+      "name": "health_window_90",
+      "value": "90 days"
+    },
+    {
+      "name": "health_sync_btn",
+      "value": "Sync now"
+    },
+    {
+      "name": "health_sync_btn_busy",
+      "value": "Syncing…"
+    },
+    {
+      "name": "health_syncing",
+      "value": "Reading Huawei Health…"
+    },
+    {
+      "name": "health_sync_ok",
+      "value": "%d reading(s) synced"
+    },
+    {
+      "name": "health_sync_empty",
+      "value": "Nothing to sync in this window"
+    },
+    {
+      "name": "health_never_synced",
+      "value": "Never synced"
+    },
+    {
+      "name": "health_last_sync_n",
+      "value": "Last sync %s · %d reading(s)"
+    },
+    {
+      "name": "health_stored_count",
+      "value": "%d reading(s) on this device"
+    },
+    {
+      "name": "health_stored_empty",
+      "value": "No health data on this device yet"
     }
   ]
 }

@@ -1,16 +1,34 @@
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Logging Configuration.
 
 # Log level (case insensitive):
 #   'debug', 'info', 'warning', 'error', or 'critical/fatal'.
 LOG_LEVEL: 'DEBUG'
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # HTTP Server Configuration.
 
 HTTP_HOST: '0.0.0.0'
 HTTP_PORT: 8080
+
+# URI prefix every route (HTTP + WebSocket) is registered under, and stripped
+# from request paths before static files are resolved. Lets the whole app live
+# on a sub-path (e.g. '/mirobody') behind an ingress that does NOT strip it.
+# Normalized on load to a leading-slash, no-trailing-slash form. Empty (the
+# default) serves everything at the root.
 # HTTP_URI_PREFIX: ''
+
+# Largest request body accepted on any route, in bytes (default 33554432 = 32
+# MiB); 0 removes the bound. This is what caps a chat file upload: a body is
+# buffered whole in memory before dispatch, and an upload's bytes are then
+# copied down the attachment chain and base64-expanded into the model request,
+# so one request costs several times this value at peak. Over the bound the
+# request is answered 413 and the connection closed — at headers time when
+# Content-Length declares it, otherwise as the bytes arrive. Keep it well under
+# the provider's own inline cap (Gemini rejects an inline payload over 20 MB).
+# A proxy in front (nginx client_max_body_size, ingress annotations) has its own
+# limit; the smaller of the two wins, so set both.
+# HTTP_MAX_BODY_BYTES: 33554432
 
 # Extra headers added to every HTTP response, and used to answer CORS preflight
 # OPTIONS requests. Uncomment the HTTP_HEADERS block below to enable CORS for
@@ -49,7 +67,7 @@ HTTP_PORT: 8080
 # Empty disables static serving (unmatched GETs 404).
 HTTP_ROOT: 'res/htdoc'
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Redis Configuration.
 #
 # Backs the cache layer (src/cache). OPTIONAL: leave REDIS_HOST empty and the
@@ -88,8 +106,7 @@ HTTP_ROOT: 'res/htdoc'
 # default). Only meaningful when REDIS_SSL is true.
 # REDIS_SSL_CERT_REQS: ''
 
-
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Object Storage Configuration.
 #
 # Four backends are available (src/storage/*); all compile into every build and
@@ -174,9 +191,9 @@ HTTP_ROOT: 'res/htdoc'
 # Absolute example:    URL_PREFIX '/files', BASE_URL 'https://cdn.example.com'
 #                      -> https://cdn.example.com/files/<key>, origin serves /files/<key>
 LOCAL_STORAGE_DIR:        '_local/storage'
-# LOCAL_STORAGE_PREFIX:   ''                                  # key prefix prepended to every object (empty => 'mirobody')
+# LOCAL_STORAGE_PREFIX:   ''                                  # key prefix for every object (empty => 'mirobody')
 LOCAL_STORAGE_URL_PREFIX: '/files'                            # URL serve path (optional; not on disk)
-LOCAL_STORAGE_SECRET:     'REPLACE_THIS_VALUE_IN_PRODUCTION'  # HMAC key (optional; >=16 non-blank chars when URL_PREFIX set)
+LOCAL_STORAGE_SECRET:     'REPLACE_THIS_VALUE_IN_PRODUCTION'  # HMAC key (optional; >=16 chars when URL_PREFIX set)
 # LOCAL_STORAGE_BASE_URL: ''                                  # public prefix; absolute for CDN (optional)
 
 # Encryption at rest for user uploads (optional). Set FILE_ENCRYPTION_KEY to one
@@ -208,14 +225,14 @@ LOCAL_STORAGE_SECRET:     'REPLACE_THIS_VALUE_IN_PRODUCTION'  # HMAC key (option
 # FILE_URL_PREFIX:     '/files'                               # app serve path for decrypted bytes
 # FILE_URL_BASE:       ''                                     # absolute origin for read URLs (optional)
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Database Configuration.
 #
 # Exactly one backend is linked per build, chosen at compile time via the
 # MIROBODY_DATABASE_BACKEND CMake option (SQLITE / DUCKDB / POSTGRESQL /
 # POSTGRESQL_LEGACY / MYSQL / CLICKHOUSE). Only the keys for the backend you
-# built are read; the rest are ignored. PostgreSQL is configured above; the
-# blocks below cover the others. Uncomment the one matching your build.
+# built are read; the rest are ignored. PostgreSQL's keys come first below, then
+# a block per other backend. Uncomment the one matching your build.
 #
 # Configuring a backend is TWO steps: (1) pick it when you BUILD (CMake,
 # compile-time — baked into build/CMakeCache.txt), then (2) set that backend's
@@ -272,7 +289,7 @@ LOCAL_STORAGE_SECRET:     'REPLACE_THIS_VALUE_IN_PRODUCTION'  # HMAC key (option
 #   PG_USER_REPORTING:           'readonly'
 #   PG_PASSWORD_REPORTING:       '...'
 #   PG_DBNAME_REPORTING:         'metrics'
-#   PG_SCHEMA_REPORTING:         'public' 
+#   PG_SCHEMA_REPORTING:         'public'
 #   PG_MIN_CONNECTION_REPORTING: 1
 #   PG_MAX_CONNECTION_REPORTING: 5
 #
@@ -331,7 +348,7 @@ PG_MAX_CONNECTION: 20
 # CLICKHOUSE_MIN_CONNECTION: 5
 # CLICKHOUSE_MAX_CONNECTION: 20
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # User login.
 
 # Demo login: each entry maps an email to a verification code that acts as its
@@ -386,8 +403,8 @@ PG_MAX_CONNECTION: 20
 # Mandrill mode; ignored for direct SMTP, which sends a built-in HTML email.
 # EMAIL_TEMPLATE: ''
 
-#-----------------------------------------------------------------------------
-# OAuth.
+#------------------------------------------------------------------------------
+# Authentication and OAuth.
 
 # Default claim values that JwtHs256 / JwtRs256.generate() mint into the
 # `iss` / `aud` / `client_id` / `scope` fields of tokens this mirobody
@@ -443,7 +460,7 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 #   -----END PUBLIC KEY-----
 
 
-# -- OAuth 2.0 authorization server -----------------------------------------
+# -- OAuth 2.0 authorization server -------------------------------------------
 #
 # Turns this server into an OAuth 2.0 authorization server so MCP clients (and
 # any standard OAuth client) can obtain access tokens for the /mcp endpoint via
@@ -484,7 +501,7 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 # OAUTH_ALLOWED_REDIRECT_HOSTS: 'claude.ai chatgpt.com'
 
 
-# -- EHR connect (SMART on FHIR) --------------------------------------------
+# -- EHR connect (SMART on FHIR) ----------------------------------------------
 #
 # Lets a user link their hospital/clinic EHR (Epic, Oracle Health/Cerner,
 # athenahealth, …) and pull their records, driven by health::EhrConnectService
@@ -507,7 +524,9 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 # SMART_FHIR_SCOPE: 'launch/patient openid fhirUser offline_access patient/Observation.read'
 
 
-# -- Device-brand vendor clients (Fitbit / Withings / Garmin / Oura / WHOOP / Polar)
+# -- Device-brand vendor clients ----------------------------------------------
+#
+# (Fitbit / Withings / Garmin / Oura / WHOOP / Polar.)
 #
 # Direct device-brand clients (src/health/vendor/device/) are configured through the
 # config object with per-vendor keys <ID>_CLIENT_ID / <ID>_CLIENT_SECRET /
@@ -539,7 +558,7 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 # GARMIN_CLIENT_SECRET: ''
 
 
-# -- Per-user vendor OAuth tokens: encryption at rest ------------------------
+# -- Per-user vendor OAuth tokens: encryption at rest -------------------------
 #
 # When a user connects a vendor via POST /vendors/{id}/bind/verify with an OAuth
 # {code, redirect_uri}, the server exchanges the code and stores THAT user's access +
@@ -573,7 +592,7 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 # VENDOR_REDIRECT_URI: 'https://api.example.com/vendors/callback'
 
 
-# -- Dexcom CGM connect (direct vendor client) ------------------------------
+# -- Dexcom CGM connect (direct vendor client) --------------------------------
 #
 # Reads a user's Dexcom continuous-glucose data through Dexcom's own v3 Web API
 # (health::vendor "dexcom", src/health/vendor/device/dexcom.cpp). This is a CLOUD
@@ -605,37 +624,7 @@ JWT_KEY: 'REPLACE_THIS_VALUE_IN_PRODUCTION'
 DEXCOM_ENVIRONMENT: 'sandbox'
 
 
-# -- Chat rate limit --------------------------------------------------------
-#
-# Each /api/chat turn (SSE or WebSocket) drives an upstream LLM call, so a
-# per-user rolling-window cap guards against runaway loops and abuse. The
-# compiled default is 0 = unlimited; this template enables a conservative cap
-# below. Set CHAT_RATE_MAX back to 0 to disable, or raise it for heavier use.
-#
-CHAT_RATE_MAX: 5              # max agent/live turns per user per window (0 = off)
-CHAT_RATE_WINDOW_SEC: 60      # window length in seconds
-
-
-# -- Care-circle limits -----------------------------------------------------
-#
-# Bound care-circle growth and curb abuse. The compiled default for every cap is
-# 0 = unlimited; this template enables conservative caps below. Set any back to 0
-# to disable it.
-#
-#   - CIRCLE_MAX_PER_USER:      max active circles a single user may own.
-#   - CIRCLE_MAX_MEMBERS:       max members per circle (pending invites count,
-#                               so a circle can't be filled with open invites).
-#   - CIRCLE_INVITE_MAX:        invitations one user may send per rolling window
-#                               (each also creates a shell account + sends mail).
-#   - CIRCLE_INVITE_WINDOW_SEC: length of that window, in seconds (default 3600).
-#
-CIRCLE_MAX_PER_USER: 5
-CIRCLE_MAX_MEMBERS: 5
-CIRCLE_INVITE_MAX: 10
-CIRCLE_INVITE_WINDOW_SEC: 1800
-
-
-# -- How to configure Firebase ----------------------------------------------
+# -- Firebase sign-in ---------------------------------------------------------
 #
 # Firebase Authentication brokers the federated ("social") sign-ins and lets the
 # server trust them through a single verifier. mirobody uses it two ways:
@@ -675,7 +664,6 @@ CIRCLE_INVITE_WINDOW_SEC: 1800
 #      browser apiKey + project number for FIREBASE_WEB_* below; for the native
 #      apps download google-services.json (Android) / GoogleService-Info.plist
 #      (iOS) and drop them into the respective app projects.
-# ----------------------------------------------------------------------------
 
 # Firebase project ID. Used by jwt::FirebaseTokenValidator (and the firebase_jwt
 # CLI) to verify the `aud` claim on incoming ID tokens, and returned to the web
@@ -739,13 +727,12 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # Sign in with Apple (web). The Apple *Services ID* (NOT the app's bundle ID),
 # e.g. 'ai.thetahealth.mirobody.web'. GET /auth/providers reports apple as enabled
 # with {clientId} only when this is set, so the web login shows an Apple button;
-# the button
-# opens Apple's JS popup, and the returned id_token is POSTed to /apple/verify
-# and verified against Apple's JWKS (jwt::AppleTokenValidator) with this value as
-# the expected `aud`. Set up under developer.apple.com -> Certificates,
-# Identifiers & Profiles -> Identifiers -> Services IDs: enable "Sign In with
-# Apple", and register the web origin + the return URL (this page's URL). Apple
-# rejects localhost return URLs, so test from a real HTTPS domain.
+# the button opens Apple's JS popup, and the returned id_token is POSTed to
+# /apple/verify and verified against Apple's JWKS (jwt::AppleTokenValidator) with
+# this value as the expected `aud`. Set up under developer.apple.com ->
+# Certificates, Identifiers & Profiles -> Identifiers -> Services IDs: enable
+# "Sign In with Apple", and register the web origin + the return URL (this page's
+# URL). Apple rejects localhost return URLs, so test from a real HTTPS domain.
 # APPLE_CLIENT_ID: ''
 
 # WeChat Mini Program sign-in. POST /wechat/verify takes the code from the
@@ -790,7 +777,8 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # WECHAT_OPEN_APPID: ''
 # WECHAT_OPEN_SECRET: ''
 
-# -- How to configure GitHub sign-in ----------------------------------------
+
+# -- GitHub sign-in -----------------------------------------------------------
 #
 # GitHub sign-in reaches mirobody two different ways, but BOTH are driven by a
 # single GitHub OAuth App's client id + secret:
@@ -825,7 +813,8 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # GITHUB_OAUTH_BASE: 'https://github.com'      # override only to point tests at a mock
 # GITHUB_API_BASE: 'https://api.github.com'    # override only to point tests at a mock
 
-# -- Tanka QR-code sign-in (web) --------------------------------------------
+
+# -- Tanka QR-code sign-in (web) ----------------------------------------------
 #
 # Tanka login needs NONE of our own credentials: the browser runs Tanka's own
 # WASM request-signer and signs the create-QR / poll calls; the server merely
@@ -857,7 +846,7 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # htdoc/src/tanka.js updated + rebuilt; the server logs and keeps the pin.
 # TANKA_WASM_AUTODISCOVER: true
 # TANKA_WASM_REFRESH_INTERVAL: 604800           # 7 days, in seconds
-# TANKA_NODE_BIN: 'node'                         # node executable (PATH name or absolute)
+# TANKA_NODE_BIN: 'node'                        # node executable (PATH name or absolute)
 #
 # To refresh the committed PINNED fallback yourself (e.g. before disabling
 # auto-discovery), run `node res/tanka/discover.cjs --write` -- it verifies the live
@@ -871,7 +860,32 @@ FIREBASE_MESSAGING_SENDER_ID: '555773021699'
 # TANKA_WEB_ORIGIN: 'https://g.tanka.ai'
 # TANKA_API_BASE: 'https://gw-q.tanka.ai'
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
+# Rate Limits and Quotas.
+
+# Chat rate limit. Each /api/chat turn (SSE or WebSocket) drives an upstream LLM
+# call, so a per-user rolling-window cap guards against runaway loops and abuse.
+# The compiled default is 0 = unlimited; this template enables a conservative cap
+# below. Set CHAT_RATE_MAX back to 0 to disable, or raise it for heavier use.
+CHAT_RATE_MAX: 5              # max agent/live turns per user per window (0 = off)
+CHAT_RATE_WINDOW_SEC: 60      # window length in seconds
+
+# Care-circle limits. Bound care-circle growth and curb abuse. The compiled
+# default for every cap is 0 = unlimited; this template enables conservative caps
+# below. Set any back to 0 to disable it.
+#
+#   - CIRCLE_MAX_PER_USER:      max active circles a single user may own.
+#   - CIRCLE_MAX_MEMBERS:       max members per circle (pending invites count,
+#                               so a circle can't be filled with open invites).
+#   - CIRCLE_INVITE_MAX:        invitations one user may send per rolling window
+#                               (each also creates a shell account + sends mail).
+#   - CIRCLE_INVITE_WINDOW_SEC: length of that window, in seconds (default 3600).
+CIRCLE_MAX_PER_USER: 5
+CIRCLE_MAX_MEMBERS: 5
+CIRCLE_INVITE_MAX: 10
+CIRCLE_INVITE_WINDOW_SEC: 1800
+
+#------------------------------------------------------------------------------
 # LLM Configuration.
 
 # Default agent. Its providers are advertised by /api/providers WITHOUT the
@@ -906,27 +920,168 @@ DEFAULT_AGENT: 'Baseline'
 # GOOGLE_API_KEY: ''
 
 
-# Vertex AI — the OAuth alternative to the AI Studio key above for Google
-# models. The embedding module (src/llm/embedding.cpp) routes the 'gemini'
-# provider through Vertex when GOOGLE_GENAI_USE_VERTEXAI is truthy; otherwise it
-# uses the AI Studio key above. Vertex authenticates with a Bearer access token
-# rather than an API key.
+# Vertex AI — the enterprise surface for the same Google models, and the one
+# covered by Google's BAA (the AI Studio key above is not). Two settings name
+# the endpoint, and naming BOTH is what switches every Google call over:
 #
-#   - GOOGLE_GENAI_USE_VERTEXAI: '1' / 'true' to use Vertex AI; default off.
-#   - VERTEX_ACCESS_TOKEN:       a pre-fetched OAuth access token, e.g. the
-#                                output of `gcloud auth print-access-token`.
-#                                There is no in-process ADC/refresh, so rotate
-#                                this before it expires (tokens last ~1h).
-#   - GCP_PROJECT:               Google Cloud project id (required; also read
-#                                from GOOGLE_CLOUD_PROJECT).
-#   - VERTEX_LOCATION:           region; default us-central1.
-#   - VERTEX_BASE_URL:           optional host override; defaults to
-#                                https://<VERTEX_LOCATION>-aiplatform.googleapis.com.
-# GOOGLE_GENAI_USE_VERTEXAI: '0'
-# VERTEX_ACCESS_TOKEN: ''
-# GCP_PROJECT: ''
-# VERTEX_LOCATION: 'us-central1'
-# VERTEX_BASE_URL: ''
+#   - GOOGLE_CLOUD_PROJECT:  Google Cloud project id.
+#   - GOOGLE_CLOUD_LOCATION: where the model runs. NOT any region you like --
+#                            each model publishes its own list, and a value
+#                            outside it simply has no node:
+#                              gemini-3.5-flash: global, the us / eu multi-
+#                                regions, northamerica-northeast1, europe-west2,
+#                                asia-northeast1, asia-south1, asia-southeast1
+#                              gemini-3.6-flash: global only
+#                            Use 'us' (not 'us-east5') to keep inference inside
+#                            the United States, 'eu' for the EU, or 'global' for
+#                            Google's routing (about 10% cheaper, no residency
+#                            guarantee). The model picker is built per surface,
+#                            so a Vertex deployment is offered only what Vertex
+#                            serves — see res/agents/baseline.cpp.
+#
+#                            This is the DEFAULT, not the whole answer: several
+#                            models do not serve whichever value you pick here,
+#                            and need an entry in GOOGLE_CLOUD_MODEL_LOCATIONS
+#                            below. Read that note before settling on a value —
+#                            'us' alone leaves two of the models this server
+#                            offers returning 404.
+#
+#                            The value picks the host, and the three kinds of
+#                            location spell it three different ways (handled in
+#                            gcp::vertex_host, src/client/gcp_auth.hpp):
+#                              region       us-central1-aiplatform.googleapis.com
+#                              us / eu      aiplatform.us.rep.googleapis.com
+#                              global       aiplatform.googleapis.com
+#                            The multi-regions are Representative Endpoints, so
+#                            the location is an INFIX, not a prefix. Nothing
+#                            falls back: a wrong host is a 400 INVALID_ARGUMENT
+#                            'Invalid hostname'.
+#
+# Credentials are a separate question from the two keys above: those say WHERE a
+# call goes, not WHO is making it. Five sources, tried in this order, first hit
+# wins (gcp::TokenSource picks among the top three, then Application Default
+# Credentials resolves the rest, exactly as the Python SDK does --
+# src/client/gcp_auth.hpp):
+#
+#   1. GCP_ACCESS_TOKEN_FILE           settable here, see below
+#   2. GCP_ACCESS_TOKEN                settable here, see below
+#   3. GOOGLE_APPLICATION_CREDENTIALS  a service-account JSON key, an
+#                                      `external_account` file (workload identity
+#                                      federation), or a gcloud login -- one path,
+#                                      and the file's `type` field picks the grant.
+#   4. the gcloud ADC login file at its well-known path, found with nothing set --
+#      what `gcloud auth application-default login` leaves behind. Same reader as
+#      3; the file is found rather than named.
+#   5. the GCE / GKE / Cloud Run metadata server -- the instance's own service
+#      account.
+#
+# So a deployment ON GCP configures nothing at all: 5 answers, and there is no key
+# to store or rotate. Off GCP, prefer 3 with an `external_account` file, which has
+# the same property.
+#
+# GOOGLE_APPLICATION_CREDENTIALS IS AN ENVIRONMENT VARIABLE, not a key in this
+# file. google.auth reads it from the environment and this server resolves it the
+# same way, so that gcloud, the Python stack and this server all agree on which
+# credential is in force. Setting it below would have no effect.
+#
+# README.md ("How Vertex authenticates") carries the rest: what each `type` grants,
+# which credential_source shape can work inside a container, and where the AWS
+# credentials behind `aws1` are looked for. That detail describes the contents of
+# the credential file, not of this one, which is why it lives there and not here.
+#
+# Sources 1 and 2 are escape hatches for handing a raw OAuth token over instead of
+# a credential (there is no official Google env var for one — ADC is Google's
+# answer, so these two names are ours). Being first, they beat everything else:
+# with either set the credential file is never opened. That is what an override is
+# for, but it also means a stale token left over from debugging silently beats a
+# correct GOOGLE_APPLICATION_CREDENTIALS. The startup log names the source that
+# won — read it before debugging a 401.
+#
+#   - GCP_ACCESS_TOKEN_FILE: a path something else keeps current (a projected
+#                            service-account token, a sidecar). Re-read on every
+#                            request, so a rotation lands without a restart.
+#   - GCP_ACCESS_TOKEN:      the token inline, e.g. `gcloud auth
+#                            print-access-token`. Read once at startup and held
+#                            for the life of the process, so it only tracks a
+#                            rotation that restarts the server; past its ~1h
+#                            expiry every Gemini turn fails on auth.
+#
+# A LOCATION IS A PROPERTY OF THE MODEL, NOT OF THE DEPLOYMENT, so the key above
+# is only a default. Google's published lists do not merely differ between models
+# -- they invert:
+#
+#                          us / eu multi-region    US single regions
+#   gemini-embedding-2              yes                    no
+#   gemini-embedding-001            no                     yes (all 7)
+#   gemini-3.5-flash                yes                    no
+#   gemini-2.5-flash                no                     yes
+#
+# Read down either column: no single value serves everything this server offers.
+# Set GOOGLE_CLOUD_LOCATION to 'us' and gemini-embedding-001 and gemini-2.5-flash
+# both 404; set it to a single region and gemini-3.5-flash does. That is not a
+# misconfiguration to be corrected -- it is an unsatisfiable constraint, which is
+# what GOOGLE_CLOUD_MODEL_LOCATIONS exists to break: model id -> the location to
+# reach THAT model at, with GOOGLE_CLOUD_LOCATION as the fallback for anything it
+# does not name. Both lanes read it.
+#
+# This one ships UNCOMMENTED, unlike everything else in this block, and the
+# difference is deliberate. The others are switches: leave GOOGLE_CLOUD_PROJECT
+# unset and the server is simply on AI Studio. This is correctness -- a fresh
+# clone that turns Vertex on and takes the recommended 'us' would 404 on two of
+# the models it offers, which reads as "Vertex is broken", not "one line is
+# missing". Nothing reads the map until Vertex is on, so it costs an AI Studio
+# deployment nothing to carry.
+#
+# All three are pinned explicitly rather than leaning on the fallback for the
+# multi-region one, so that changing GOOGLE_CLOUD_LOCATION later moves only the
+# models that were never pinned -- it cannot silently break 3.5.
+GOOGLE_CLOUD_MODEL_LOCATIONS:
+  gemini-embedding-001: 'us-west1'
+  gemini-2.5-flash: 'us-west1'
+  gemini-3.5-flash: 'us'
+#
+# As an environment variable it is the same map as JSON, and an env value
+# REPLACES this map rather than merging into it -- name every model there too:
+# GOOGLE_CLOUD_MODEL_LOCATIONS='{"gemini-embedding-001":"us-west1"}'
+#
+# Deliberately not validated against a built-in table of what each model serves.
+# Google's lists move, and a stale table compiled in here would be a 404 no
+# operator could override; a wrong value is Google's own 404, which names the
+# model and the location. Nor is anything inferred: resolving 'us' to a nearby
+# region for a model that lacks it would move data across a residency boundary
+# that was chosen on purpose. The startup log prints every override in force.
+#
+# Host override, if a proxy or gateway sits in front:
+#
+#   - GEMINI_VERTEX_BASE_URL: defaults to whichever of the three hosts above the
+#                             location implies. Set it only for a proxy — it is
+#                             not the way to reach a plain Vertex location.
+#
+# GOOGLE_CLOUD_PROJECT: ''
+# GOOGLE_CLOUD_LOCATION: 'us'
+# GCP_ACCESS_TOKEN_FILE: ''
+# GCP_ACCESS_TOKEN: ''
+# GEMINI_VERTEX_BASE_URL: ''
+#
+# GOOGLE_APPLICATION_CREDENTIALS is deliberately absent from that list: it is read
+# from the environment only, per the note above. GOOGLE_CLOUD_MODEL_LOCATIONS is
+# absent because it is the one key in this block that is already live, above.
+#
+# Every key above applies to BOTH lanes that call Google — chat
+# (res/agents/baseline.cpp) and embeddings (src/llm/embedding.cpp): same switch,
+# same credentials, same host override. There is no per-lane variant of any of
+# them, so a deployment cannot end up with its chat on Vertex and its embeddings
+# still going to the consumer endpoint.
+#
+# Retired spellings, NO LONGER READ — rename them, since one spelling per setting
+# is what keeps a half-migrated deployment from having two that disagree:
+#   - GCP_PROJECT / GCP_LOCATION -> GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION.
+#     The server warns at startup while either is still set, because a project
+#     that resolves to nothing looks exactly like a deployment never meant for
+#     Vertex.
+#   - GOOGLE_GENAI_USE_VERTEXAI / VERTEX_ACCESS_TOKEN / VERTEX_LOCATION /
+#     VERTEX_BASE_URL were the embedding lane's own spellings of the switch,
+#     token, location and host — all covered by the keys above.
 
 
 # OpenAI API key. Used by the openai_chat / openai_responses clients
@@ -1069,8 +1224,12 @@ DEFAULT_AGENT: 'Baseline'
 
 # Embedding provider used to populate the th_series_dim vector recall
 # column. Pick one based on which API key you have configured above:
-#   - 'gemini' -> Google's text-embedding-001 (free via the GOOGLE_API_KEY
-#     block above; recommended for getting started).
+#   - 'gemini' -> Google's gemini-embedding-001 (free via the GOOGLE_API_KEY
+#     block above; recommended for getting started). Follows the same surface
+#     switch as chat: naming GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION
+#     sends it to Vertex, otherwise AI Studio. Vertex accepts one input per
+#     :predict call where AI Studio batches 100, so a bulk backfill issues 100x
+#     the requests there — same vectors either way.
 #   - 'qwen'   -> Qwen3 embedding via DashScope (needs DASHSCOPE_API_KEY).
 #   - 'gemma'  -> EmbeddingGemma served locally over an OpenAI-compatible
 #     endpoint (Ollama / llama.cpp). Fully on-device, no API key, no data
@@ -1097,7 +1256,7 @@ EMBEDDING_PROVIDER: 'gemini'
 # GEMMA_CHAT_MODEL: 'gemma-4-e2b'
 # GEMMA_CHAT_API_KEY: ''             # usually empty for a local server
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Sentry (crash / error reporting).
 #
 # Brought up at startup by init_sentry() in src/main.cpp, mirroring the Python
@@ -1129,7 +1288,7 @@ EMBEDDING_PROVIDER: 'gemini'
 # set it explicitly only when the handler lives elsewhere.
 # SENTRY_HANDLER_PATH: ''
 
-#-----------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # MCP (Model Context Protocol).
 #
 # This server exposes its registered tools (src/mcp) over MCP at the /mcp
@@ -1150,5 +1309,3 @@ EMBEDDING_PROVIDER: 'gemini'
 # `mcp_servers[].url`. Point it at the externally-reachable /mcp (or a
 # per-user /mcp/{secret} personal-MCP URL), e.g. 'https://api.example.com/mcp'.
 # MCP_PUBLIC_URL: ''
-
-#-----------------------------------------------------------------------------

@@ -5,6 +5,7 @@
 // to `app.chat`, ...), and loads the Main window from the Mirobody QML module.
 
 #include <QGuiApplication>
+#include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
@@ -18,6 +19,13 @@ int main(int argc, char* argv[]) {
     QGuiApplication::setApplicationName(QStringLiteral("Mirobody"));
     QGuiApplication::setOrganizationName(QStringLiteral("thetahealth"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Mirobody"));
+
+    // The WINDOW icon (title bar, alt-tab, and the running task's taskbar button).
+    // Separate from the icon compiled into the .exe by icon/mirobody.rc: that one is
+    // what the shell shows for the FILE, and it does not exist at all on Linux, where
+    // this call is the only icon the app gets. Embedded, so nothing has to ship
+    // beside the binary; the path is pinned by the qt_add_resources call for it.
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/mirobody.png")));
 
     // A consistent, restyleable Controls look across platforms.
     QQuickStyle::setStyle(QStringLiteral("Fusion"));

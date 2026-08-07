@@ -37,6 +37,23 @@ if(POLICY QTP0004)
     qt_policy(SET QTP0004 NEW)
 endif()
 
+# The app icon comes in two halves, because on a desktop "the icon" is two things:
+#
+#   icon/mirobody.rc   the EXECUTABLE's icon (Explorer, Start menu, pinned taskbar
+#                      entry). Windows only reads this from a resource compiled into
+#                      the binary, hence the .rc in the source list. Windows-only --
+#                      an ELF or a Mach-O has no such thing.
+#   icon/mirobody.png  the WINDOW's icon, embedded as a Qt resource and applied in
+#                      main.cpp (see the qt_add_resources call below). This is what
+#                      Linux has instead, and what the title bar / alt-tab use
+#                      everywhere.
+#
+# Both are generated from the shared brand mark; see icon/gen_icon.py.
+set(mirobody_qt_platform_sources "")
+if(WIN32)
+    list(APPEND mirobody_qt_platform_sources icon/mirobody.rc)
+endif()
+
 qt_add_executable(mirobody_qt
     main.cpp
     apiclient.cpp
@@ -53,6 +70,7 @@ qt_add_executable(mirobody_qt
     modeldownloader.hpp
     locallmengine.cpp
     locallmengine.hpp
+    ${mirobody_qt_platform_sources}
 )
 
 # Qt headers are C++17; keep this requirement local to the Qt target so the rest
@@ -87,6 +105,16 @@ qt_add_qml_module(mirobody_qt
         qml/ConfirmDialog.qml
     RESOURCES
         qml/strings.js
+)
+
+# The window icon, in a resource of its own rather than the QML module's. The module's
+# prefix depends on the QTP0001 policy (":/Mirobody/" as things stand, ":/qt/qml/..."
+# once that policy is actually set -- see the note above), and main.cpp needs a literal
+# path that cannot quietly stop resolving. PREFIX + BASE here pin it to ":/icons/mirobody.png".
+qt_add_resources(mirobody_qt "mirobody_qt_appicon"
+    PREFIX "/icons"
+    BASE "icon"
+    FILES icon/mirobody.png
 )
 
 target_link_libraries(mirobody_qt PRIVATE

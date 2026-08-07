@@ -1,5 +1,6 @@
 #include "transcode/parser.hpp"
 
+#include "client/gcp_auth.hpp"    // Vertex: the shared token source
 #include "client/http_client.hpp"
 #include "config/config.hpp"
 #include "platform/log.hpp"
@@ -10,7 +11,11 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <cstddef>
+#include <functional>
+#include <memory>
 #include <string>
+#include <utility>
 
 namespace mirobody { namespace file {
 
@@ -25,16 +30,20 @@ const char* const kPrompt =
     "text -- no commentary, no headings you add yourself, no markdown code "
     "fences. If the file contains no readable text, output nothing.";
 
-// Upper bound on cached extracted text, so one huge document can't blow up the
-// per-user cache entry. Truncated past this with an explicit marker.
-const std::size_t kMaxChars = 100000;
-
-std::string cap(std::string s) {
-    if (s.size() > kMaxChars) {
-        s.resize(kMaxChars);
-        s += "\n...[truncated]";
+// Largest cut point at or below `limit` that does not split a UTF-8 sequence:
+// step back over continuation bytes (10xxxxxx) to the start of the character
+// they belong to. Worth the care because extracted text is routinely CJK, where
+// characters are three bytes and a blind byte cut lands mid-character two times
+// in three -- the invalid tail would then ride into a JSON response body. Input
+// that is not UTF-8 (no lead byte within a sequence's reach) is cut at `limit`.
+std::size_t utf8_cut(const std::string& s, std::size_t limit) {
+    if (limit >= s.size()) return s.size();
+    std::size_t n = limit;
+    for (int back = 0; back < 4 && n > 0; ++back) {
+        if ((static_cast<unsigned char>(s[n]) & 0xC0) != 0x80) return n;
+        --n;
     }
-    return s;
+    return limit;
 }
 
 // Serialize a rapidjson value to a compact string.
@@ -97,20 +106,39 @@ void conform_image(const image::Limits& limits, const std::string& filename,
 //------------------------------------------------------------------------------
 // Gemini (Google AI Studio generateContent)
 
+// Google's generateContent, on either surface. The wire format is identical --
+// same request body, same response shape -- so only the URL and the credential
+// header differ, and both are decided once at construction:
+//
+//   AI Studio: .../v1beta/models/{model}:generateContent
+//              x-goog-api-key: {key}
+//   Vertex   : {host}/v1/projects/{p}/locations/{l}/publishers/google/models/
+//              {model}:generateContent
+//              Authorization: Bearer {token}, resolved per request
+//
+// Which one is in play matters beyond the endpoint: uploads are the most
+// sensitive thing this server sends anywhere -- the whole file, not a summary --
+// and AI Studio is not covered by Google's BAA. A deployment that put its chat on
+// Vertex for that reason would not expect its documents to leave by the other
+// door, so the parser follows the same switch rather than carrying its own.
 class GeminiParser : public Parser {
 public:
-    GeminiParser(std::string api_key, std::string base_url, std::string model,
-                 int timeout_ms, image::Limits limits)
-        : api_key_(std::move(api_key)), base_url_(std::move(base_url)),
-          model_(std::move(model)), timeout_ms_(timeout_ms), limits_(limits) {}
+    // `auth_header` returns the complete header line to send, resolved at call
+    // time (a Vertex token may have been rotated since construction). Returning
+    // "" means the credential is gone, and the extraction is skipped.
+    GeminiParser(std::string url, std::function<std::string()> auth_header,
+                 std::string surface, int timeout_ms, image::Limits limits)
+        : url_(std::move(url)), auth_header_(std::move(auth_header)),
+          surface_(std::move(surface)), timeout_ms_(timeout_ms), limits_(limits) {}
 
     const char* name() const override { return "gemini"; }
 
     std::string extract_text(const std::string& bytes, const std::string& mime_type,
                              const std::string& filename) override {
-        if (api_key_.empty()) {
-            platform::log_warn("file parser[gemini]: no API key; skipping '%s'",
-                               filename.c_str());
+        const std::string auth = auth_header_ ? auth_header_() : std::string();
+        if (auth.empty()) {
+            platform::log_warn("file parser[gemini/%s]: no credential; skipping '%s'",
+                               surface_.c_str(), filename.c_str());
             return std::string();
         }
 
@@ -156,18 +184,23 @@ public:
 
         client::HttpClient http;
         client::HttpRequest req;
-        req.url = base_url_ + "/v1beta/models/" + model_ + ":generateContent?key=" + api_key_;
+        req.url = url_;
+        // The credential as a header, never in the URL: a URL is written down by
+        // everything on the request's path (proxy logs, curl traces), a header is
+        // not. Same form the embedding and chat clients use.
+        req.headers.push_back(auth);
         req.body = serialize(d);
         req.request_timeout_ms = timeout_ms_;
         const client::HttpResponse resp = http.post(req);
         if (resp.status != 200) {
-            platform::log_error("file parser[gemini]: HTTP %ld for '%s': %s",
-                                resp.status, filename.c_str(), snippet(resp.body).c_str());
+            platform::log_error("file parser[gemini/%s]: HTTP %ld for '%s': %s",
+                                surface_.c_str(), resp.status, filename.c_str(),
+                                snippet(resp.body).c_str());
             return std::string();
         }
-        const std::string text = cap(parse(resp.body));
-        platform::log_info("file parser[gemini]: extracted %zu chars from '%s'",
-                           text.size(), filename.c_str());
+        const std::string text = cap_text(parse(resp.body));
+        platform::log_info("file parser[gemini/%s]: extracted %zu chars from '%s'",
+                           surface_.c_str(), text.size(), filename.c_str());
         return text;
     }
 
@@ -194,9 +227,11 @@ private:
         return out;
     }
 
-    std::string   api_key_, base_url_, model_;
-    int           timeout_ms_;
-    image::Limits limits_;
+    std::string                   url_;
+    std::function<std::string()>  auth_header_;
+    std::string                   surface_;   // "ai-studio" / "vertex", for the logs
+    int                           timeout_ms_;
+    image::Limits                 limits_;
 };
 
 //------------------------------------------------------------------------------
@@ -270,7 +305,7 @@ public:
                                 resp.status, filename.c_str(), snippet(resp.body).c_str());
             return std::string();
         }
-        const std::string text = cap(parse(resp.body));
+        const std::string text = cap_text(parse(resp.body));
         platform::log_info("file parser[qwen]: extracted %zu chars from '%s'",
                            text.size(), filename.c_str());
         return text;
@@ -307,7 +342,30 @@ std::string lower(std::string s) {
     return s;
 }
 
+// Announce the backend the process will actually use. This is the only place an
+// operator can see that extraction is on and what it will call: everything
+// downstream is best-effort and silent by design -- a disabled parser and one
+// that fails on every upload both simply produce no text, and the only visible
+// trace either way is a missing <key>.trans object. Logged once, at startup.
+void log_selection(const char* backend, const std::string& model, bool has_credential) {
+    if (has_credential) {
+        platform::log_info("file parser: %s (model=%s)", backend, model.c_str());
+        return;
+    }
+    platform::log_warn("file parser: %s (model=%s) has NO credential configured; every "
+                       "upload will skip extraction and keep no text", backend, model.c_str());
+}
+
 }   // namespace
+
+//------------------------------------------------------------------------------
+
+std::string cap_text(std::string s) {
+    if (s.size() <= kMaxTextBytes) return s;
+    s.resize(utf8_cut(s, kMaxTextBytes));
+    s += "\n...[truncated]";
+    return s;
+}
 
 //------------------------------------------------------------------------------
 
@@ -315,6 +373,12 @@ std::unique_ptr<Parser> make_parser(const Config& cfg) {
     const std::string sel = lower(cfg.store.get_str("FILE_PARSER", "gemini"));
 
     if (sel.empty() || sel == "none" || sel == "off" || sel == "disabled") {
+        // Worth a line even though it is a deliberate choice: with no extracted
+        // text, an upload is only readable by a model that can read the file
+        // itself, in the turn it arrived on. The read_file tool then has nothing
+        // but a URL to hand back, on this turn and every later one.
+        platform::log_info("file parser: disabled (FILE_PARSER='%s'); uploads keep no "
+                           "extracted text", sel.empty() ? "" : sel.c_str());
         return std::unique_ptr<Parser>();
     }
 
@@ -323,10 +387,54 @@ std::unique_ptr<Parser> make_parser(const Config& cfg) {
     const int timeout = static_cast<int>(cfg.store.get_int("FILE_PARSER_TIMEOUT_MS", 300000));
 
     if (sel == "gemini") {
+        // Same switch, same two keys as the chat lane (res/agents/baseline.cpp):
+        // a project AND a location mean Vertex. One Vertex configuration decides
+        // where EVERYTHING Google-bound goes -- which matters most here, since
+        // what this lane sends is the uploaded file itself, and AI Studio is not
+        // covered by Google's BAA.
+        const std::string project  = cfg.store.get_str("GOOGLE_CLOUD_PROJECT");
+        const std::string location = cfg.store.get_str("GOOGLE_CLOUD_LOCATION");
+
+        if (!project.empty() && !location.empty()) {
+            // Vertex serves gemini-3.5-flash; 3.6 publishes only the `global`
+            // location, so a region-pinned project cannot reach it (the chat
+            // lane's model table says the same thing).
+            const std::string model = cfg.store.get_str("FILE_PARSER_GEMINI_MODEL",
+                                                        "gemini-3.5-flash");
+            // Region, us / eu multi-region and "global" each spell the host
+            // differently; gcp::vertex_host is the one place that knows how.
+            const std::string host = cfg.store.get_str("GEMINI_VERTEX_BASE_URL",
+                                                       gcp::vertex_host(location));
+            const std::string url = host + "/v1/projects/" + project + "/locations/" + location
+                                  + "/publishers/google/models/" + model + ":generateContent";
+
+            // Shared resolution order (token file, inline token, ADC), resolved
+            // per request so a rotated token lands without a restart.
+            std::shared_ptr<gcp::TokenSource> tokens = std::make_shared<gcp::TokenSource>(
+                cfg.store.get_str("GCP_ACCESS_TOKEN_FILE"),
+                cfg.store.get_str("GCP_ACCESS_TOKEN"));
+            platform::log_info("file parser: gemini via Vertex AI (model=%s, project=%s, "
+                               "location=%s, token=%s)",
+                               model.c_str(), project.c_str(), location.c_str(),
+                               tokens->describe());
+            return std::unique_ptr<Parser>(new GeminiParser(
+                url,
+                [tokens]() {
+                    const std::string t = tokens->token();
+                    return t.empty() ? std::string() : "Authorization: Bearer " + t;
+                },
+                "vertex", timeout, ocr_limits(image::GeminiLimits, cfg)));
+        }
+
         const std::string key   = cfg.store.get_str("GOOGLE_API_KEY", cfg.gemini.api_key);
-        const std::string model = cfg.store.get_str("FILE_PARSER_GEMINI_MODEL", "gemini-3.5-flash");
+        const std::string model = cfg.store.get_str("FILE_PARSER_GEMINI_MODEL", "gemini-3.6-flash");
+        log_selection("gemini via AI Studio", model, !key.empty());
+        const std::string url = cfg.gemini.base_url + "/v1beta/models/" + model
+                              + ":generateContent";
         return std::unique_ptr<Parser>(new GeminiParser(
-            key, cfg.gemini.base_url, model, timeout, ocr_limits(image::GeminiLimits, cfg)));
+            url,
+            [key]() { return key.empty() ? std::string() : "x-goog-api-key: " + key; },
+            "ai-studio", timeout, ocr_limits(image::GeminiLimits, cfg)));
     }
 
     if (sel == "qwen") {
@@ -335,6 +443,7 @@ std::unique_ptr<Parser> make_parser(const Config& cfg) {
         // Must be a vision-capable model (it receives an image). Override per
         // account via FILE_PARSER_QWEN_MODEL.
         const std::string model = cfg.store.get_str("FILE_PARSER_QWEN_MODEL", "qwen3.7-plus");
+        log_selection("qwen", model, !key.empty());
         return std::unique_ptr<Parser>(new QwenParser(
             key, cfg.dashscope.base_url, model, timeout, ocr_limits(image::QwenLimits, cfg)));
     }

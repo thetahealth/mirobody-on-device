@@ -21,6 +21,8 @@
 // The typed getters mirror mcp::Args and read directly from the params object;
 // they are tolerant (a missing / wrong-typed key yields the supplied default).
 
+#include "compat/cxx11.hpp"   // Blob
+
 #include <rapidjson/document.h>
 
 #include <string>
@@ -37,14 +39,16 @@ struct Attachment {
     std::string filename;    // client-supplied name; becomes the stored object's last segment
     std::string mime_type;   // declared content type ("" -> application/octet-stream when stored)
 
-    // The raw bytes. std::string is used here as a binary-safe byte buffer, not
-    // text: it stores an explicit length, so embedded NULs are fine -- read it
-    // via data()/size(), never c_str(). It's std::string (rather than
-    // std::vector<unsigned char>/std::byte) on purpose: every hop these bytes
-    // travel already speaks std::string -- the HTTP body, the multipart file
-    // part, and storage::Storage::put_object -- so this type moves straight
-    // through with zero conversions. (C++11 here, so std::byte isn't available.)
-    std::string data;
+    // The raw bytes, shared rather than owned outright (see mirobody::Blob).
+    // They are read by the dispatcher (to store and to extract text from) and by
+    // the params parse that hands them to the agent, all through const
+    // references -- so a by-value std::string here meant a full copy at each of
+    // those hops. Read them with data()/size()/str(), never c_str(): this is a
+    // byte buffer and embedded NULs are expected. The buffer underneath is a
+    // std::string because every producer and consumer on this path already
+    // speaks one (the multipart part in, storage::put_object out), so it moves
+    // in and out with no conversion.
+    Blob data;
 };
 
 class Packet {

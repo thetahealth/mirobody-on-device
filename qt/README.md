@@ -60,9 +60,13 @@ build-qt.cmd deploy      :: + windeployqt, so the exe is double-clickable
 
 | Env override | Meaning |
 |---|---|
-| `QT_PREFIX` | Qt kit dir (default `D:\Qt\6.11.1\msvc2022_64`) |
+| `QT_ROOT` | Qt install root to scan (Windows; default `%SystemDrive%\Qt`) |
+| `QT_PREFIX` | the kit itself, skipping the scan — e.g. `<qt-root>\6.11.1\msvc2022_64` |
 | `VS_DIR` | Visual Studio root (Windows) |
-| `NINJA` | `ninja.exe` path (Windows) |
+| `NINJA` | `ninja.exe` path (Windows; default `%QT_ROOT%\Tools\Ninja`, else the one vcvars puts on PATH) |
+
+Windows installs Qt outside `%SystemDrive%` often enough that the scan misses it — if yours
+is elsewhere, `setx QT_ROOT <your-qt-root>` once and forget about it.
 
 Keep the exe next to its generated `Mirobody/` QML module dir (loaded from disk) — don't
 relocate it away from that directory.

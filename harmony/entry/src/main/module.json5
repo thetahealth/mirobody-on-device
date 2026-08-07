@@ -28,6 +28,15 @@
         // is otherwise session-only, so an imported GGUF would have to be re-picked
         // on every cold start. system_grant + availableLevel normal, so declaring
         // it is enough -- no ACL, no runtime prompt.
+        //
+        // Health data needs NO entry in this list: Health Service Kit is authorized
+        // per data type through its own sheet (healthStore.requestAuthorizations,
+        // see ets/core/HealthSource.ets), not through ohos.permission.*. What it
+        // does need lives outside this file -- Health Service Kit enabled for this
+        // app in AppGallery Connect with the read scopes APPROVED, plus whatever
+        // AGC metadata (client_id) that console tells you to add here. Until then
+        // every Kit call fails with a BusinessError and the health card reports
+        // itself unauthorized; nothing else in the app is affected.
         "name": "ohos.permission.FILE_ACCESS_PERSIST",
         "reason": "$string:perm_file_persist_reason",
         "usedScene": {

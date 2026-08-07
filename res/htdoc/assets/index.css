@@ -56,6 +56,15 @@ svg {
     }
 }
 
+/* The three dots that hold the assistant's place between "sent" and the first
+   token (typingDots in chat.js). Each dot runs the same cycle, staggered by an
+   animation-delay, so the pulse travels left to right. Opacity only -- nothing
+   here changes layout, so the dots can't nudge the thread as they animate. */
+@keyframes mb-dot {
+    0%, 70%, 100% { opacity: 0.25; }
+    35%           { opacity: 1; }
+}
+
 /* Rendered Markdown in assistant chat bubbles (see markdown.js). Colors track
    the M3 palette used inline elsewhere. Bundled so it's allowed under a strict
    style-src 'self'. */

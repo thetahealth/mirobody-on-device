@@ -11,6 +11,7 @@
 
 #include "compat/cxx11.hpp"
 
+#include <chrono>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -52,6 +53,7 @@ public:
             status_ = status;
             content_type_ = std::move(content_type);
             headers_ready_ = true;
+            last_activity_ = std::chrono::steady_clock::now();
         }
         wake();
     }
@@ -60,8 +62,24 @@ public:
         {
             std::lock_guard<std::mutex> lk(m_);
             buf_.append(bytes.data(), bytes.size());
+            last_activity_ = std::chrono::steady_clock::now();
         }
         wake();
+    }
+
+    // Append `bytes` unless the stream is already finished; false when it was.
+    // The check and the append happen under one lock, so a second producer (the
+    // keepalive pump) cannot slip bytes in behind the terminal chunk however it
+    // races the thread that ends the stream.
+    bool write_unless_finished(const std::string& bytes) {
+        {
+            std::lock_guard<std::mutex> lk(m_);
+            if (finished_) return false;
+            buf_.append(bytes.data(), bytes.size());
+            last_activity_ = std::chrono::steady_clock::now();
+        }
+        wake();
+        return true;
     }
 
     void finish() {                        // end the stream cleanly
@@ -107,6 +125,20 @@ public:
         return headers_ready_;
     }
 
+    // True once the stream has been ended (by finish() or fail()).
+    bool is_finished() const {
+        std::lock_guard<std::mutex> lk(m_);
+        return finished_;
+    }
+
+    // Milliseconds since the last bytes were queued (or since begin()). What a
+    // keepalive producer consults so it stays quiet while real data is flowing.
+    long long idle_ms() const {
+        std::lock_guard<std::mutex> lk(m_);
+        return static_cast<long long>(std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - last_activity_).count());
+    }
+
     //-- Service-thread side, used by the router's writeable callback. ---------
 
     long status() const {
@@ -150,6 +182,9 @@ private:
     lws_context*       ctx_;
     mutable std::mutex m_;
     std::string        buf_;
+    // When bytes were last queued -- steady_clock, so a wall-clock adjustment
+    // cannot make a stream look idle (or busy) when it isn't.
+    std::chrono::steady_clock::time_point last_activity_ = std::chrono::steady_clock::now();
     long               status_        = 200;
     std::string        content_type_  = "application/octet-stream";
     bool               headers_ready_ = false;

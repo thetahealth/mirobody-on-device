@@ -112,6 +112,32 @@
   max-width: 100%;
   color: #1a1c1e;
 }
+/* Waiting dots, shown in the assistant's place until its first token (see
+   chat.wxml). Each dot runs the same cycle, staggered by an animation-delay, so
+   the pulse travels left to right. Opacity only — nothing here changes layout,
+   so the dots cannot nudge the transcript as they animate. The height matches
+   one line of body text, so the swap to real content does not jump. */
+.typing {
+  display: flex;
+  align-items: center;
+  height: 46rpx;
+}
+.typing .dot {
+  width: 12rpx;
+  height: 12rpx;
+  margin-right: 8rpx;
+  border-radius: 50%;
+  background: #52565c;
+  opacity: 0.25;
+  animation: mb-dot 1.2s ease-in-out infinite;
+}
+.typing .dot:nth-child(2) { animation-delay: 0.16s; }
+.typing .dot:nth-child(3) { animation-delay: 0.32s; }
+@keyframes mb-dot {
+  0%, 70%, 100% { opacity: 0.25; }
+  35%           { opacity: 1; }
+}
+
 .thinking {
   max-width: 82%;
   margin-bottom: 10rpx;

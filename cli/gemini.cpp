@@ -109,6 +109,10 @@ int parse_args(int argc, char** argv, Args& out) {
         }
     }
 
+    // Google's own names where Google has one. Same set the server reads, so one
+    // configuration points both at the same surface -- see res/agents/baseline.cpp.
+    // (The CLI takes a token directly; the server also resolves one through ADC
+    // when none is given.)
     out.opt.api_key            = store.get_str("GOOGLE_API_KEY",            out.opt.api_key);
     out.opt.access_token       = store.get_str("GCP_ACCESS_TOKEN",          out.opt.access_token);
     out.opt.gcp_project        = store.get_str("GOOGLE_CLOUD_PROJECT",      out.opt.gcp_project);

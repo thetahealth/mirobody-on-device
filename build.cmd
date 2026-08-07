@@ -140,7 +140,7 @@ echo   build.cmd arm64 legacy    -^> build-arm64-legacy  (cross-arch, POSTGRESQL
 echo.
 echo Environment variables (see README "Building - Windows"):
 echo   VS_DIR       Visual Studio install root.
-echo                Default: C:\Program Files\Microsoft Visual Studio\18\Community
+echo                Default: %%ProgramFiles%%\Microsoft Visual Studio\18\Community
 echo   VCPKG_ROOT   vcpkg checkout. If unset, vcvarsall.bat points at VS-bundled vcpkg.
 echo   NINJA        ninja.exe path.
 echo                Default: %%VS_DIR%%\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe

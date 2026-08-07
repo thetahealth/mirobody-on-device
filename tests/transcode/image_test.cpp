@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <jpeglib.h>
 #include <png.h>
+#include <zlib.h>   // crc32, to re-stamp a hand-edited PNG header chunk
 
 #include <algorithm>
 #include <cstdint>
@@ -246,6 +247,51 @@ TEST_CASE("undecodable input throws", "[image]") {
     std::string png = make_png(300, 300, false);
     std::string truncated = png.substr(0, png.size() / 2);
     REQUIRE_THROWS_AS(Transcoder(lim).transcode(truncated), ImageError);
+}
+
+//------------------------------------------------------------------------------
+
+TEST_CASE("a source over the decode ceiling is refused from its header alone",
+          "[image]") {
+    // The bomb shape: a tiny file that would decode to an enormous RGBA buffer.
+    // Rewriting the IHDR (and its CRC) makes a real 8x8 PNG claim 100000x100000
+    // -- 40 GB decoded -- without the bytes to back it. The guard reads the
+    // header, so this must throw promptly rather than attempt the allocation.
+    std::string png = make_png(8, 8, false);
+    REQUIRE(png.size() > 33);
+    auto put_be32 = [](std::string& s, std::size_t at, std::uint32_t v) {
+        s[at + 0] = static_cast<char>((v >> 24) & 0xFF);
+        s[at + 1] = static_cast<char>((v >> 16) & 0xFF);
+        s[at + 2] = static_cast<char>((v >> 8) & 0xFF);
+        s[at + 3] = static_cast<char>(v & 0xFF);
+    };
+    put_be32(png, 16, 100000);   // IHDR width
+    put_be32(png, 20, 100000);   // IHDR height
+    put_be32(png, 29, static_cast<std::uint32_t>(
+        crc32(0L, reinterpret_cast<const Bytef*>(png.data() + 12), 17)));   // type+data
+
+    REQUIRE_THROWS_AS(Transcoder().transcode(png), ImageError);
+
+    // The ceiling is a property of the Limits, so it can be tightened (or, at
+    // zero, lifted). A 300x300 source is 90000 px: over a 50000 px ceiling...
+    Limits tight;
+    tight.max_decode_pixels = 50000;
+    REQUIRE_THROWS_AS(Transcoder(tight).transcode(make_png(300, 300, false)), ImageError);
+
+    // ...and fine once the ceiling clears it, even though the same image still
+    // has to be shrunk to the (separate, smaller) output pixel budget.
+    Limits ok;
+    ok.max_decode_pixels = 1000000;
+    ok.max_pixels        = 100 * 100;
+    Transcoded t = Transcoder(ok).transcode(make_png(300, 300, false));
+    CHECK(t.changed);
+    CHECK(static_cast<long long>(t.width) * t.height <= ok.max_pixels);
+
+    // Every shipped preset admits a real photo or scan: 24 MP (a phone camera)
+    // and 35 MP (a 600 dpi A4 scan) are both under the ceiling.
+    for (const Limits& lim : {QwenLimits, GeminiLimits, GptLimits}) {
+        CHECK(lim.max_decode_pixels > 35LL * 1000 * 1000);
+    }
 }
 
 //------------------------------------------------------------------------------

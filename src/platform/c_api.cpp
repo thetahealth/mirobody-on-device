@@ -34,6 +34,9 @@
 #include "config/config.hpp"
 #include "database/database.hpp"
 #include "database/schema.hpp"
+#include "fhir/resource.hpp"
+#include "fhir/store.hpp"
+#include "fhir/write.hpp"
 #include "llm/event.hpp"
 #include "memory/memory.hpp"
 #include "platform/log.hpp"
@@ -58,6 +61,7 @@
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
 
+#include <algorithm>   // sort (mirobody_health_recent orders by reading time)
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>   // setenv / _putenv_s (mirobody_set_config)
@@ -756,6 +760,289 @@ extern "C" const void* mirobody_read_file(
         return result.data();
     } catch (const std::exception& e) {
         mirobody::platform::log_error("mirobody_read_file: %s", e.what());
+        return nullptr;
+    }
+}
+
+//------------------------------------------------------------------------------
+// Health data (on-device ingest)
+//------------------------------------------------------------------------------
+
+namespace {
+
+// The health calls' OWN database connection, plus the mutex that serializes it.
+//
+// Same FILE as the chat services' connection (so a sync writes exactly what the
+// family_health MCP tool reads back during a turn), but deliberately a SEPARATE
+// handle: database::Database is documented as not thread-safe, and these calls
+// run on the host's worker threads while a chat turn may be using its own
+// connection on another. One connection per user, each touched under one lock, is
+// the contract that header asks for.
+//
+// SQLite is opened in WAL mode, so a reader never blocks the writer; two
+// simultaneous WRITERS (a sync landing mid-turn) can still collide and raise
+// SQLITE_BUSY, which surfaces as this call's "error" rather than being retried
+// behind the user's back -- a sync is a button, and pressing it again is cheap.
+struct HealthContext {
+    std::unique_ptr<mirobody::database::Database> db;
+    std::mutex mu;
+};
+
+HealthContext& health_context() {
+    static HealthContext ctx;
+    static std::once_flag flag;
+    std::call_once(flag, [] {
+        try {
+            const mirobody::Config& cfg = mirobody::config();
+            apply_migrations(cfg);          // idempotent DDL; a sync may be the first write
+            ctx.db = open_file_db(cfg);     // backend-appropriate connection (null on failure)
+        } catch (const std::exception& e) {
+            mirobody::platform::log_error("mirobody health: database unavailable (%s)", e.what());
+        }
+    });
+    return ctx;
+}
+
+// Resolve the writing/reading subject the way run_chat_turn does, so a sync and
+// a turn agree on whose records these are.
+long long health_subject(long long user_id) {
+#if MIROBODY_MOBILE
+    if (user_id <= 0) return 1;   // single-user device: the owner is row 1
+#endif
+    return user_id;
+}
+
+// The first string member of `v` matching `name`, else "".
+std::string json_str(const rapidjson::Value& v, const char* name) {
+    rapidjson::Value::ConstMemberIterator it = v.FindMember(name);
+    if (it == v.MemberEnd() || !it->value.IsString()) return std::string();
+    return std::string(it->value.GetString(), it->value.GetStringLength());
+}
+
+void json_add(rapidjson::Value& obj, const char* key, const std::string& val,
+              rapidjson::Document::AllocatorType& a) {
+    obj.AddMember(rapidjson::StringRef(key),
+                  rapidjson::Value(val.c_str(), static_cast<rapidjson::SizeType>(val.size()), a), a);
+}
+
+// One flattened Observation for mirobody_health_recent.
+struct HealthItem {
+    std::string code, display, unit, when, source;
+    double      value     = 0.0;
+    bool        has_value = false;
+};
+
+// Newest READING first. The store pages by updated_at (write time), which within
+// one sync is effectively one instant, so its tie-break -- resource_id -- would
+// group a batch by metric name instead of ordering it in time. FHIR instants are
+// ISO-8601 UTC, so comparing the strings orders them; an item with no effective
+// time sorts last rather than being dropped.
+bool later_reading(const HealthItem& a, const HealthItem& b) {
+    if (a.when.empty() != b.when.empty()) return !a.when.empty();
+    return a.when > b.when;
+}
+
+}  // namespace
+
+extern "C" const char* mirobody_health_store(long long user_id, const char* resources_json) {
+    static thread_local std::string result;
+    result.clear();
+
+    rapidjson::Document in;
+    if (!resources_json || in.Parse(resources_json).HasParseError() || !in.IsArray()) {
+        mirobody::platform::log_error("mirobody_health_store: resources_json is not a JSON array");
+        return nullptr;
+    }
+
+    const long long subject = health_subject(user_id);
+    if (subject <= 0) {
+        mirobody::platform::log_error("mirobody_health_store: no subject (user_id %lld)", user_id);
+        return nullptr;
+    }
+
+    HealthContext& hc = health_context();
+    std::lock_guard<std::mutex> lock(hc.mu);
+    if (!hc.db) {
+        mirobody::platform::log_error(
+            "mirobody_health_store: no database -- set SQLITE_PATH and SQL_DIR first");
+        return nullptr;
+    }
+
+    int stored = 0, failed = 0;
+    std::string first_error;
+    try {
+        mirobody::fhir::FhirStore store(*hc.db);
+        for (rapidjson::SizeType i = 0; i < in.Size(); ++i) {
+            // Each resource gets its own Document: write_resource injects id +
+            // meta into it, which needs an allocator the input array's elements
+            // do not own individually.
+            rapidjson::Document one;
+            one.CopyFrom(in[i], one.GetAllocator());
+
+            std::string type, id;
+            const std::vector<mirobody::fhir::ValidationIssue> issues =
+                mirobody::fhir::validate_resource(one, &type, &id);
+            if (!issues.empty()) {
+                ++failed;
+                if (first_error.empty()) first_error = issues[0].diagnostics;
+                continue;
+            }
+            // A caller-supplied id makes the write idempotent; an absent one is
+            // assigned, matching POST /fhir/{type}.
+            mirobody::fhir::write_resource(store, static_cast<std::int64_t>(subject), type, id, one);
+            ++stored;
+        }
+    } catch (const std::exception& e) {
+        // A store-level failure (schema missing, disk full) is not per-resource:
+        // report what landed plus the error rather than pretending it all did.
+        mirobody::platform::log_error("mirobody_health_store: %s", e.what());
+        if (first_error.empty()) first_error = e.what();
+        failed += static_cast<int>(in.Size()) - stored - failed;
+    }
+
+    rapidjson::Document d;
+    d.SetObject();
+    rapidjson::Document::AllocatorType& a = d.GetAllocator();
+    d.AddMember("stored", stored, a);
+    d.AddMember("failed", failed, a);
+    json_add(d, "error", first_error, a);
+
+    rapidjson::StringBuffer buf;
+    rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+    d.Accept(w);
+    result.assign(buf.GetString(), buf.GetSize());
+    mirobody::platform::log_info("mirobody_health_store: user %lld stored=%d failed=%d",
+                                 subject, stored, failed);
+    return result.c_str();
+}
+
+//------------------------------------------------------------------------------
+
+extern "C" const char* mirobody_health_recent(long long user_id, int count) {
+    static thread_local std::string result;
+    result.clear();
+
+    const long long subject = health_subject(user_id);
+    if (subject <= 0) return nullptr;
+
+    HealthContext& hc = health_context();
+    std::lock_guard<std::mutex> lock(hc.mu);
+    if (!hc.db) {
+        mirobody::platform::log_error("mirobody_health_recent: no database configured");
+        return nullptr;
+    }
+
+    if (count <= 0)   count = 20;
+    if (count > 200)  count = 200;
+
+    try {
+        mirobody::fhir::FhirStore store(*hc.db);
+        std::int64_t total = 0;
+        const std::vector<mirobody::fhir::StoredResource> hits = store.search(
+            static_cast<std::int64_t>(subject), "Observation", std::string(), count, 0, total);
+
+        std::vector<HealthItem> items_out;
+        items_out.reserve(hits.size());
+
+        for (std::size_t i = 0; i < hits.size(); ++i) {
+            rapidjson::Document res;
+            if (res.Parse(hits[i].content.c_str(), hits[i].content.size()).HasParseError() ||
+                !res.IsObject()) {
+                continue;   // unreadable row: skip rather than fail the listing
+            }
+
+            // code.coding[0] -- the LOINC code + display we wrote on ingest.
+            std::string code, display;
+            rapidjson::Value::ConstMemberIterator c = res.FindMember("code");
+            if (c != res.MemberEnd() && c->value.IsObject()) {
+                rapidjson::Value::ConstMemberIterator cg = c->value.FindMember("coding");
+                if (cg != c->value.MemberEnd() && cg->value.IsArray() && cg->value.Size() > 0 &&
+                    cg->value[0].IsObject()) {
+                    code    = json_str(cg->value[0], "code");
+                    display = json_str(cg->value[0], "display");
+                }
+            }
+
+            // valueQuantity, or the panel's first component (blood pressure).
+            double value = 0.0;
+            bool has_value = false;
+            std::string unit;
+            rapidjson::Value::ConstMemberIterator vq = res.FindMember("valueQuantity");
+            if (vq == res.MemberEnd() || !vq->value.IsObject()) {
+                rapidjson::Value::ConstMemberIterator comp = res.FindMember("component");
+                if (comp != res.MemberEnd() && comp->value.IsArray() && comp->value.Size() > 0 &&
+                    comp->value[0].IsObject()) {
+                    vq = comp->value[0].FindMember("valueQuantity");
+                    if (vq == comp->value[0].MemberEnd()) vq = res.MemberEnd();
+                }
+            }
+            if (vq != res.MemberEnd() && vq->value.IsObject()) {
+                rapidjson::Value::ConstMemberIterator v = vq->value.FindMember("value");
+                if (v != vq->value.MemberEnd() && v->value.IsNumber()) {
+                    value = v->value.GetDouble();
+                    has_value = true;
+                }
+                unit = json_str(vq->value, "code");
+                if (unit.empty()) unit = json_str(vq->value, "unit");
+            }
+
+            // An instant sample carries effectiveDateTime; an interval one
+            // (a day's steps, a night's sleep) carries effectivePeriod.start.
+            std::string when = json_str(res, "effectiveDateTime");
+            if (when.empty()) {
+                rapidjson::Value::ConstMemberIterator p = res.FindMember("effectivePeriod");
+                if (p != res.MemberEnd() && p->value.IsObject()) when = json_str(p->value, "start");
+            }
+
+            // method.coding[0].display -- the ingesting source, set on ingest.
+            std::string source;
+            rapidjson::Value::ConstMemberIterator m = res.FindMember("method");
+            if (m != res.MemberEnd() && m->value.IsObject()) {
+                rapidjson::Value::ConstMemberIterator mg = m->value.FindMember("coding");
+                if (mg != m->value.MemberEnd() && mg->value.IsArray() && mg->value.Size() > 0 &&
+                    mg->value[0].IsObject()) {
+                    source = json_str(mg->value[0], "display");
+                }
+            }
+
+            HealthItem item;
+            item.code      = code;
+            item.display   = display;
+            item.value     = value;
+            item.has_value = has_value;
+            item.unit      = unit;
+            item.when      = when;
+            item.source    = source;
+            items_out.push_back(item);
+        }
+        std::sort(items_out.begin(), items_out.end(), later_reading);
+
+        rapidjson::Document d;
+        d.SetObject();
+        rapidjson::Document::AllocatorType& a = d.GetAllocator();
+        rapidjson::Value items(rapidjson::kArrayType);
+        for (std::size_t i = 0; i < items_out.size(); ++i) {
+            const HealthItem& it = items_out[i];
+            rapidjson::Value item(rapidjson::kObjectType);
+            json_add(item, "code", it.code, a);
+            json_add(item, "display", it.display, a);
+            if (it.has_value) item.AddMember("value", it.value, a);
+            json_add(item, "unit", it.unit, a);
+            json_add(item, "time", it.when, a);
+            json_add(item, "source", it.source, a);
+            items.PushBack(item, a);
+        }
+
+        d.AddMember("total", static_cast<int64_t>(total), a);
+        d.AddMember("items", items, a);
+
+        rapidjson::StringBuffer buf;
+        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+        d.Accept(w);
+        result.assign(buf.GetString(), buf.GetSize());
+        return result.c_str();
+    } catch (const std::exception& e) {
+        mirobody::platform::log_error("mirobody_health_recent: %s", e.what());
         return nullptr;
     }
 }
