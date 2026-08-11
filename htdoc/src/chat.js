@@ -25,6 +25,9 @@ const renderInto   = widgets.renderInto;
 const streamRender = widgets.streamRender;
 const button       = widgets.button;
 
+const charts = require("./charts");
+const slash  = require("./slash");
+
 const icons = require("./icons");
 const CARET_SVG  = icons.CARET_SVG;
 const DOLLAR_SVG = icons.DOLLAR_SVG;
@@ -258,6 +261,27 @@ function toggleIncognito() {
         state.readOnly = !!saved.readOnly;
         state.incognitoSaved = null;
         state.incognito = false;
+    }
+    app.render();
+}
+
+//----------------------------------------------------------------------------
+
+// "New chat": drop the current thread for a fresh one, and forget the local
+// mirror so a reload doesn't resurrect it. Skipped mid-stream so an in-flight
+// reply isn't torn down; leaves incognito as it was (that's the toggle's job).
+//
+// Lives here, beside toggleIncognito, because the drawer's row and the `/new`
+// command must be the same action -- a command that had drifted from its button
+// would be worse than no command at all.
+function newChat() {
+    if (state.streaming) { return; }
+    state.messages = [];
+    state.currentConversationId = "";
+    state.readOnly = false;
+    if (!state.incognito) {
+        db.saveMessages([]);
+        db.saveConversationId("");
     }
     app.render();
 }
@@ -551,6 +575,16 @@ function buildChat() {
         return bubble;
     };
 
+    // An assistant turn carries no top margin of its own: the user bubble above it
+    // brings the 32px that separates one exchange from the next. A reply with no
+    // user turn above it -- the guide, whose `/help` was a control and was never
+    // echoed -- would otherwise start hard against the footer of whatever was
+    // answered last. Same 32px, so the thread's rhythm doesn't change.
+    function spaceAbove(bubble) {
+        ui.setStyle(bubble.parentNode, { marginTop: "32px" });
+        return bubble;
+    };
+
     // The "waiting for the model" indicator: three pulsing dots that stand in the
     // assistant bubble from the moment a turn is sent until its first token
     // arrives. The send button turns into a spinner at the same moment, but that
@@ -731,7 +765,11 @@ function buildChat() {
     var i;
     for (i = 0; i < state.messages.length; i ++) {
         var hist = state.messages[i];
-        appendMessage(hist.role, hist.content, hist.ts);
+        var histBubble = appendMessage(hist.role, hist.content, hist.ts);
+        // A `local` message (the guide) had no user turn to space it away from
+        // the reply above -- see spaceAbove. This loop runs on every re-render,
+        // so the gap has to be restored here too, not only where it is created.
+        if (hist.local) { spaceAbove(histBubble); }
         // Rebuild the reply footer (stats + copy) from what was persisted, so a
         // restored answer keeps its stats icon. Messages saved before cost/provider
         // were added have neither -> no footer.
@@ -1194,6 +1232,70 @@ function buildChat() {
         controls.appendChild(send);
     }
 
+    //----------------------------------------------------
+    // The slash-command palette, above the composer.
+    //
+    // It is the discovery mechanism -- nobody is expected to know these words in
+    // advance -- so it opens on a lone "/" and narrows by prefix as the draft
+    // grows (slash.suggest). Clicking a row runs the command straight away: every
+    // one of them is also a control in the drawer, so there is nothing here to
+    // compose or edit first. Escape dismisses it without touching the draft.
+
+    var palette = ui.dom("div", {
+        display       : "none",
+        flexDirection : "column",
+        width         : "100%",
+        maxWidth      : THREAD_MAX,
+        marginInline  : "auto",
+        marginBottom  : "8px",
+        padding       : "4px 0",
+        border        : "1px solid " + color.outlineVar,
+        borderRadius  : "16px",
+        background    : color.surfaceLow,
+        boxSizing     : "border-box"
+    });
+    var paletteHidden = false;   // Escape closed it; the next keystroke reopens
+
+    function paletteRow(spec) {
+        var row = ui.dom("div", {
+            display    : "flex",
+            alignItems : "center",
+            gap        : "10px",
+            padding    : "10px 14px",
+            cursor     : "pointer",
+            minWidth   : "0"
+        });
+        row.appendChild(ui.setText(ui.dom("span", {
+            flex     : "0 0 auto",
+            fontSize : "0.95rem",
+            color    : color.onSurface
+        }), spec.name));
+        row.appendChild(ui.setText(ui.dom("span", {
+            minWidth     : "0",
+            fontSize     : "0.8rem",
+            color        : color.onSurfaceVar,
+            whiteSpace   : "nowrap",
+            overflow     : "hidden",
+            textOverflow : "ellipsis"
+        }), t(spec.desc)));
+        row.addEventListener("mouseenter", function () { row.style.background = color.overlay; });
+        row.addEventListener("mouseleave", function () { row.style.background = "transparent"; });
+        // mousedown, not click: click lands after the textarea has already lost
+        // focus, and a command should leave the cursor where the user left it.
+        row.addEventListener("mousedown", function (evt) {
+            evt.preventDefault();
+            runCommand(spec.name);
+        });
+        return row;
+    };
+
+    function syncPalette() {
+        var rows = paletteHidden ? [] : slash.suggest(input.value);
+        ui.clear(palette);
+        for (var i = 0; i < rows.length; i ++) { palette.appendChild(paletteRow(rows[i])); }
+        palette.style.display = rows.length ? "flex" : "none";
+    };
+
     var bar = ui.dom("div", {
         display       : "flex",
         flexDirection : "column",
@@ -1255,15 +1357,58 @@ function buildChat() {
 
     send.setAttribute("type", "submit");
     form.appendChild(previews);
+    form.appendChild(palette);
     form.appendChild(bar);   // narrow "currently for" is in the top bar; wide is inline in the bar
     form.appendChild(disclaimer);
     form.appendChild(fileInput);
 
     //----------------------------------------------------
 
+    // A message the composer answered by itself: drawn in the thread, never sent
+    // to a model and never saved (db.saveMessages drops it; the on-device
+    // transcript below skips it). Only the guide uses this today.
+    function appendLocal(text) {
+        if (state.messages.length === 0) {
+            ui.clear(thread);   // the empty-state hero gives way to the first message
+            if (state.incognito) { thread.appendChild(incognitoBanner()); }
+        }
+        var ts = Date.now();
+        state.messages.push({ role: "assistant", content: text, ts: ts, local: true });
+        spaceAbove(appendMessage("assistant", text, ts));
+    };
+
+    // Run a slash command. Each one does exactly what its control in the drawer
+    // does -- /new and /incognito call the very same functions those rows call.
+    // The typed command itself is never echoed as a user turn: it was a control,
+    // not something the user said.
+    function runCommand(name) {
+        input.value = "";
+        input.style.height = "auto";
+        paletteHidden = false;
+        syncPalette();
+        if (name === slash.NEW) {
+            newChat();          // re-renders the whole view
+        } else if (name === slash.INCOGNITO) {
+            toggleIncognito();  // likewise
+        } else if (name === slash.HELP) {
+            // The guide is fetched from the doc root the first time it is asked
+            // for. It ships with the build, so a failure here means the page is
+            // offline or the asset is missing -- say so rather than do nothing.
+            slash.help().then(function (guide) { appendLocal(guide || t("requestFailed")); });
+        }
+    };
+
     function submit() {
         var text = input.value.trim();
         if (!text || state.streaming) {
+            return;
+        }
+
+        // A command the composer answers by itself, matched on the whole draft
+        // (so "what does /help do" is still a question for the model).
+        var command = slash.match(text);
+        if (command) {
+            runCommand(command);
             return;
         }
 
@@ -1286,6 +1431,7 @@ function buildChat() {
         appendMessage("user", text, userTs);
         input.value = "";
         input.style.height = "auto";
+        syncPalette();        // an emptied draft is no longer a command being typed
         clearAttachments();   // chips are client-only; reset once the turn is sent
 
         state.streaming = true;
@@ -1533,31 +1679,10 @@ function buildChat() {
             };
             function appendChart(option) {
                 if (!option || typeof option !== "object" || !Object.keys(option).length) { return; }
-                var holder = ui.dom("div", { width: "100%", height: isMobile() ? "240px" : "320px" });
+                var holder = charts.holder();
                 visualsBlock().appendChild(holder);
                 followBottom();
-                ensureECharts().then(function (echarts) {
-                    if (!echarts) { return; }
-                    try {
-                        // Shared theme: the validated series palette plus the app's own
-                        // ink/hairline colors as chart chrome; mbPrepare() strips any
-                        // model-supplied colors so the theme actually applies (and adds
-                        // a legend when several series must be told apart). Guarded --
-                        // if chart-theme.js didn't load, fall back to stock ECharts.
-                        // Both mode + chrome are read at render time, so a chart picks
-                        // up the theme in effect when it arrives (older canvases keep
-                        // theirs until a re-render drops them, like a reload does).
-                        var theme = window.mbChartTheme ? window.mbChartTheme(config.isDarkTheme(), {
-                            ink: color.onSurface, inkDim: color.onSurfaceVar,
-                            axis: color.outline, grid: color.outlineVar,
-                            surface: "transparent"
-                        }) : null;
-                        var chart = echarts.init(holder, theme, { renderer: "canvas" });
-                        chart.setOption(window.mbPrepare ? window.mbPrepare(option) : option);
-                        window.addEventListener("resize", function () { chart.resize(); });
-                    } catch (e) { /* bad option: leave an empty holder rather than crash */ }
-                    followBottom();
-                }, function () { /* echarts failed to load: leave the holder empty */ });
+                charts.draw(holder, option).then(followBottom);
             };
             function appendImage(url) {
                 if (!url) { return; }
@@ -1816,10 +1941,17 @@ function buildChat() {
             // It emits the same {type:"reply"} chunk strings, so the handlers above
             // are reused verbatim; completion/errors arrive on the same callbacks.
             if (isOnDeviceProvider(turnProvider)) {
+                // `local` messages (the built-in guide) are drawn but never sent:
+                // several KB of documentation the user already has on screen would
+                // otherwise be replayed as context on every later turn. The server
+                // lane needs no equivalent -- it keeps its own thread and is sent
+                // only this turn's question.
                 var history = [];
                 for (var hi = 0; hi < state.messages.length; hi ++) {
                     var hm = state.messages[hi];
-                    if (hm && hm.content) { history.push({ role: hm.role, content: hm.content }); }
+                    if (hm && hm.content && !hm.local) {
+                        history.push({ role: hm.role, content: hm.content });
+                    }
                 }
                 var odModel = modelFromProvider(turnProvider);
                 onDeviceBridge().isReady(odModel).then(function (ready) {
@@ -1861,6 +1993,15 @@ function buildChat() {
         submit();
     });
     input.addEventListener("keydown", function (evt) {
+        // Escape closes the palette and leaves the draft alone -- a user who typed
+        // "/" meaning to write a fraction should not have to delete it to get the
+        // list out of the way. The next keystroke brings it back.
+        if (evt.key === "Escape" && palette.style.display !== "none") {
+            evt.preventDefault();
+            paletteHidden = true;
+            syncPalette();
+            return;
+        }
         if (evt.key === "Enter" && !evt.shiftKey) {
             evt.preventDefault();
             submit();
@@ -1869,6 +2010,8 @@ function buildChat() {
     input.addEventListener("input", function () {
         input.style.height = "auto";
         input.style.height = Math.min(input.scrollHeight, 160) + "px";
+        paletteHidden = false;
+        syncPalette();
     });
 
     wrap.appendChild(log);
@@ -1884,31 +2027,6 @@ function buildChat() {
 // for streamed answer text, {error} for an error event, {upload} /
 // {transcript} for the upload-preprocess progress the server streams before the
 // answer, {} for everything else (tool steps, cost, the terminal "end").
-// ECharts is a doc-root static asset (static/echarts.min.js ~1 MB), loaded lazily
-// the first time a chart event arrives so users who never see a chart don't pay
-// for it up front. Mirrors the qrcode/tanka-signer lazy loads (see tanka.js).
-// chart-theme.js (the shared mirobody chart theme, another static/ copy) rides
-// along best-effort: if it fails to load, charts degrade to stock ECharts
-// instead of never appearing.
-var echartsPromise = null;
-function ensureECharts() {
-    if (echartsPromise) { return echartsPromise; }
-    function load(src, required) {
-        return new Promise(function (resolve, reject) {
-            var s = document.createElement("script");
-            s.src = net.appBase() + src;
-            s.onload = function () { resolve(); };
-            s.onerror = required ? reject : function () { resolve(); };
-            document.head.appendChild(s);
-        });
-    }
-    echartsPromise = window.echarts
-        ? Promise.resolve(window.echarts)
-        : Promise.all([load("/echarts.min.js", true), load("/chart-theme.js", false)])
-            .then(function () { return window.echarts; });
-    return echartsPromise;
-};
-
 function parseAgentChunk(chunk) {
     var json = null;
     try {
@@ -1977,3 +2095,4 @@ function parseAgentChunk(chunk) {
 
 exports.buildChat = buildChat;
 exports.toggleIncognito = toggleIncognito;
+exports.newChat = newChat;

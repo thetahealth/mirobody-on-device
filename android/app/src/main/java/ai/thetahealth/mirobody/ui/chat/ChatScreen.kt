@@ -7,10 +7,13 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -37,10 +40,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.AttachFile
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
@@ -87,13 +92,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -101,6 +113,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import ai.thetahealth.mirobody.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -117,6 +130,7 @@ import ai.thetahealth.mirobody.data.settings.StoredAccount
 import ai.thetahealth.mirobody.ui.DrawerDivider
 import ai.thetahealth.mirobody.ui.DrawerHeader
 import ai.thetahealth.mirobody.ui.DrawerRow
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import ai.thetahealth.mirobody.ui.LocalLayoutInfo
 import ai.thetahealth.mirobody.ui.circle.CareCircleDialog
@@ -155,6 +169,7 @@ fun ChatScreen(
     onAddAccount: () -> Unit,
 ) {
     val container = LocalAppContainer.current
+    val appContext = LocalContext.current.applicationContext
     val vm: ChatViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
@@ -166,6 +181,7 @@ fun ChatScreen(
                     container.chatHistoryStore,
                     container.modelManager,
                     container.mlKitTextService,
+                    { lang -> SlashCommand.help(appContext, lang) },
                 )
             }
         },
@@ -276,10 +292,29 @@ fun ChatScreen(
             vm.onProviderSelected(provider)
         }
     }
+    // `/probe`: the undocumented developer page. Opened from a one-shot request in the
+    // state rather than owned by it, so dismissing is the UI's business alone.
+    if (state.probeRequested) {
+        DebugProbeDialog(
+            models = container.modelManager,
+            onDismiss = vm::probeConsumed,
+        )
+    }
+
     if (showModelDialog) {
         OnDeviceModelDialog(
             statuses = state.onDeviceModels,
             imported = state.onDeviceImported,
+            // Choosing happens here too, not only in the composer's picker. This dialog
+            // is where a model is downloaded, and "downloaded it, now go find it in
+            // another menu to use it" is a step with nothing behind it.
+            // ProviderInfo.forModel rather than a lookup in state.providers: a model that
+            // JUST finished downloading may not be in that list yet, and the two agree by
+            // construction — rebuildProviders keys off exactly this.
+            onSelect = { spec ->
+                vm.onProviderSelected(ProviderInfo.forModel(spec))
+                showModelDialog = false
+            },
             hasStorageAccess = vm::hasStorageAccess,
             onDownload = vm::downloadOnDeviceModel,
             onDelete = vm::deleteOnDeviceModel,
@@ -393,6 +428,14 @@ fun ChatScreen(
                     ) {
                         // (The subject picker used to sit here; it lives in the top bar's
                         // centre slot now -- see the app bar above.)
+                        // The command palette, above the pill: typing a lone "/" opens it.
+                        SlashPalette(
+                            suggestions = SlashCommand.suggest(state.input),
+                            onPick = { name ->
+                                vm.onInputChange(name)
+                                vm.send()
+                            },
+                        )
                         // Staged attachments, removable until the turn is sent.
                         if (state.attachments.isNotEmpty()) {
                             AttachmentChips(
@@ -400,15 +443,25 @@ fun ChatScreen(
                                 onRemove = vm::removeAttachment,
                             )
                         }
-                        val canSend = !state.sending && state.selected != null &&
+                        // A slash command is not a turn: it needs no provider, and on a
+                        // fresh install there may not be one yet — /help has to work
+                        // before anything is downloaded or the server is reachable.
+                        val isCommand = SlashCommand.match(state.input).isNotEmpty()
+                        val canSend = !state.sending &&
+                            (isCommand || state.selected != null) &&
                             (state.input.isNotBlank() || state.attachments.isNotEmpty())
                         val doSend: () -> Unit = {
-                            // The "manage" entry isn't a chat provider — open the manager
-                            // instead of sending. Downloaded models send normally.
-                            if (state.selected?.isManageEntry == true) {
-                                showModelDialog = true
-                            } else {
-                                vm.send()
+                            when {
+                                // Checked FIRST, before the manage-entry shortcut below.
+                                // With no model downloaded the picker sits on "manage
+                                // on-device AI", and that branch used to swallow every
+                                // command — typing /probe opened the download page.
+                                isCommand -> vm.send()
+                                // The "manage" entry isn't a chat provider — open the
+                                // manager instead of sending. Downloaded models send
+                                // normally.
+                                state.selected?.isManageEntry == true -> showModelDialog = true
+                                else -> vm.send()
                             }
                         }
                         // One rounded pill: the input on top, a control row (attach ·
@@ -425,6 +478,10 @@ fun ChatScreen(
                                     value = state.input,
                                     onValueChange = vm::onInputChange,
                                     enabled = !state.sending,
+                                    // Same guard the send button uses, so the two
+                                    // affordances cannot disagree about whether this
+                                    // draft can go.
+                                    onSend = if (canSend) doSend else null,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Row(
@@ -465,6 +522,18 @@ fun ChatScreen(
                                 }
                             }
                         }
+                        // "AI can be wrong", under the composer like every other chat
+                        // client (Harmony shows the same string). Inside the composer's
+                        // own column so it tracks the pill's width and padding, and so
+                        // anything that later hides the composer takes the caption with
+                        // it — there is nothing to double-check in a conversation you
+                        // cannot add to.
+                        AiDisclaimer(
+                            text = stringResource(R.string.chat_ai_disclaimer),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                        )
                     }
                 }
             }
@@ -607,6 +676,9 @@ private fun ChatInputField(
     value: String,
     onValueChange: (String) -> Unit,
     enabled: Boolean,
+    // Enter sends, as on HarmonyOS (TextInput + onSubmit there). Null when there is
+    // nothing to send, which leaves the key inert rather than firing an ignored action.
+    onSend: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val hint = stringResource(R.string.chat_message_hint)
@@ -623,7 +695,130 @@ private fun ChatInputField(
             maxLines = 6,
             textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+            // ImeAction.Send turns the keyboard's return key into a send key, so it no
+            // longer inserts a newline — the same trade HarmonyOS makes. A multi-line
+            // draft is still possible by pasting; maxLines keeps it readable up to six.
+            //
+            // CONSTANT, never `if (onSend != null) Send else Default`. Changing
+            // keyboardOptions makes Compose restart the input connection, and `onSend`
+            // is null exactly until the draft is non-empty — so the flip landed on the
+            // FIRST keystroke and tore down the IME's composing session mid-word. On a
+            // Latin keyboard that is invisible; typing Chinese, the pinyin being composed
+            // got committed as the raw letters instead of reaching the candidate bar.
+            //
+            // Whether there is anything to send belongs in the action, not the options:
+            // Send on an empty draft simply does nothing, which is what the greyed-out
+            // send button next to it already does.
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            // The keyboard deliberately stays up: the next message usually follows.
+            keyboardActions = KeyboardActions(onSend = { onSend?.invoke() }),
+        )
+    }
+}
+
+/**
+ * The command palette, shown above the composer while a command is being typed.
+ *
+ * It is the discovery mechanism — nobody is expected to know these words in advance —
+ * so it opens on a lone `/` and narrows by prefix. Tapping a row runs the command
+ * immediately: every one of them is also a control in the drawer, so there is nothing
+ * here to compose or edit first.
+ */
+@Composable
+private fun SlashPalette(suggestions: List<SlashSpec>, onPick: (String) -> Unit) {
+    if (suggestions.isEmpty()) return
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp, MaterialTheme.colorScheme.outlineVariant,
+        ),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            suggestions.forEach { spec ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onPick(spec.name) }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        text = spec.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(spec.desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 10.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The "AI can be wrong" caption, shrunk to whatever it takes to stay on ONE line.
+ *
+ * One line is the requirement, not legibility: this is a caption nobody reads twice, and
+ * a second line steals height from the conversation on every screen for the sake of a
+ * sentence the reader already knows. So the size is derived from the width actually
+ * available — which varies with the screen, the language (the German string is half again
+ * the English one) and the in-app font-size slider, none of which a fixed size can answer.
+ *
+ * [MIN_DISCLAIMER_SP] is the floor. Below it the text would be decorative rather than
+ * small, so a string that still does not fit is ellipsized instead of shrunk further —
+ * still exactly one line, which is what was asked for.
+ *
+ * Compose 1.7 has no `autoSize`; it arrived in foundation 1.8. Hence the measure loop,
+ * which is cheap (a bounded walk, memoized on text + width + density) and runs only when
+ * one of those three actually changes.
+ */
+private const val MIN_DISCLAIMER_SP = 6f
+
+@Composable
+private fun AiDisclaimer(text: String, modifier: Modifier = Modifier) {
+    val measurer = rememberTextMeasurer()
+    val base = MaterialTheme.typography.bodySmall
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier = modifier) {
+        val room = constraints.maxWidth
+        // The SAME style is measured and drawn. letterSpacing is part of the width, so
+        // fitting one style and rendering another would leave the answer wrong by
+        // however much the two differ.
+        val style = remember(text, room, density, base) {
+            val baseSp = base.fontSize.value
+            // Line height and tracking scale WITH the size, or a 6sp line would still
+            // reserve a 12sp line's height and the shrinking would buy nothing.
+            fun styleAt(sp: Float) = base.copy(
+                fontSize = sp.sp,
+                lineHeight = (sp * base.lineHeight.value / baseSp).sp,
+                letterSpacing = (sp * base.letterSpacing.value / baseSp).sp,
+            )
+            var sp = baseSp
+            while (sp > MIN_DISCLAIMER_SP) {
+                if (measurer.measure(AnnotatedString(text), styleAt(sp), softWrap = false)
+                        .size.width <= room
+                ) break
+                sp -= 0.5f
+            }
+            styleAt(sp.coerceAtLeast(MIN_DISCLAIMER_SP))
+        }
+        Text(
+            text = text,
+            style = style,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -851,14 +1046,29 @@ private fun ChatDrawer(
                             .padding(horizontal = 16.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // New chat borrows HarmonyOS's glyph (sys.symbol.plus_circle);
+                        // Material's bare `Add` was the near-miss to avoid, since a
+                        // plus with no circle reads as "add an item to this list".
                         DrawerActionButton(
                             label = stringResource(R.string.chat_new_chat),
+                            icon = rememberVectorPainter(Icons.Outlined.AddCircleOutline),
                             active = false,
                             onClick = onNewChat,
                             modifier = Modifier.weight(1f),
                         )
+                        // Incognito uses OUR ghost, not a Material stand-in: the pair
+                        // was ported from the web client's INCOGNITO_SVG /
+                        // INCOGNITO_OUTLINE_SVG for exactly this — solid when on,
+                        // hollow when off — and the outline half had never been wired
+                        // up. It also makes the toggle show the same mark as the state
+                        // it produces (EmptyState's hero, IncognitoBanner), which no
+                        // borrowed eye-with-a-slash would.
                         DrawerActionButton(
                             label = stringResource(R.string.chat_incognito_mode),
+                            icon = painterResource(
+                                if (incognito) R.drawable.ic_incognito
+                                else R.drawable.ic_incognito_outline
+                            ),
                             active = incognito,
                             onClick = onToggleIncognito,
                             modifier = Modifier.weight(1f),
@@ -1004,29 +1214,47 @@ private fun ChatDrawer(
 @Composable
 private fun DrawerActionButton(
     label: String,
+    icon: Painter,
     active: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
+    val shape = RoundedCornerShape(8.dp)
+    // Active is a FILLED pill, not just a tint — Harmony's rule, and it is not a
+    // stylistic one: "am I being recorded" has to be answerable at a glance, and a
+    // colour shift alone is easy to miss and invisible to anyone who cannot
+    // distinguish the two hues. A border-and-label recolour (what this was) is exactly
+    // the version that rule rejects.
+    val content = if (active) MaterialTheme.colorScheme.onPrimary
+                  else MaterialTheme.colorScheme.onSurface
+    Row(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(shape)
+            .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
             .border(
                 width = 1.dp,
                 color = if (active) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(8.dp),
+                shape = shape,
             )
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center,
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            painter = icon,
+            contentDescription = null,
+            tint = content,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(6.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-            color = if (active) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurface,
+            color = content,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -1038,7 +1266,7 @@ private fun SignOutConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.chat_sign_out_confirm_title)) },
+        title = { DialogTitleWithClose(stringResource(R.string.chat_sign_out_confirm_title), onDismiss) },
         text = { Text(stringResource(R.string.chat_sign_out_confirm_message)) },
         confirmButton = {
             TextButton(onClick = onConfirm) {
@@ -1177,13 +1405,21 @@ private fun PolishButton(
 
 /**
  * Manage the on-device models: explains the privacy trade-off, then lists the catalog
- * (Gemma, Qwen, …) with a per-model (resumable) download / progress / delete. A model
- * appears in the provider picker once it finishes downloading.
+ * with a per-model (resumable) download / progress / delete, plus whatever the user has
+ * imported.
+ *
+ * Also where a model is CHOSEN: tapping a downloaded model's name picks it and closes
+ * the dialog. It still appears in the composer's provider picker — that list is the one
+ * place every backend, server or local, is comparable — but making the user go back to
+ * it after downloading here was a step that existed only because the two screens were
+ * written separately.
  */
 @Composable
 private fun OnDeviceModelDialog(
     statuses: Map<String, OnDeviceModelStatus>,
     imported: List<OnDeviceModelSpec>,
+    /** Picks the model and closes this dialog; choosing one is the end of the errand. */
+    onSelect: (OnDeviceModelSpec) -> Unit,
     hasStorageAccess: () -> Boolean,
     onDownload: (OnDeviceModelSpec) -> Unit,
     onDelete: (OnDeviceModelSpec) -> Unit,
@@ -1227,7 +1463,7 @@ private fun OnDeviceModelDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
-        title = { Text(stringResource(R.string.chat_ondevice_title)) },
+        title = { DialogTitleWithClose(stringResource(R.string.chat_ondevice_title), onDismiss) },
         text = {
             Column {
                 Text(stringResource(R.string.chat_ondevice_desc))
@@ -1251,6 +1487,7 @@ private fun OnDeviceModelDialog(
                     OnDeviceModelRow(
                         spec = spec,
                         status = statuses[spec.id] ?: OnDeviceModelStatus.Absent,
+                        onSelect = { onSelect(spec) },
                         onDownload = { onDownload(spec) },
                         onDelete = { onDelete(spec) },
                     )
@@ -1272,15 +1509,25 @@ private fun OnDeviceModelDialog(
                         enabled = storageOk,
                     ) { Text(stringResource(R.string.chat_ondevice_import)) }
                 }
+                Text(
+                    stringResource(R.string.chat_ondevice_import_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
                 imported.forEach { spec ->
-                    ImportedModelRow(spec = spec, onDelete = { onDeleteImported(spec) })
+                    ImportedModelRow(
+                        spec = spec,
+                        onSelect = { onSelect(spec) },
+                        onDelete = { onDeleteImported(spec) },
+                    )
                     Spacer(Modifier.height(8.dp))
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_done)) }
-        },
+        // Managing models is done by the per-row buttons; "Done" only dismissed, which is
+        // what the title's ✕ is for.
+        confirmButton = {},
     )
 }
 
@@ -1288,10 +1535,12 @@ private fun OnDeviceModelDialog(
 @Composable
 private fun ImportedModelRow(
     spec: OnDeviceModelSpec,
+    onSelect: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(modifier = Modifier.weight(1f)) {
+        // An import is a file the user already has, so it is always ready to pick.
+        Column(modifier = Modifier.weight(1f).clickable(onClick = onSelect)) {
             Text(spec.displayName, style = MaterialTheme.typography.titleSmall)
             Text(
                 "~" + formatBytes(spec.approxBytes) + " · " + spec.fileName,
@@ -1315,12 +1564,19 @@ private fun ImportedModelRow(
 private fun OnDeviceModelRow(
     spec: OnDeviceModelSpec,
     status: OnDeviceModelStatus,
+    onSelect: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Column {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    // The name IS the affordance. Inert until the file is there, so a
+                    // tap on a model still downloading cannot select something absent.
+                    .clickable(enabled = status is OnDeviceModelStatus.Ready, onClick = onSelect),
+            ) {
                 Text(spec.displayName, style = MaterialTheme.typography.titleSmall)
                 Text(
                     "~" + formatBytes(spec.approxBytes) + " · " + spec.recommendedRam + " RAM",
@@ -1337,6 +1593,10 @@ private fun OnDeviceModelRow(
                 }
                 is OnDeviceModelStatus.Downloading -> Text(
                     if (status.totalBytes > 0) "${(status.fraction * 100).toInt()}%" else "…",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                is OnDeviceModelStatus.Verifying -> Text(
+                    "${(status.fraction * 100).toInt()}%",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 is OnDeviceModelStatus.Failed -> TextButton(onClick = onDownload) {
@@ -1362,6 +1622,20 @@ private fun OnDeviceModelRow(
                 } else {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 }
+            }
+            // Checking a file already on disk instead of re-downloading it. Shown with a
+            // determinate bar and its own label so the wait reads as work, not a stall.
+            is OnDeviceModelStatus.Verifying -> {
+                LinearProgressIndicator(
+                    progress = { status.fraction },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.chat_ondevice_verifying),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             is OnDeviceModelStatus.Failed -> Text(
                 status.message,
@@ -1396,7 +1670,7 @@ private fun MessageBubble(msg: ChatMessage) {
     val isUser = msg.role == Role.User
     val bubbleMaxWidth = LocalLayoutInfo.current.bubbleMaxWidth
     var showStats by remember(msg.id) { mutableStateOf(false) }
-    val clipboard = LocalClipboardManager.current
+    val footerCopy = rememberCopyAction()
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
@@ -1472,7 +1746,9 @@ private fun MessageBubble(msg: ChatMessage) {
                         }
                         if (showCopyIcon) {
                             IconButton(
-                                onClick = { clipboard.setText(AnnotatedString(msg.text)) },
+                                // No haptic: a button that looks pressed has already
+                                // acknowledged the tap. See CopyAction.
+                                onClick = { footerCopy.copy(msg.text, haptic = false) },
                                 modifier = Modifier.size(28.dp),
                             ) {
                                 Icon(
@@ -1505,7 +1781,7 @@ private fun CostStatsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.chat_stats_title)) },
+        title = { DialogTitleWithClose(stringResource(R.string.chat_stats_title), onDismiss) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatsRow(stringResource(R.string.chat_stats_model), stats.model)
@@ -1518,11 +1794,10 @@ private fun CostStatsDialog(
                 StatsRow(stringResource(R.string.chat_stats_total_cost), formatCost(stats.totalCost))
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.common_close))
-            }
-        },
+        // No bottom button: leaving is the only thing this dialog does, and the ✕ in the
+        // title already is that. A "Close" button beside it would be the same action
+        // twice.
+        confirmButton = {},
     )
 }
 
@@ -1548,11 +1823,39 @@ private fun StatsRow(label: String, value: String) {
 /** Format USD cost with 4 fractional digits — covers typical LLM call ranges without noise. */
 private fun formatCost(cost: Double): String = "$" + "%.4f".format(cost)
 
+// combinedClickable is still @ExperimentalFoundationApi in Compose 1.7 (the BOM this
+// project pins); it is stable in 1.8. Nothing here depends on the unstable part —
+// only onLongClick — so the opt-in is scoped to this one composable.
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun BubbleContent(msg: ChatMessage, horizontalPadding: Dp = 14.dp) {
     val context = LocalContext.current
     var viewerUrl by remember { mutableStateOf<String?>(null) }
-    Column(modifier = Modifier.padding(horizontal = horizontalPadding, vertical = 10.dp)) {
+    val copy = rememberCopyAction()
+    val haptics = LocalHapticFeedback.current
+    // Long-press to copy, as on HarmonyOS. Two paths, because the reply body is an
+    // AndroidView that owns its own touches: the TextView handles the press over the
+    // text itself (see MarkdownText.onLongClick), and this covers everything else in the
+    // bubble — the padding, an attachment chip, a figure. Compose does NOT buzz for a
+    // long press on its own, hence the explicit haptic here and none on the TextView
+    // path, where the View framework has already done it.
+    val longPressCopy: () -> Unit = {
+        copy.copy(msg.text, haptic = true) {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+    }
+    Column(
+        modifier = Modifier
+            .combinedClickable(
+                // No ripple and no click action: the press is the whole gesture, and a
+                // tappable-looking reply would be a lie — nothing happens on tap.
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {},
+                onLongClick = if (msg.text.isEmpty()) null else longPressCopy,
+            )
+            .padding(horizontal = horizontalPadding, vertical = 10.dp),
+    ) {
         msg.attachmentNames.forEach { name ->
             // Uses LocalContentColor so it stays legible on the navy user bubble.
             Row(
@@ -1581,11 +1884,52 @@ private fun BubbleContent(msg: ChatMessage, horizontalPadding: Dp = 14.dp) {
             )
         }
         if (msg.text.isNotEmpty()) {
-            MarkdownText(
-                text = msg.text,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = if (msg.toolCalls.isNotEmpty()) Modifier.padding(top = 8.dp) else Modifier,
-            )
+            // Split first: an SVG or chart fence needs a different renderer than the
+            // prose around it, and the figure belongs BETWEEN the paragraph that
+            // introduces it and the one that reads it — not appended after both.
+            val segments = remember(msg.text) { splitMessage(msg.text) }
+            segments.forEachIndexed { index, segment ->
+                val top = if (index > 0 || msg.toolCalls.isNotEmpty()) 8.dp else 0.dp
+                val segmentModifier = Modifier.padding(top = top)
+                when (segment) {
+                    is MessageSegment.Markdown -> MarkdownText(
+                        text = segment.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = segmentModifier,
+                        // Copies the WHOLE message, not this segment: what the reader
+                        // pressed on is a reply, and the split into text/figure/chart is
+                        // ours, not something they can see.
+                        onLongClick = { copy.copy(msg.text, haptic = false) },
+                    )
+                    is MessageSegment.Svg -> SvgFigure(
+                        source = segment.source,
+                        modifier = segmentModifier,
+                    )
+                    is MessageSegment.Chart -> EChartsView(
+                        optionJson = segment.optionJson,
+                        modifier = segmentModifier,
+                    )
+                }
+            }
+        } else if (msg.loadingModel) {
+            // NOT the typing dots. Dots say "a model is writing", and during a load
+            // nothing is writing — it is several seconds of reading a few GB off disk,
+            // and a caption that names it is the difference between waiting and
+            // wondering whether the app is stuck. (It could only ever animate once the
+            // load stopped blocking the main thread; see LiteRtLlmEngine's flowOn.)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(14.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.chat_loading_model),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
         } else if (msg.streaming && msg.error == null && msg.toolCalls.isEmpty() &&
             msg.imageUrls.isEmpty() && msg.charts.isEmpty()
         ) {
@@ -1838,15 +2182,24 @@ private fun DrawerActionButtonsPreview() {
             ) {
                 DrawerActionButton(
                     label = "New chat",
+                    icon = rememberVectorPainter(Icons.Outlined.AddCircleOutline),
                     active = false,
                     onClick = {},
                     modifier = Modifier.weight(1f),
                 )
-                // Incognito on: navy border + navy label, so "am I being recorded"
-                // is answerable at a glance.
+                // Incognito on: a filled navy pill and the SOLID ghost, so "am I being
+                // recorded" is answerable at a glance rather than by comparing hues.
                 DrawerActionButton(
                     label = "Incognito",
+                    icon = painterResource(R.drawable.ic_incognito),
                     active = true,
+                    onClick = {},
+                    modifier = Modifier.weight(1f),
+                )
+                DrawerActionButton(
+                    label = "Incognito",
+                    icon = painterResource(R.drawable.ic_incognito_outline),
+                    active = false,
                     onClick = {},
                     modifier = Modifier.weight(1f),
                 )

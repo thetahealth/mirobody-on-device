@@ -40,6 +40,7 @@
 "verify_resending" = "再送信中…";
 "verify_resend_code" = "コードを再送信";
 
+"chat_ai_disclaimer" = "Mirobody は AI であり、誤ることがあります。回答は確認してください。";
 "chat_message_hint" = "何でも質問してください";
 "chat_history_cd" = "履歴";
 "chat_select_model" = "モデルを選択";

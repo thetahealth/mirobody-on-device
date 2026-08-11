@@ -40,6 +40,7 @@
 "verify_resending" = "Renvoi…";
 "verify_resend_code" = "Renvoyer le code";
 
+"chat_ai_disclaimer" = "Mirobody est une IA et peut se tromper. Veuillez vérifier les réponses.";
 "chat_message_hint" = "Posez n'importe quelle question";
 "chat_history_cd" = "Historique";
 "chat_select_model" = "Choisir un modèle";

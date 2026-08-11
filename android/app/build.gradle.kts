@@ -79,7 +79,23 @@ android {
     }
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            // TRUE, i.e. compressed in the APK and unpacked by the installer, which is
+            // the opposite of the modern default and of what the 16 KB page work wanted.
+            //
+            // llama.cpp is why. Its CPU kernels ship as several libggml-cpu-<arch>.so
+            // modules and ggml picks one at startup by scanning a directory and dlopening
+            // what it finds. With uncompressed packaging there is no directory to scan:
+            // the libraries stay inside the APK, nativeLibraryDir holds nothing, and the
+            // scan comes back empty. Extracting them ourselves is not a way out either --
+            // W^X blocks dlopen from an app-writable path on API 29+.
+            //
+            // The 16 KB requirement is unaffected: it is about ELF segment alignment,
+            // which android/build-llama.cmd and the root CMakeLists set with
+            // -Wl,-z,max-page-size=16384. Uncompressed packaging is one way to satisfy
+            // the loader, not the requirement itself. The cost is disk -- the libraries
+            // exist twice, in the APK and unpacked -- and that is the price of one APK
+            // that runs fast kernels on new phones without SIGILLing on old ones.
+            useLegacyPackaging = true
         }
     }
 }
@@ -109,14 +125,60 @@ val androidAbi = (project.findProperty("mirobody.abi") as String?)
 val nativeOptIn = (project.findProperty("mirobody.native") as String?)?.toBoolean() ?: true
 val nativeServerEnabled = nativeOptIn && rootProject.file("prebuilt/$androidAbi").exists()
 
-// Where the app points when the user has not chosen a backend. An embedded build serves on
-// 127.0.0.1:8080 in-process, so localhost is right; a client build has nothing listening there
-// and would boot onto a dead address, so it defaults to the public test server instead.
-// -Pmirobody.baseUrl=... overrides either (e.g. http://10.0.2.2:18080 for a host-run server
-// reached from an emulator).
+// The on-device LLM engine (llama.cpp + GGUF), built into libmirobody.so when the SDK
+// android/build-llama.cmd produces is present. Gated on the directory the same way the
+// server is gated on prebuilt/<abi>: drop it in and the engine is on, delete it and the
+// app still builds -- src/llm/local.cpp compiles a stub whose available() is false.
+//
+// This is a SECOND on-device runtime, not a replacement: LiteRT-LM (.litertlm, a Gradle
+// dependency) stays, and a model's spec says which engine runs it. The two answer very
+// different questions -- see docs/on-device-llm.md.
+val llamaSdkDir = rootProject.file("prebuilt/llama-sdk/$androidAbi")
+val llamaEnabled = nativeServerEnabled && llamaSdkDir.resolve("include/llama.h").exists()
+
+// The SDK is shared objects, so they have to be packaged as well as linked against --
+// libmirobody.so carries a DT_NEEDED on libllama.so, and the libggml-cpu-* modules are
+// dlopened by name at startup and referenced by nothing at link time at all.
+//
+// A staging copy rather than a srcDir straight onto the SDK, because AGP wants
+// <root>/<abi>/*.so and the SDK is <abi>/lib/*.so. Building the layout AGP expects is a
+// two-line Copy; reshaping the SDK to suit one consumer would make it worse for the
+// others (harmony/, qt/) that just want include/ and lib/.
+// A plain File, resolved now: the Android source-set API rejects a lazy Provider
+// ("You cannot add Provider instances to the Android SourceSet API"), so the directory
+// has to be nameable at configuration time. The Copy task below still fills it lazily.
+val llamaJniStage = layout.buildDirectory.dir("llama-jni").get().asFile
+// Everything the task body touches is resolved to a plain File or String out here. A
+// lambda that reads a script-level val (`onlyIf { llamaEnabled }`, a nested `from { }`)
+// captures the build script itself, which the configuration cache refuses to serialize.
+val llamaLibDir = llamaSdkDir.resolve("lib")
+val llamaJniAbiDir = llamaJniStage.resolve(androidAbi)
+val stageLlamaJniLibs = tasks.register<Copy>("stageLlamaJniLibs") {
+    // No guard on llamaEnabled: in a client build llamaLibDir simply does not exist and
+    // Copy stages nothing, which is the same outcome with one less thing to keep in sync.
+    from(llamaLibDir)
+    include("*.so")
+    into(llamaJniAbiDir)
+}
+android {
+    sourceSets["main"].jniLibs.srcDir(llamaJniStage)
+}
+tasks.named("preBuild") { dependsOn(stageLlamaJniLibs) }
+
+// Where the app points when the user has not chosen a backend: the public test server,
+// embedded build or not.
+//
+// An embedded build does serve on 127.0.0.1:8080 in-process, and defaulting there was the
+// tidy answer — it is the server this very APK is carrying. But it starts EMPTY. A fresh
+// install has no account on it and no way to make one, so the first thing a new user meets
+// is a sign-in screen nothing can get them past. Reaching the in-process server is a
+// two-tap change in Settings → Backend; an account that does not exist is not.
+//
+// -Pmirobody.baseUrl=... still overrides (e.g. http://10.0.2.2:18080 for a server running
+// on the emulator's host).
 val defaultBaseUrl = (project.findProperty("mirobody.baseUrl") as String?)
     ?.takeIf { it.isNotBlank() }
-    ?: if (nativeServerEnabled) "http://localhost:8080" else "https://test.mirobody.ai"
+    ?: "https://test.mirobody.ai"
 
 // No companion "is this an embedded build" flag: MainActivity already gates on
 // NativeBridge.available, which reports whether the .so actually loaded rather than whether
@@ -149,6 +211,16 @@ if (nativeServerEnabled) {
                         "-DCMAKE_FIND_ROOT_PATH=${rootProject.projectDir}/prebuilt/$androidAbi",
                         "-DCMAKE_PREFIX_PATH=${rootProject.projectDir}/prebuilt/$androidAbi",
                     )
+                    if (llamaEnabled) {
+                        // Absolute, and NOT via CMAKE_PREFIX_PATH: the NDK toolchain sets
+                        // CMAKE_FIND_ROOT_PATH_MODE_*=ONLY, and local.cpp's find_library
+                        // for the llama/ggml archives passes NO_CMAKE_FIND_ROOT_PATH to
+                        // escape that -- so it wants a real path, not a prefix to search.
+                        arguments += listOf(
+                            "-DMIROBODY_ONDEVICE_LLM=ON",
+                            "-DLLAMA_CPP_DIR=${llamaSdkDir.invariantSeparatorsPath}",
+                        )
+                    }
                     cppFlags += "-std=c++17"
                 }
             }

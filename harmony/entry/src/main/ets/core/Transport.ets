@@ -231,6 +231,10 @@ export async function streamChat(
 
   const wire: WireMessage[] = [];
   for (const m of messages) {
+    // A slash command's answer is the app talking, not a turn: display only.
+    if (m.local === true) {
+      continue;
+    }
     wire.push({ role: m.role, content: m.content });
   }
   const body: ChatCompletionBody = { model: model, messages: wire, stream: true };

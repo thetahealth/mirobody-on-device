@@ -336,7 +336,7 @@ wrong for your machine.
 | `QT_PREFIX` | Qt desktop | one specific Qt kit; skips the scan | the scan's newest hit |
 | `ANDROID_HOME` | Android | Android SDK root | `%LOCALAPPDATA%\Android\Sdk` |
 | `NDK_HOME` / `ANDROID_NDK_HOME` | Android | NDK for cross-compiling the deps (`.cmd` / `.sh` respectively) | the pinned NDK under `$ANDROID_HOME\ndk`, else the newest installed there |
-| `MIROBODY_NDK_PATH` | Android | space-free NDK mirror for Gradle | the mirror `build-app.cmd` makes |
+| `MIROBODY_NDK_PATH` | Android | space-free NDK mirror for Gradle | the mirror `build-app.cmd` makes (Windows only; `build-app.sh` passes `ANDROID_NDK_HOME` straight through) |
 | `GRADLE_BIN` | Android | `gradle` launcher (the one on PATH is usually too old) | the pinned Gradle under `%USERPROFILE%\.gradle\` |
 | `DEVECO_HOME` | HarmonyOS | DevEco Studio install root | `%ProgramFiles%\Huawei\DevEco Studio` |
 | `OHOS_SDK_ROOT` | HarmonyOS | the SDK dir *containing* `native\`; skips the DevEco probe | derived from `DEVECO_HOME` |
@@ -346,7 +346,7 @@ wrong for your machine.
 | `GLSLC` | Qt `vulkan` backend | `glslc.exe` | `%VULKAN_SDK%\Bin`, else newest under `VK_ROOT` |
 | `VK_ROOT` | Qt `vulkan` backend | root holding versioned Vulkan SDK installs | `%SystemDrive%\VulkanSDK` |
 | `MIROBODY_REF` | terminology | raw reference-data root for `indicator build-lexicon` / `build-units` | **none** - pass `--ref`, or the command exits 2 |
-| `REF_ROOT` | fine-tuning | the same root, for `fine-tuning/units/gen.py` | **none** - pass `--ref`, or the script exits |
+| `REF_ROOT` | fine-tuning | the same root, for `fine-tuning/tool_gen.py` and `tool_coverage.py` | **none** - pass `--ref`, or the script exits |
 | `LF_HOME` | fine-tuning | LlamaFactory checkout | `LlamaFactory` beside the repo |
 | `LLAMA_BIN` | fine-tuning | dir holding `llama-quantize` | searched: a downloaded release beside the repo, then a build tree under `LLAMA_SRC`, then PATH |
 | `SAVE_DIR` | fine-tuning | trainer `output_dir` | `<LF_HOME>\saves\...` |
@@ -360,7 +360,7 @@ Non-path knobs live where they apply rather than here:
 under [Runtime](#runtime), `MIROBODY_VCPKG_CACHE` under
 [Set environment variables](#3-set-environment-variables), and
 `BASE_MODEL` / `QUANTS` / `LLAMA_RELEASE` / `LLAMA_BACKEND` / `TORCH_INDEX` /
-`GITHUB_TOKEN` in `python fine-tuning/train_units.py --help`.
+`GITHUB_TOKEN` in `python fine-tuning/tool_train.py --help`.
 
 Each lane's own README repeats the two or three variables it needs, in context:
 [`qt/`](../qt/README.md), [`android/`](../android/README.md),
@@ -437,6 +437,21 @@ xcodebuild -create-xcframework \
 
 Only `arm64` slices are built - 32-bit and `x86_64`-simulator are intentionally
 skipped (no supported iOS hardware needs them).
+
+### On-device LLM (llama.cpp)
+
+[`ios/build-llama.sh`](../ios/build-llama.sh) cross-compiles llama.cpp into
+`ios/prebuilt/llama-sdk/<sdk>-arm64/{include,lib}` - static archives, since iOS
+cannot dlopen code the app wrote and has nowhere to put a loose `.so`. Add
+`-DMIROBODY_ONDEVICE_LLM=ON -DLLAMA_CPP_DIR=<that dir>` to the matching configure
+above and rebuild the xcframework; the script prints the exact flags. Link the
+archives into the app target, plus `Metal.framework` and `Accelerate.framework`
+on the device slice.
+
+Unlike Android, nothing finds this by itself - the iOS core is configured by
+hand, so the flags are yours to pass. Omit them and `src/llm/local.cpp` compiles
+its stub, `mirobody_llm_available()` returns 0, and `LlamaCppEngine` reports that
+the engine is not built in.
 
 ### Consuming from Swift
 

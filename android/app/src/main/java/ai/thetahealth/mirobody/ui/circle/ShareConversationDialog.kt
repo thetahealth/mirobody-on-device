@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -68,7 +69,7 @@ fun ShareConversationDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.share_title)) },
+        title = { DialogTitleWithClose(stringResource(R.string.share_title), onDismiss) },
         text = {
             when {
                 state.loading -> Box(

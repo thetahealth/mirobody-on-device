@@ -214,4 +214,28 @@
     <string name="hdp_unsupported">HDP 仅在 Android 9 及以下可用。较新设备请改用蓝牙（BLE）。</string>
     <string name="hdp_start">开始监听</string>
     <string name="hdp_stop">停止</string>
+
+    <string name="slash_help_desc">查看使用帮助</string>
+    <string name="slash_new_desc">开始新对话</string>
+    <string name="slash_incognito_desc">隐私模式，本轮不保存</string>
+    <string name="chat_ai_disclaimer">Mirobody 是 AI,可能会出错,请自行核实回答内容。</string>
+    <plurals name="history_message_count">
+        <item quantity="other">%d 条</item>
+    </plurals>
+    <string name="history_just_now">刚刚</string>
+    <plurals name="history_mins_ago">
+        <item quantity="other">%d 分钟前</item>
+    </plurals>
+    <plurals name="history_hours_ago">
+        <item quantity="other">%d 小时前</item>
+    </plurals>
+    <plurals name="history_days_ago">
+        <item quantity="other">%d 天前</item>
+    </plurals>
+    <string name="history_date_pattern">M月d日</string>
+    <string name="history_date_year_pattern">yyyy年M月d日</string>
+    <string name="chat_ondevice_verifying">正在校验本机已有的文件…</string>
+    <string name="chat_ondevice_import_hint">请选择 .litertlm 文件。若文件与上方某个模型一致，会直接识别为该模型，不会重复添加。</string>
+    <string name="chat_copied">已复制</string>
+    <string name="chat_loading_model">正在加载模型…</string>
 </resources>

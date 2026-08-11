@@ -9,6 +9,7 @@
 //   build-units                           → units.tsv (+ --abbrev)
 //   resolve <term>...                     → ranked codes (JSON lines)
 
+#include "indicator/fhir_id.hpp"
 #include "indicator/lexicon.hpp"
 #include "indicator/resolve.hpp"
 #include "indicator/sources.hpp"
@@ -176,16 +177,45 @@ void split_csv_list(const std::string& s, std::vector<std::string>& out) {
     if (!cur.empty()) out.push_back(cur);
 }
 
+// One term per line, blanks and #-comments skipped, so a whole report's worth of
+// indicator names can be piped in. "-" reads stdin.
+bool read_terms(const std::string& path, std::vector<std::string>& out) {
+    FILE* f = (path == "-") ? stdin : std::fopen(path.c_str(), "rb");
+    if (!f) return false;
+    std::string line;
+    int c;
+    while ((c = std::fgetc(f)) != EOF) {
+        if (c == '\n') {
+            while (!line.empty() && (line[line.size() - 1] == '\r' || line[line.size() - 1] == ' '))
+                line.erase(line.size() - 1);
+            if (!line.empty() && line[0] != '#') out.push_back(line);
+            line.clear();
+        } else {
+            line.push_back(static_cast<char>(c));
+        }
+    }
+    if (!line.empty() && line[0] != '#') out.push_back(line);
+    if (f != stdin) std::fclose(f);
+    return true;
+}
+
 int cmd_resolve(const std::vector<std::string>& args) {
-    std::string lexicon_path = "res/indicator/fhir_lexicon.bin";
+    std::string lexicon_path = "res/indicator/fhir_lexicon.bin", in_path;
     int top_k = 5;
+    bool fhir = false;
     std::vector<std::string> systems, terms;
     for (size_t i = 0; i < args.size(); ++i) {
         const std::string& a = args[i];
         if (a == "--lexicon" && i + 1 < args.size()) lexicon_path = args[++i];
         else if (a == "--top-k" && i + 1 < args.size()) top_k = std::atoi(args[++i].c_str());
         else if (a == "--systems" && i + 1 < args.size()) split_csv_list(args[++i], systems);
+        else if (a == "--in" && i + 1 < args.size()) in_path = args[++i];
+        else if (a == "--fhir") fhir = true;
         else terms.push_back(a);
+    }
+    if (!in_path.empty() && !read_terms(in_path, terms)) {
+        std::fprintf(stderr, "resolve: cannot read %s\n", in_path.c_str());
+        return 1;
     }
     if (terms.empty()) { std::fprintf(stderr, "resolve: no terms given\n"); return 2; }
 
@@ -198,6 +228,29 @@ int cmd_resolve(const std::vector<std::string>& args) {
         rapidjson::Document d;
         d.SetObject();
         rapidjson::Document::AllocatorType& a = d.GetAllocator();
+        if (fhir) {
+            // A FHIR CodeableConcept, which is what a caller actually needs and
+            // what makes the miss path explicit: `text` always carries what the
+            // report said, `coding` is empty when nothing resolved. An empty
+            // coding beside a populated text is valid R4 and is the honest
+            // answer for the ~20% of Chinese indicators no standard codes.
+            d.AddMember("text", rapidjson::Value(terms[t].c_str(), a), a);
+            rapidjson::Value cs(rapidjson::kArrayType);
+            for (size_t i = 0; i < res.size(); ++i) {
+                rapidjson::Value o(rapidjson::kObjectType);
+                const char* url = system_url(system_from_name(res[i].system));
+                if (url[0]) o.AddMember("system", rapidjson::Value(url, a), a);
+                o.AddMember("code", rapidjson::Value(res[i].code.c_str(), a), a);
+                o.AddMember("display", rapidjson::Value(res[i].name.c_str(), a), a);
+                cs.PushBack(o, a);
+            }
+            d.AddMember("coding", cs, a);
+            rapidjson::StringBuffer fb;
+            rapidjson::Writer<rapidjson::StringBuffer> fw(fb);
+            d.Accept(fw);
+            std::printf("%s\n", fb.GetString());
+            continue;
+        }
         d.AddMember("term", rapidjson::Value(terms[t].c_str(), a), a);
         rapidjson::Value arr(rapidjson::kArrayType);
         for (size_t i = 0; i < res.size(); ++i) {

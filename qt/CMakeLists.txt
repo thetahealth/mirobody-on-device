@@ -22,7 +22,12 @@ cmake_minimum_required(VERSION 3.19)
 # Bluetooth backs the direct BLE GATT health-sensor path (blehealth.*); Qt maps
 # QLowEnergyController onto WinRT / Core Bluetooth / BlueZ, so one build covers
 # Windows, macOS, and Linux.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Bluetooth)
+#
+# Svg is what DRAWS a rendered formula and a ```svg figure: both reach the UI as an
+# .svg file behind a plain QML Image, and Qt loads those through the qsvg image
+# format plugin this module brings. Not optional -- without it a formula is a blank
+# rectangle rather than a fallback.
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Bluetooth Svg)
 
 # CMAKE_AUTOMOC drives moc over the QObject-derived backend classes.
 set(CMAKE_AUTOMOC ON)
@@ -70,6 +75,8 @@ qt_add_executable(mirobody_qt
     modeldownloader.hpp
     locallmengine.cpp
     locallmengine.hpp
+    renderhost.cpp
+    renderhost.hpp
     ${mirobody_qt_platform_sources}
 )
 
@@ -102,9 +109,27 @@ qt_add_qml_module(mirobody_qt
         qml/VendorsDialog.qml
         qml/LanguageDialog.qml
         qml/FontDialog.qml
+        qml/OnDeviceDialog.qml
         qml/ConfirmDialog.qml
+        qml/ReplyBody.qml
+        qml/ReplySegment.qml
+        qml/ToolCard.qml
     RESOURCES
         qml/strings.js
+        qml/slash.js
+        qml/markdown.js
+)
+
+# The built-in guide `/help` renders. NOT a copy: these are the very files the web
+# client serves from its doc root and the Android app ships in its assets, so the
+# three clients answer /help with one document and it cannot drift between them.
+# PREFIX pins them to ":/help/<name>.md", which AppController::helpDocument() reads.
+qt_add_resources(mirobody_qt "mirobody_qt_help"
+    PREFIX "/help"
+    BASE "${CMAKE_CURRENT_SOURCE_DIR}/../htdoc/static/help"
+    FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/../htdoc/static/help/help-en.md"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../htdoc/static/help/help-zh.md"
 )
 
 # The window icon, in a resource of its own rather than the QML module's. The module's
@@ -125,16 +150,85 @@ target_link_libraries(mirobody_qt PRIVATE
     Qt6::QuickControls2
     Qt6::Network
     Qt6::Bluetooth
+    Qt6::Svg
 )
 
-# On-device private LLM (Gemma GGUF via llama.cpp). OFF by default so the app builds
+# --- LaTeX + ECharts rendering (Qt WebEngine) --------------------------------
+# A reply can carry formulas ($…$ / $$…$$) and ```echarts charts. Every Mirobody
+# client renders those through a browser engine -- harmony and iOS in a hidden
+# webview, Android with a WebView for charts -- because MathJax and ECharts are the
+# implementations, and reimplementing either natively would put this client's output
+# out of step with the rest.
+#
+# So renderhost.cpp drives ONE offscreen QWebEnginePage over render/render.html and
+# hands the results back as .svg / .png files that the message list draws as ordinary
+# Images. See qt/renderhost.hpp for why it is shaped that way.
+#
+# ON when Qt WebEngine is installed, and it degrades rather than fails: built without
+# it, formulas and charts show their source, while ```svg figures, tables, code and
+# everything else render exactly the same (neither needs a browser). Force it off with
+# -DMIROBODY_RICH_RENDER=OFF.
+option(MIROBODY_RICH_RENDER "Render LaTeX and ECharts via Qt WebEngine" ON)
+if(MIROBODY_RICH_RENDER)
+    find_package(Qt6 6.5 QUIET COMPONENTS WebEngineQuick)
+    if(Qt6WebEngineQuick_FOUND)
+        target_compile_definitions(mirobody_qt PRIVATE MIROBODY_WEBENGINE)
+        target_link_libraries(mirobody_qt PRIVATE Qt6::WebEngineQuick)
+        message(STATUS "mirobody_qt: LaTeX + ECharts rendering ON (Qt WebEngine)")
+    else()
+        message(STATUS
+            "mirobody_qt: Qt WebEngine not found -- formulas and charts will show their "
+            "source. Install the 'Qt WebEngine' component to enable them.")
+    endif()
+endif()
+
+# The render host's page and the two libraries behind it.
+#
+# The libraries are read out of harmony/'s render directory rather than copied here:
+# that is where the repo keeps the offscreen-render assets, harmony loads the same
+# three files for the same two jobs, and a second copy of a 2 MB MathJax bundle is a
+# second thing to keep in step. Only render.html is this client's own -- it carries
+# Theme.qml's palette and has no colour-mode parameter (see the comment in it).
+#
+# PREFIX pins them to ":/render/", which is where renderhost.cpp loads the page from
+# and where the page's relative <script src> tags resolve.
+set(mirobody_qt_render_dir "${CMAKE_CURRENT_SOURCE_DIR}/../harmony/entry/src/main/resources/rawfile/render")
+if(MIROBODY_RICH_RENDER AND Qt6WebEngineQuick_FOUND)
+    foreach(lib tex-svg.js echarts.min.js chart-theme.js)
+        if(NOT EXISTS "${mirobody_qt_render_dir}/${lib}")
+            message(FATAL_ERROR
+                "Render asset missing: ${mirobody_qt_render_dir}/${lib}. It is tracked in "
+                "the repo; configure with -DMIROBODY_RICH_RENDER=OFF to build without "
+                "LaTeX/ECharts rendering.")
+        endif()
+    endforeach()
+    # The hidden view that runs the page. Added to the QML module only in this branch:
+    # it does `import QtWebEngine`, which a build without the module cannot resolve.
+    qt_target_qml_sources(mirobody_qt QML_FILES qml/RenderHostView.qml)
+
+    qt_add_resources(mirobody_qt "mirobody_qt_render"
+        PREFIX "/render"
+        BASE "${CMAKE_CURRENT_SOURCE_DIR}/render"
+        FILES render/render.html
+    )
+    qt_add_resources(mirobody_qt "mirobody_qt_render_libs"
+        PREFIX "/render"
+        BASE "${mirobody_qt_render_dir}"
+        FILES
+            "${mirobody_qt_render_dir}/tex-svg.js"
+            "${mirobody_qt_render_dir}/echarts.min.js"
+            "${mirobody_qt_render_dir}/chart-theme.js"
+    )
+endif()
+
+# On-device private LLM (any GGUF via llama.cpp). OFF by default so the app builds
 # without the SDK (locallmengine.cpp compiles as a stub). This is the same runtime the
-# Electron desktop client uses, so both desktops run the same Gemma GGUF. To enable,
+# Electron desktop client uses, so both desktops run the same GGUFs. To enable,
 # build llama.cpp as shared libs (pure CMake; see qt/README.md), assemble an SDK dir
 # (include/llama.h + ggml.h, lib/llama.{lib,so,dylib}, bin/*.dll), then:
 #   -DMIROBODY_ONDEVICE_LLM=ON -DLLAMA_CPP_DIR=<that dir>
 # The runtime DLLs/.so must sit next to the exe (build-qt.cmd deploy copies them).
-option(MIROBODY_ONDEVICE_LLM "Build on-device LLM (Gemma GGUF via llama.cpp)" OFF)
+option(MIROBODY_ONDEVICE_LLM "Build on-device LLM (any GGUF via llama.cpp)" OFF)
 if(MIROBODY_ONDEVICE_LLM)
     if(NOT DEFINED LLAMA_CPP_DIR)
         message(FATAL_ERROR
@@ -155,15 +249,6 @@ if(MIROBODY_ONDEVICE_LLM)
     target_compile_definitions(mirobody_qt PRIVATE MIROBODY_ONDEVICE_LLM)
     target_include_directories(mirobody_qt PRIVATE "${LLAMA_CPP_DIR}/include")
     target_link_libraries(mirobody_qt PRIVATE "${LLAMA_LIB}")
-    # The seeded default model is hard-coded in modeldownloader.cpp (models are managed
-    # at runtime). Packagers can override that default here without editing source:
-    #   -DMIROBODY_GGUF_REPO=<hf-org/repo> -DMIROBODY_GGUF_FILE=<file.gguf>
-    if(DEFINED MIROBODY_GGUF_REPO)
-        target_compile_definitions(mirobody_qt PRIVATE MIROBODY_GGUF_REPO="${MIROBODY_GGUF_REPO}")
-    endif()
-    if(DEFINED MIROBODY_GGUF_FILE)
-        target_compile_definitions(mirobody_qt PRIVATE MIROBODY_GGUF_FILE="${MIROBODY_GGUF_FILE}")
-    endif()
     message(STATUS "mirobody_qt: on-device LLM ON -> ${LLAMA_LIB}")
 endif()
 
@@ -177,9 +262,11 @@ set_target_properties(mirobody_qt PROPERTIES
 # The BLE GATT decoder (blehealth_codec.*) is pure Qt-Core logic, so it is tested
 # without the Bluetooth module or any hardware. Built only when Qt Test is present
 # (it always is in a full Qt install). Run with `ctest` in the build dir, or invoke
-# the mirobody_qt_tests executable directly. A console app so QtTest output shows.
+# the test executables directly. Console apps so QtTest output shows.
 find_package(Qt6 6.5 QUIET COMPONENTS Test)
 if(Qt6Test_FOUND)
+    enable_testing()
+
     qt_add_executable(mirobody_qt_tests
         tests/blehealth_codec_test.cpp
         blehealth_codec.cpp
@@ -189,6 +276,17 @@ if(Qt6Test_FOUND)
     target_include_directories(mirobody_qt_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(mirobody_qt_tests PRIVATE Qt6::Core Qt6::Test)
     set_target_properties(mirobody_qt_tests PROPERTIES WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
-    enable_testing()
     add_test(NAME mirobody_qt_tests COMMAND mirobody_qt_tests)
+
+    # qml/markdown.js -- the reply splitter and the math scanner. Plain JavaScript with
+    # no QML dependency, so QJSEngine runs it directly; no scene, no window. Reads the
+    # .js and the help document from the source tree, hence the source-dir define.
+    qt_add_executable(mirobody_qt_markdown_tests tests/markdown_test.cpp)
+    target_compile_features(mirobody_qt_markdown_tests PRIVATE cxx_std_17)
+    target_compile_definitions(mirobody_qt_markdown_tests PRIVATE
+        MIROBODY_QT_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(mirobody_qt_markdown_tests PRIVATE Qt6::Core Qt6::Qml Qt6::Test)
+    set_target_properties(mirobody_qt_markdown_tests
+        PROPERTIES WIN32_EXECUTABLE FALSE MACOSX_BUNDLE FALSE)
+    add_test(NAME mirobody_qt_markdown_tests COMMAND mirobody_qt_markdown_tests)
 endif()

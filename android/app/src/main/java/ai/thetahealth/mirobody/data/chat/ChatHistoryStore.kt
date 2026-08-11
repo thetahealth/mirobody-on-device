@@ -47,7 +47,9 @@ class ChatHistoryStore(context: Context, private val settings: SettingsStore, pr
      */
     suspend fun save(messages: List<ChatMessage>) {
         val settled = messages.filter { msg ->
-            !msg.streaming && (
+            // A `local` message was produced by the composer (a slash command), not by a
+            // turn. It is shown for as long as the screen lives and never stored.
+            !msg.local && !msg.streaming && (
                 msg.role == Role.User ||
                     msg.text.isNotEmpty() ||
                     msg.toolCalls.isNotEmpty() ||

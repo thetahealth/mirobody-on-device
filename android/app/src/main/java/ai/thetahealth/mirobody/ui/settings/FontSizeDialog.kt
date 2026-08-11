@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.theme.MirobodyTheme
 import kotlin.math.roundToInt
 
@@ -57,7 +58,7 @@ fun FontSizeDialog(
     var stagedIndex by remember(current) { mutableStateOf(initialIndex) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.chat_font_size)) },
+        title = { DialogTitleWithClose(stringResource(R.string.chat_font_size), onDismiss) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Slider(

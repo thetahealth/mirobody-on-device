@@ -205,4 +205,32 @@
     <string name="hdp_unsupported">HDP solo está disponible en Android 9 y anteriores. En dispositivos más nuevos usa Bluetooth (BLE).</string>
     <string name="hdp_start">Empezar a escuchar</string>
     <string name="hdp_stop">Detener</string>
+
+    <string name="slash_help_desc">Mostrar la guía integrada</string>
+    <string name="slash_new_desc">Empezar una conversación nueva</string>
+    <string name="slash_incognito_desc">Incógnito: esta no se guarda</string>
+    <string name="chat_ai_disclaimer">Mirobody es una IA y puede equivocarse. Comprueba las respuestas.</string>
+    <plurals name="history_message_count">
+        <item quantity="one">%d mensaje</item>
+        <item quantity="other">%d mensajes</item>
+    </plurals>
+    <string name="history_just_now">ahora mismo</string>
+    <plurals name="history_mins_ago">
+        <item quantity="one">hace %d min</item>
+        <item quantity="other">hace %d min</item>
+    </plurals>
+    <plurals name="history_hours_ago">
+        <item quantity="one">hace %d h</item>
+        <item quantity="other">hace %d h</item>
+    </plurals>
+    <plurals name="history_days_ago">
+        <item quantity="one">hace %d día</item>
+        <item quantity="other">hace %d días</item>
+    </plurals>
+    <string name="history_date_pattern">d MMM</string>
+    <string name="history_date_year_pattern">d MMM yyyy</string>
+    <string name="chat_ondevice_verifying">Comprobando el archivo ya presente…</string>
+    <string name="chat_ondevice_import_hint">Elige un archivo .litertlm. Si coincide con un modelo de arriba, se reconoce como ese modelo en lugar de añadirse dos veces.</string>
+    <string name="chat_copied">Copiado</string>
+    <string name="chat_loading_model">Cargando el modelo…</string>
 </resources>

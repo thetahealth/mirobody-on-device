@@ -152,8 +152,13 @@ struct NavDrawer: View {
                 } else if item.owned && item.sharedWithCount > 0 {
                     badge(L("chat_shared_with", lang, item.sharedWithCount), strong: false)
                 }
-                if item.timestamp > 0 {
-                    Text(formatHistoryTimestamp(item.timestamp))
+                // "2 hours ago · 6 messages", the same subtitle the full history
+                // screen shows -- one helper, so the two lists cannot drift apart.
+                // Either half may be missing, so the separator is drawn only when both
+                // are there rather than leaving a dangling "·".
+                let subtitle = historySubtitle(item)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
                         .mbFont(.labelSmall).foregroundColor(colors.onSurfaceVariant.opacity(0.6))
                 }
             }

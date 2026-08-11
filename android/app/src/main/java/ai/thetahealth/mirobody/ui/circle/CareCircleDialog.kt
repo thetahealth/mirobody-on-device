@@ -45,6 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.data.circle.dto.Circle
 import ai.thetahealth.mirobody.data.circle.dto.CircleInvite
 import ai.thetahealth.mirobody.data.circle.dto.CircleMember
@@ -210,7 +211,7 @@ private fun CircleCard(circle: Circle, vm: CircleViewModel) {
     if (showDelete) {
         AlertDialog(
             onDismissRequest = { showDelete = false },
-            title = { Text(stringResource(R.string.circle_delete_circle)) },
+            title = { DialogTitleWithClose(stringResource(R.string.circle_delete_circle), { showDelete = false }) },
             text = { Text(stringResource(R.string.circle_delete_confirm, circle.name)) },
             confirmButton = {
                 TextButton(onClick = { showDelete = false; vm.deleteCircle(circle.circleId) }) {
@@ -299,7 +300,7 @@ private fun MemberRow(circle: Circle, m: CircleMember, vm: CircleViewModel) {
     if (showRemove) {
         AlertDialog(
             onDismissRequest = { showRemove = false },
-            title = { Text(stringResource(R.string.circle_remove)) },
+            title = { DialogTitleWithClose(stringResource(R.string.circle_remove), { showRemove = false }) },
             text = { Text(stringResource(R.string.circle_remove_confirm, label)) },
             confirmButton = {
                 TextButton(onClick = { showRemove = false; vm.remove(m.member) }) {

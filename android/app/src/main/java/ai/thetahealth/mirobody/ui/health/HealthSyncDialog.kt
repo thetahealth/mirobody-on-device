@@ -1,6 +1,7 @@
 package ai.thetahealth.mirobody.ui.health
 
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Column
@@ -45,7 +46,7 @@ fun HealthSyncDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.chat_sync_health)) },
+        title = { DialogTitleWithClose(stringResource(R.string.chat_sync_health), onDismiss) },
         text = {
             Column {
                 val status = when {

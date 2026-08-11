@@ -105,15 +105,26 @@ ensure_llama() {
         echo "[build-qt] cloning llama.cpp -> $LLAMA_SRC"
         git clone --depth 1 https://github.com/ggml-org/llama.cpp "$LLAMA_SRC"
     }
-    local lflags="-DGGML_NATIVE=OFF"
-    [ "$BACKEND" = "avx2" ]   && lflags="-DGGML_NATIVE=ON"
-    [ "$BACKEND" = "vulkan" ] && lflags="-DGGML_VULKAN=ON"
-    [ "$BACKEND" = "cuda" ]   && lflags="-DGGML_CUDA=ON"
+    local lflags=(-DGGML_NATIVE=OFF)
+    [ "$BACKEND" = "avx2" ]   && lflags=(-DGGML_NATIVE=ON)
+    [ "$BACKEND" = "vulkan" ] && lflags=(-DGGML_VULKAN=ON)
+    [ "$BACKEND" = "cuda" ]   && lflags=(-DGGML_CUDA=ON)
+    # ggml-vulkan does find_package(SPIRV-Headers CONFIG REQUIRED) and puts $VULKAN_SDK on
+    # CMAKE_PREFIX_PATH to satisfy it -- which is not enough. Config mode looks under a
+    # prefix for lib/cmake/<Name>*/, a directory NAMED AFTER THE PACKAGE; the LunarG SDK
+    # drops every config flat into lib/cmake/, so nothing matches and the configure dies
+    # on a header-only package sitting right there. Name the directory outright when that
+    # is the layout; a newer SDK that nests them properly is found without help.
+    if [ "$BACKEND" = "vulkan" ]; then
+        for d in "${VULKAN_SDK:-}/lib/cmake" "${VULKAN_SDK:-}/Lib/cmake"; do
+            [ -f "$d/SPIRV-HeadersConfig.cmake" ] && { lflags+=("-DSPIRV-Headers_DIR=$d"); break; }
+        done
+    fi
     local lbuild="$LLAMA_SRC/build-$BACKEND"
     echo "[build-qt] building llama.cpp ($BACKEND) -- first time takes a few minutes..."
     cmake -S "$LLAMA_SRC" -B "$lbuild" -G Ninja -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=ON -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF \
-        -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TOOLS=OFF $lflags
+        -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TOOLS=OFF "${lflags[@]}"
     cmake --build "$lbuild" --target llama
     mkdir -p "$LLAMA_CPP_DIR/include" "$LLAMA_CPP_DIR/lib"
     cp "$LLAMA_SRC"/include/*.h "$LLAMA_CPP_DIR/include/"

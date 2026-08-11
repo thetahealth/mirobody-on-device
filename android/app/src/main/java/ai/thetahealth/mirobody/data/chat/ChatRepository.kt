@@ -63,4 +63,7 @@ class ChatRepository(
      */
     fun chatOnDevice(history: List<ChatTurn>, model: OnDeviceModelSpec): Flow<ChatStreamEvent> =
         onDeviceEngine.generate(history, model)
+
+    /** Warm an on-device model so the first turn does not pay for its load. */
+    suspend fun preloadOnDevice(model: OnDeviceModelSpec) = onDeviceEngine.preload(model)
 }

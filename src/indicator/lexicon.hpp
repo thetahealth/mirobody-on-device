@@ -9,9 +9,17 @@
 // write(); the runtime calls Lexicon::load(). Format is little-endian (every
 // target — Windows x64/ARM64, Android ARM, iOS — is LE).
 //
-//   magic "LXC1" | version | n_codes | n_surfaces | n_postings | blob_len
-//   codes[n_codes]      : { u64 fhir_id, u32 code_off, u32 name_off,
-//                           u32 rank_tier, u32 spec_mask }
+// On disk the payload is zlib-wrapped, so the first four bytes are "LXCZ", not
+// "LXC1". Fields are written by hand, so nothing is padded or aligned: a code
+// record is 17 bytes, not the 20 or 24 a compiler would lay out.
+//
+//   file: "LXCZ" | u64 raw_len | deflate(payload)
+//
+//   payload:
+//   "LXC1" | u32 version | u32 n_codes | u32 n_surfaces | u32 n_postings
+//          | u64 blob_len
+//   codes[n_codes]      : { u8 system, u32 code_off, u32 name_off,
+//                           u32 rank_tier, u32 spec_mask }   -- 17 bytes each
 //   surfaces[n_surfaces]: { u32 surface_off, u32 post_off, u32 post_count }
 //                          (sorted by surface string, for future mmap binary
 //                           search; the v1 loader builds a hash map instead)
@@ -19,6 +27,11 @@
 //   blob[blob_len]      : NUL-terminated UTF-8 strings; offset 0 == ""
 //
 // Surface keys are already run through indicator::normalize() on BOTH sides.
+//
+// This block claims to be the authority and once was not: it documented a
+// `u64 fhir_id` per code and a u32 blob_len, and a reader written from it
+// produced garbage. It describes the writer now. If the two ever disagree
+// again, the writer in lexicon.cpp is the format.
 
 #include <cstdint>
 #include <string>
@@ -45,8 +58,20 @@ struct CodeMeta {
     uint8_t system;      // System enum (see fhir_id.hpp)
     std::string code;    // original code string (LOINC keeps its dash, "CHEBI:100", …)
     std::string name;    // display name
-    uint32_t rank_tier;  // common_test_rank bonus tier (0 = none)  [reserved]
-    uint32_t spec_mask;  // 17-bit specificity name-mask           [reserved]
+    // LOINC's COMMON_TEST_RANK, raw, 1..~20k over the 19,978 terms it ranks;
+    // 0 means unranked, which every non-LOINC code is. Not bucketed -- the
+    // ordering is the whole signal.
+    uint32_t rank_tier;
+    // Categorical gates, each set at build time from a column LOINC publishes
+    // and each compared before rank_tier is:
+    //   bits 0-2  specimen tier: 1 = a cell fraction of the ordinary specimen
+    //             (SYSTEM RBC or WBC), which `血红蛋白` does not mean
+    //   bit 3     off-report: CLASSTYPE 3/4 or a *.ONTOLOGY class -- claims
+    //             attachments, 12,446 questionnaire items, hierarchy scaffolding
+    //   bit 4     qualified COMPONENT: a dot before any '/', i.e. the primary
+    //             analyte is narrowed (`Triiodothyronine.free`)
+    // Bits 5+ are free; the 17-bit specificity name-mask is still to come.
+    uint32_t spec_mask;
 
     CodeMeta() : system(0), rank_tier(0), spec_mask(0) {}
 };

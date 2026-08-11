@@ -47,8 +47,8 @@ class AppController : public QObject {
     Q_PROPERTY(bool streaming READ streaming NOTIFY streamingChanged)
     Q_PROPERTY(ChatModel* chat READ chat CONSTANT)
     Q_PROPERTY(QStringList baseUrlPresets READ baseUrlPresets CONSTANT)
-    // The on-device model downloader (status/progress + start/cancel/remove), exposed
-    // to QML for the download affordance. Bind app.onDeviceModel.status / .progress.
+    // The on-device model registry (catalog + the user's own, with download/progress/
+    // remove), exposed to QML. Bind app.onDeviceModel.catalog / .imported.
     Q_PROPERTY(ModelDownloader* onDeviceModel READ onDeviceModel CONSTANT)
     // Direct BLE GATT health-sensor ingestion (scan/connect → FHIR). Bind
     // app.ble.devices / .status and drive app.ble.startScan() / connectDevice(i).
@@ -93,6 +93,8 @@ public:
     Q_INVOKABLE void setLanguage(const QString& code);
     Q_INVOKABLE void setFontOffset(int offset);
     Q_INVOKABLE void setProvider(const QString& provider);
+    // Select a downloaded on-device model (by ModelDownloader id) as the provider.
+    Q_INVOKABLE void selectOnDeviceModel(const QString& id);
 
     // --- chat ------------------------------------------------------------
     Q_INVOKABLE void loadProviders();
@@ -102,6 +104,15 @@ public:
     Q_INVOKABLE void newChat();
     // Enter/leave incognito, swapping the whole session (chat.toggleIncognito).
     Q_INVOKABLE void toggleIncognito();
+
+    // --- slash commands (qml/slash.js) -----------------------------------
+    // Show `text` as an assistant turn the client answered by itself. Flagged
+    // `local`, so it never reaches disk and never joins the next turn's context.
+    Q_INVOKABLE void appendLocalReply(const QString& text);
+    // The built-in guide's Markdown, in the app's language ("" if unreadable).
+    // Read from the Qt resource (":/help/"), which carries the SAME files the web
+    // client serves and the Android app ships in its assets.
+    Q_INVOKABLE QString helpDocument() const;
 
     // --- server-side history (the drawer) --------------------------------
     Q_INVOKABLE void loadHistory(int page, int pageSize);
@@ -179,7 +190,7 @@ private:
     void finishTurn(int assistantRow, const QString& provider);
     void failTurn(int userRow, int assistantRow, const QString& errorText);
 
-    // On-device turn (Gemma 4 via LiteRT-LM), mirroring the SSE handler in sendMessage.
+    // On-device turn (a local GGUF via llama.cpp), mirroring the SSE handler in sendMessage.
     void sendOnDeviceMessage(const QString& model, const QString& label, int assistantRow);
     void rebuildProviders();   // providers_ = server providers + one synthetic entry per on-device model
 

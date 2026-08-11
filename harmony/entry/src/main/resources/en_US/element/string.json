@@ -25,6 +25,10 @@
       "value": "Keep the model file you picked readable across restarts (the file stays in your own folder)"
     },
     {
+      "name": "perm_vibrate_reason",
+      "value": "A short tick when a long press copies a message"
+    },
+    {
       "name": "chat_pick_model",
       "value": "Select model"
     },
@@ -99,6 +103,30 @@
     {
       "name": "toast_added",
       "value": "Added %s"
+    },
+    {
+      "name": "slash_help_desc",
+      "value": "Show the built-in guide"
+    },
+    {
+      "name": "slash_new_desc",
+      "value": "Start a new conversation"
+    },
+    {
+      "name": "slash_incognito_desc",
+      "value": "Incognito — this one is not saved"
+    },
+    {
+      "name": "ask_confirm",
+      "value": "Confirm"
+    },
+    {
+      "name": "toast_copied",
+      "value": "Copied"
+    },
+    {
+      "name": "chat_ai_disclaimer",
+      "value": "Mirobody is AI and can make mistakes. Please double-check responses."
     },
     {
       "name": "model_dialog_title",

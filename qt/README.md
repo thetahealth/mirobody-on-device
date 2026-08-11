@@ -12,7 +12,7 @@ Full parity with the web client's main flow:
 | Feature | How it works |
 |---|---|
 | Email one-time-code sign-in | `POST /email/login` → `/email/verify`; login.js's staircase — a valid address (`*@*.*`) unlocks **Send code**, a send unlocks the code field and starts the 60s cooldown (editing the address re-locks it), six digits unlock **Sign in** and submit on their own; token persisted via `QSettings` |
-| Chat — *agent* mode | `POST /api/chat` SSE: `reply` / `thinking` / `costStatistics` / `error` events (+ live thinking block, cost footer) |
+| Chat — *agent* mode | `POST /api/chat` SSE: `reply` / `thinking` / `costStatistics` / `chart` / `image` / `queryTitle`+`queryArguments`+`queryDetail` / `error` events (+ live thinking block, tool-call cards, cost footer) |
 | Chat — *proxy* mode | `{model, messages, stream}` → OpenAI-style `choices[].delta.content` (+ resumable `session_id` chunk) |
 | Provider picker | `POST /api/providers`, selection restored/persisted |
 | **On-device private LLM** *(optional)* | each registered GGUF appears in the provider picker as **"&lt;name&gt; · On-device"**; runs locally (offline, no server) via llama.cpp, emitting the same reply stream. Manage models in **⚙ → On-device AI**. See [On-device LLM](#on-device-llm-optional) |
@@ -20,7 +20,8 @@ Full parity with the web client's main flow:
 | Local persistence | transcript mirrored to `conversation-<userid>.json` under `AppDataLocation` (web client's IndexedDB stand-in) |
 | History drawer | `GET /api/history`, `POST /api/history/delete` |
 | Settings | backend URL (presets), language (all 10, rides each request + localises UI), font size |
-| Rendering | Markdown assistant replies; RTL mirroring for Arabic/Hebrew |
+| Rendering | Markdown (tables, lists, code) and ```` ```svg ```` figures; RTL mirroring for Arabic/Hebrew. **LaTeX math and ECharts charts are written but do not render yet** and fall back to source — see [Math and charts](#math-and-charts-not-rendering-yet-) |
+| Slash commands | `/help` (the built-in guide), `/new`, `/incognito` — palette opens on a lone `/` |
 
 **BLE detail** — standard-profile services only: Heart Rate `0x180D`, Blood Pressure `0x1810`,
 Health Thermometer `0x1809` (adding one = a row in the decode dispatch in
@@ -32,12 +33,64 @@ on the cloud vendor clients. Reached via **⚙ → Bluetooth devices** when sign
 
 - **Social sign-ins** (Google/Apple/WeChat/GitHub/X) — browser-SDK popup/OAuth flows with no
   native Qt equivalent; email login reaches every account, so the client ships email-only.
-- **KaTeX math** — Markdown is rendered, math is shown as source.
+- **Attachments** — no paperclip; the composer sends text only.
+
+## Reply rendering
+
+A reply is not only prose. [`ReplyBody.qml`](qml/ReplyBody.qml) splits it into the pieces that
+need different renderers — prose, a ```` ```svg ```` figure, a ```` ```echarts ```` chart — re-splitting on
+every token as it streams, so an **unclosed** fence stays source: half an SVG is not a figure,
+and a block becomes one the moment its closing fence lands. The splitter and the `$…$`-vs-currency
+rule live in [`qml/markdown.js`](qml/markdown.js), ported from Android's `MarkdownSegments.kt`
+and `InlineMath.kt` so the clients agree on the judgement calls.
+
+Prose reaches the screen as rich text rather than `Text.MarkdownText`. The conversion is still
+`QTextDocument` — the same importer `MarkdownText` uses — so tables, lists and code blocks render
+as they always did; going through HTML was meant to let a rendered formula be spliced into a
+paragraph as an `<img>`.
+
+### Math and charts: not rendering yet ⚠️
+
+The machinery is written and the design is harmony's ([`renderhost.cpp`](renderhost.cpp) ports
+`core/RenderHost.ets`: [`render/render.html`](render/render.html) runs MathJax + ECharts in a
+hidden [`WebEngineView`](qml/RenderHostView.qml), results are cached as
+`<hash>-<w>x<h>.svg|png` under `AppDataLocation/render-cache` and drawn as plain `Image`s, so the
+message list never holds a web view). **It does not work on this platform yet**, and formulas and
+charts fall back to their source. Two independent blockers, both measured:
+
+1. **An `<img>` inside `Text.RichText` sends QQuickText into an endless relayout.** One inline
+   formula in one paragraph pegs a core and the window stops answering — no binding-loop warning,
+   nothing in any log. Measured per block kind: prose, tables, code, ` ```svg ` and ` ```echarts `
+   all idle at ~0.1 core; a single inline formula sits at 1.00. Removing the `Loader` that wrapped
+   the `Text` (it assigned a height back, a plausible cause) changed nothing. So the `<img>`
+   splicing is disabled in [`ReplySegment.qml`](qml/ReplySegment.qml) — inline math shows as
+   `$BMI = w/h^2$`. A fix needs a mechanism that is not a rich-text image.
+2. **The hidden `WebEngineView` never runs the page** — `loadingChanged` reports
+   `LoadFailedStatus` with an empty error string and `runJavaScript` never calls back. Qt's own
+   `qml` tool runs a `WebEngineView` with V8 on the same machine, so WebEngine itself is fine
+   here; something about this embedding is not. (A standalone `QWebEnginePage` is worse: its
+   renderer process dies with `0xC0000409` inside `Qt6WebEngineCore.dll` as soon as a page needs
+   V8 — a plain HTML file loads, anything with a `<script>` does not. `--single-process` gets the
+   page running but then wedges the UI thread, which is why it is not used.)
+
+What DOES render, verified end to end: markdown prose, tables, code blocks, and ` ```svg `
+figures (native via QtSvg — a 420×120 diagram writes its file and draws). The fence splitter and
+the `$…$`-vs-currency rule are unit-tested (`ctest`), including the case where a `$` before a
+price must not swallow the rest of the reply.
+
+An SVG figure (```` ```svg ````) needs no browser — Qt rasterizes it — but the source is model-authored, so it
+is **validated and refused**, never rewritten: no external `href`/`src`, no DOCTYPE/ENTITY, no
+`<script>`/`<foreignObject>`/`<use>`, no `on*=` handler. A refused (or unrenderable) figure falls
+back to showing its XML.
+
+Every block that cannot be drawn falls back to its source — which is also, for now, what a build
+**without Qt WebEngine** looks like, and what a build with it looks like too.
 
 ## Build
 
 Off by default (built only with `MIROBODY_BUILD_QT=ON`, never on mobile). Needs **Qt 6.5+**
-(Core, Gui, Qml, Quick, QuickControls2, Network, **Bluetooth**).
+(Core, Gui, Qml, Quick, QuickControls2, Network, **Bluetooth**, **Svg**), and optionally
+**WebEngineQuick** — see [Math and charts](#math-and-charts-optional).
 
 **Toolchain — do not mix compilers** (a MinGW build cannot link MSVC libraries, and vice-versa):
 
@@ -78,11 +131,31 @@ cmake -B build-qt -S . -DMIROBODY_BUILD_QT=ON -DCMAKE_PREFIX_PATH=/path/to/Qt/6.
 cmake --build build-qt --target mirobody_qt
 ```
 
+### Math and charts (optional)
+
+`MIROBODY_RICH_RENDER` is **ON by default** and needs Qt's **WebEngine** component (install it
+from the Qt Maintenance Tool if your kit lacks it). Configure reports which way it went:
+
+```
+-- mirobody_qt: LaTeX + ECharts rendering ON (Qt WebEngine)
+-- mirobody_qt: Qt WebEngine not found -- formulas and charts will show their source. …
+```
+
+Missing WebEngine is **not an error** — the build proceeds and those two block kinds render as
+source. Turn it off deliberately with `-DMIROBODY_RICH_RENDER=OFF`; nothing else in the client
+depends on it.
+
+It adds ~3 MB to the binary: `tex-svg.js` (MathJax) and `echarts.min.js`, read straight out of
+[`harmony/entry/src/main/resources/rawfile/render/`](../harmony/entry/src/main/resources/rawfile/render/)
+rather than copied here — that is the repo's home for the offscreen-render assets and harmony
+loads the same files for the same two jobs. `deploy` (windeployqt) bundles the WebEngine runtime,
+including `QtWebEngineProcess`, so a deployed build renders without Qt installed.
+
 ### On-device LLM (optional)
 
 Runs a local GGUF model **fully locally via [llama.cpp](https://github.com/ggml-org/llama.cpp)** —
-the same runtime the Electron desktop client uses (the mobile clients stay on LiteRT-LM `.litertlm`).
-The engine is **model-agnostic**: any GGUF works — **Gemma, Qwen, Llama, Phi, Mistral, …** — using
+the same runtime the Electron desktop client uses, and the one of Android's two engines that reads
+GGUF. The engine is **model-agnostic**: any GGUF works — **Gemma, Qwen, Llama, Phi, Mistral, …** — using
 each model's own chat template (with a per-arch fallback for gemma4). Off by default: on-device
 providers appear but are inert until built with a backend. `build-qt` clones + builds llama.cpp for
 you (pure CMake, a few minutes, no TensorFlow) and **caches the SDK per backend**.
@@ -104,17 +177,27 @@ build-qt.cmd cuda deploy      :: on-device via NVIDIA GPU (CUDA)
 ```
 
 The backend is the **only** build-time choice — build-qt never downloads a model. **Models are a
-runtime concern**: manage a **list** in **⚙ → On-device AI** (add any GGUF — paste a Gemma / Qwen /
-Llama URL, or point at a local file — no rebuild), and pick which to use from the model dropdown
-above the chat box, where each shows as `<name> · On-device`. The app ships a sensible default
-(Gemma E4B Q4_0). `build-qt.sh` mirrors the tokens on Linux/macOS.
+runtime concern**, managed in **⚙ → On-device AI**:
+
+| Model | Download | RAM |
+|---|---|---|
+| Qwen3.5 2B (Q4_K_M) | 1.2 GB | 4 GB+ |
+| Qwen3.5 4B (Q4_K_M) | 2.6 GB | 8 GB+ |
+| Gemma 4 E2B (Q4_K_M) | 2.9 GB | 6 GB+ |
+| Gemma 4 E4B (Q4_K_M) | 4.6 GB | 8 GB+ |
+
+The same four Android offers, as GGUF — Android runs the Gemma pair on LiteRT-LM instead, because
+Google's own runtime reads the E-series' MatFormer layout faster on a phone; on a desktop there is
+one engine and no reason for a second format. Each row downloads in place, and **clicking a
+downloaded model picks it**. Anything else works too (llama.cpp is model-agnostic — Llama, Phi,
+Mistral, …): paste a GGUF URL or point at a file you already have, and it joins the list under
+**Your models**. Every downloaded model also appears in the dropdown above the chat box as
+`<name> · On-device`. `build-qt.sh` mirrors the tokens on Linux/macOS.
 
 **Direct CMake equivalent** (if you drive CMake yourself): `-DMIROBODY_ONDEVICE_LLM=ON
 -DLLAMA_CPP_DIR=<sdk>` — point `LLAMA_CPP_DIR` at a prebuilt llama.cpp SDK (`include/`, `lib/`,
-`bin/`) to skip the build. Packagers can change the shipped default model with
-`-DMIROBODY_GGUF_REPO=… -DMIROBODY_GGUF_FILE=…` (optional; defaults live in
-`modeldownloader.cpp`). The runtime libs must sit next to the exe (build-qt copies them); `clean`
-is needed to turn the engine back OFF.
+`bin/`) to skip the build. The runtime libs must sit next to the exe (build-qt copies them);
+`clean` is needed to turn the engine back OFF.
 
 ## Run
 
@@ -124,8 +207,15 @@ demo codes by uncommenting `EMAIL_PREDEFINE_CODES` in the server's `config.yml` 
 e.g. `demo1@mirobody.ai` / `777777`.
 
 **On-device chat** (if built with a backend) — pick a `… · On-device` model from the dropdown
-above the composer; it runs offline, no server needed. Add/download/remove models in
-**⚙ → On-device AI**; selecting a model that isn't downloaded yet opens that manager.
+above the composer; it runs offline, no server needed. Download, pick and remove models in
+**⚙ → On-device AI**, which the picker's last entry also opens.
+
+**Slash commands** — type `/` in the composer to open the palette (the same three the web and
+Android clients offer, word for word): `/help` renders the built-in guide, `/new` starts a fresh
+conversation, `/incognito` toggles privacy mode. A command never reaches a model, and its answer
+is flagged local — it is not saved and costs nothing in the next turn's context. `/help` reads
+`htdoc/static/help/help-{en,zh}.md`, compiled into the binary as a Qt resource, so the three
+clients answer it with one document.
 
 **Bluetooth permission** — BLE scanning is OS-gated:
 
@@ -144,15 +234,24 @@ qt/
   chatmodel.{hpp,cpp}      QAbstractListModel of the transcript
   blehealth.{hpp,cpp}      BLE GATT sensor scan/connect -> FHIR Observation ingestion
   appcontroller.{hpp,cpp}  settings, login, providers, streaming, persistence
-  modeldownloader.{hpp,cpp}  on-device model registry (remote downloads + local files), persisted
+  modeldownloader.{hpp,cpp}  on-device model registry — built-in GGUF catalog + the user's own
   locallmengine.{hpp,cpp}  on-device LLM engine — any GGUF (llama.cpp; stub unless enabled)
+  renderhost.{hpp,cpp}     LaTeX/ECharts via one offscreen page + the disk cache; markdown -> rich text
+  render/render.html       that page (MathJax + ECharts); its libraries come from harmony/
   qml/
     Main.qml               top bar + login/chat loader + shared dialogs
     LoginPage.qml  ChatPage.qml  MessageDelegate.qml
+    ReplyBody.qml          a reply, split into prose / figure / chart segments
+    ReplySegment.qml       one such segment (rich text, or an Image over its fallback)
+    ToolCard.qml           one tool invocation: "Calling <tool>…", arguments, result
     HistoryDrawer.qml      the app's only menu: history + health + app settings + account
     CostDialog.qml  BackendDialog.qml  BleDialog.qml  LanguageDialog.qml  FontDialog.qml
+    OnDeviceDialog.qml     the on-device model manager (catalog + your own; also picks one)
     ConfirmDialog.qml
     Theme.qml              singleton: Material 3 colour scheme (mirrors config.js)
     I18n.qml               singleton: reactive i18n facade
     strings.js             UI string table (verbatim from htdoc/src/i18n.js; regenerate if it changes)
+    slash.js               slash commands (port of htdoc/src/slash.js)
+    markdown.js            fence splitting + the $…$-vs-currency rule (port of android's)
+  tests/                   ctest: the BLE decoder, and markdown.js via QJSEngine
 ```

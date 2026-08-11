@@ -97,11 +97,28 @@ const char* mirobody_get_providers(void);
 //
 //   event_type  a stable lowercase tag for the chunk: "reply" (answer text),
 //               "thinking" (reasoning), "queryTitle" / "queryArguments" /
-//               "queryDetail" (an MCP tool step), "costStatistics" (terminal
-//               usage summary), or "error". Never NULL.
+//               "queryDetail" (an MCP tool step), "chart" (a rendered figure),
+//               "costStatistics" (terminal usage summary), or "error".
+//               Never NULL.
+//
+//               These are the SAME tags the HTTP/SSE transport sends, and they
+//               come off the same chat-tier filter pipeline, so an embedded
+//               client and a network client see one event vocabulary.
 //   content     the UTF-8 text payload, NUL-terminated. Never NULL but may be
 //               empty (e.g. for "costStatistics"). Only valid for the duration
 //               of the call — copy it if you need to keep it.
+//
+//               For "chart" this is the Apache ECharts *option* as a JSON
+//               object string, ready to parse and hand to setOption(). It is
+//               deliberately NOT delivered as text inside the reply: an option
+//               inlined into the answer would be replayed to the model as
+//               context on every later turn, and land in the clipboard when the
+//               user copies the reply.
+//
+//               A "chart" event REPLACES the render_chart tool's
+//               queryTitle/queryArguments/queryDetail triple, which is
+//               suppressed — so a handler that draws charts needs no tool-name
+//               sniffing, and one that ignores "chart" simply shows no figure.
 //   user_data   the opaque pointer passed to mirobody_chat, forwarded verbatim.
 //
 // Return non-zero to keep streaming, 0 to abort the turn early.
@@ -160,6 +177,34 @@ int mirobody_chat_messages(
     long long user_id,
     mirobody_chat_handler on_event,
     void* user_data);
+
+// Answer an "ask" event, so a turn parked on the `ask_user` tool can continue.
+//
+// The turn is BLOCKED inside the tool call when this event arrives — the model
+// asked and is waiting for the reply, rather than ending its turn — so the answer
+// must come from a DIFFERENT thread than the one running mirobody_chat_messages.
+// Nothing is in flight to the model while it waits: a round of tool calling is a
+// completed request, and the next round is a new one, so the user may take as long
+// as they like. What is held is one thread here.
+//
+//   ask_id       the "ask_id" from the event's JSON payload, verbatim.
+//   answer_json  the user's choice, as a JSON object. The shape is the caller's,
+//                and reaches the model as the tool's result — the built-in clients
+//                send {"selected":["..."],"other":"free text"}.
+//
+// Returns 1 when a waiting turn took it, 0 when none was waiting. A stale answer
+// (the turn was stopped, the tool timed out, the user tapped twice) is DROPPED,
+// never queued for whatever asks next. Answering is idempotent in the sense that
+// only the first call wins; later ones return 0.
+//
+// A client that never answers is not an error: the tool times out on its own and
+// tells the model nobody replied, so the turn always finishes.
+int mirobody_chat_answer(const char* ask_id, const char* answer_json);
+
+// Abandon every turn waiting on an answer. Their tools return "no answer" and the
+// turns finish normally. Call it when tearing down, or when the user leaves a
+// screen where answering is no longer possible.
+void mirobody_chat_answer_cancel_all(void);
 
 //------------------------------------------------------------------------------
 // Files
@@ -270,6 +315,106 @@ const char* mirobody_health_store(long long user_id, const char* resources_json)
 //
 // Same buffer ownership as above. NULL on error.
 const char* mirobody_health_recent(long long user_id, int count);
+
+//------------------------------------------------------------------------------
+// On-device LLM (llama.cpp + a GGUF file)
+//------------------------------------------------------------------------------
+//
+// A C door onto llm::LocalClient, for hosts that cannot hold a C++ object: iOS
+// reaches it from Swift through the bridging header, exactly as Android reaches
+// the same class through JNI. Deliberately the SAME shape as those JNI entry
+// points (open / load / generate / cancel / close), because the two are two
+// spellings of one contract and a difference between them would be a bug waiting
+// to happen rather than a design.
+//
+// Nothing here talks to a server, a provider, or the config. It is the offline
+// lane, and it is available even in a build with no server started.
+//
+// Handle-based because the weights must NOT be re-read between turns: that is
+// seconds of work over a few GB. One handle owns one model for its life and
+// builds a fresh context per turn.
+
+// Opaque on-device engine handle.
+typedef struct mirobody_llm mirobody_llm_t;
+
+// Event kinds for mirobody_llm_handler. Reasoning arrives as its own kind rather
+// than inline, because a reasoning model writes `<think>…</think>` into the token
+// stream and the split happens natively — the caller never sees a tag.
+#define MIROBODY_LLM_REPLY    0
+#define MIROBODY_LLM_THINKING 1
+#define MIROBODY_LLM_ERROR    2
+
+// Non-zero when this build linked llama.cpp. Zero means every call below is inert
+// (open returns NULL), which is the graceful-degradation contract the rest of this
+// header follows: a missing native piece never crashes a host, it just says no.
+int mirobody_llm_available(void);
+
+// Where to look for dlopen-able ggml backend modules — Android's
+// GGML_CPU_ALL_VARIANTS build, where the CPU kernels ship as one .so per feature
+// level and the best for this chip is chosen at startup. Call once, before
+// anything else here.
+//
+// A no-op in a statically linked build, which is every Apple one: iOS cannot
+// dlopen code the app wrote, so there is nothing to choose and the single -march
+// the toolchain settles on is the whole answer.
+void mirobody_llm_backend_path(const char* dir);
+
+// Open an engine over the GGUF at `model_path`. Cheap — nothing is read yet.
+//
+//   threads   worker threads; <= 0 takes the library's own tuned default, which
+//             is NOT hardware_concurrency (see LocalOptions::n_threads).
+//   thinking  1 to reason before answering, 0 not to, -1 to leave it to the
+//             model. Explicit because otherwise it is an accident: the built-in
+//             chat template has no Jinja engine, so a model's own
+//             `enable_thinking` conditional never fires.
+//
+// Returns NULL when llama.cpp is not linked in or allocation fails.
+mirobody_llm_t* mirobody_llm_open(const char* model_path, int threads, int thinking);
+
+// Free the engine and its weights. Safe on NULL.
+void mirobody_llm_close(mirobody_llm_t* handle);
+
+// Ask the in-flight turn to stop. Safe from another thread — that is the whole
+// point of it — and a no-op when idle.
+void mirobody_llm_cancel(mirobody_llm_t* handle);
+
+// Read the weights now, so the first turn does not pay for them. BLOCKS for
+// seconds over a few GB; idempotent.
+//
+// Returns "" on success, else why not. Same buffer ownership as the health calls:
+// owned by mirobody, valid until this thread's next mirobody_llm_load.
+const char* mirobody_llm_load(mirobody_llm_t* handle);
+
+// Non-zero once the weights are in memory, so a caller knows whether this turn
+// owes the user a spinner.
+int mirobody_llm_loaded(mirobody_llm_t* handle);
+
+// Streaming callback for mirobody_llm_generate. `kind` is one of the
+// MIROBODY_LLM_* constants; `text` is UTF-8, NUL-terminated, valid only for the
+// duration of the call. Return non-zero to keep streaming, 0 to stop the turn at
+// the next token — which is how a cancelled UI ends a decode loop that would
+// otherwise run for minutes.
+typedef int (*mirobody_llm_handler)(int kind, const char* text, void* user_data);
+
+// Run one turn, streaming into `on_event`. BLOCKS until the reply ends or is
+// stopped, so call it off whatever thread draws.
+//
+// `roles` and `contents` are parallel arrays of `count` strings: roles[i] is
+// "user" or "assistant" for contents[i]. The WHOLE transcript, every turn — the
+// library owns the window and drops the oldest messages until the prompt fits,
+// keeping a reserve free for the answer, so trimming here too would only make two
+// policies disagree.
+//
+// `system_prompt` may be NULL or empty. Returns non-zero on success; a provider-
+// level failure is delivered as a MIROBODY_LLM_ERROR event, not as a return code.
+int mirobody_llm_generate(
+    mirobody_llm_t* handle,
+    const char* const* roles,
+    const char* const* contents,
+    int count,
+    const char* system_prompt,
+    mirobody_llm_handler on_event,
+    void* user_data);
 
 #ifdef __cplusplus
 }

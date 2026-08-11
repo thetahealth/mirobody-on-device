@@ -36,8 +36,11 @@ const button = require("./widgets").button;
 const icons  = require("./icons");
 const BACK_SVG  = icons.BACK_SVG;
 const TRASH_SVG = icons.TRASH_SVG;
+const PLUS_CIRCLE_SVG = icons.PLUS_CIRCLE_SVG;
+const INCOGNITO_SVG   = icons.INCOGNITO_SVG;
+const INCOGNITO_OUTLINE_SVG = icons.INCOGNITO_OUTLINE_SVG;
 
-const formatTimestamp  = require("./format").formatTimestamp;
+const formatStamp      = require("./format").formatStamp;
 const modals           = require("./modals");
 const showConfirmModal = modals.showConfirmModal;
 
@@ -197,37 +200,38 @@ function openHistory() {
         });
     };
 
+    // An 18px leading glyph for the two action buttons, sized like android's
+    // (18dp beside a bodyMedium label) and inheriting the button's colour so it
+    // tracks the toggle's state with the text.
+    function drawerGlyph(svg) {
+        return ui.setHTML(ui.dom("span", {
+            display: "flex", flex: "0 0 auto", lineHeight: "0"
+        }), svg.replace(/width="\d+" height="\d+"/, 'width="18" height="18"'));
+    };
+
     // The "New chat" / Incognito row only exists for a signed-in session; the login
     // screen's drawer has no thread to start or hide.
     var topRow = null;
     if (signedIn) {
 
-        // "New chat": drop the current thread for a fresh one. Skipped mid-stream so an
-        // in-flight reply isn't torn down. Leaves incognito state as-is (that's the
-        // top-bar toggle's job); clears the local mirror so a reload doesn't resurrect
-        // the old thread.
+        // "New chat": drop the current thread for a fresh one. The action itself lives
+        // in chat.js (chat.newChat), which is also what the `/new` command runs -- a
+        // command that had drifted from its button would be worse than no command.
         var newChatBtn = ui.dom("button", {
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
             border: "1px solid " + color.outlineVar, borderRadius: "8px",
             background: "transparent", cursor: "pointer",
             font: "inherit", fontSize: "0.95rem", fontWeight: "500",
             color: color.onSurface, padding: "9px 14px", flex: "1 1 0", minWidth: "0"
         }, { type: "button" });
+        newChatBtn.appendChild(drawerGlyph(PLUS_CIRCLE_SVG));
         newChatBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }), t("newChat")));
         newChatBtn.addEventListener("mouseenter", function () { newChatBtn.style.background = color.surfaceLow; });
         newChatBtn.addEventListener("mouseleave", function () { newChatBtn.style.background = "transparent"; });
         newChatBtn.addEventListener("click", function () {
             if (state.streaming) { return; }
-            state.messages = [];
-            state.currentConversationId = "";
-            state.readOnly = false;
-            if (!state.incognito) {
-                var freshDb = require("./db");
-                freshDb.saveMessages([]);
-                freshDb.saveConversationId("");   // forget the old thread id too
-            }
             dismiss();
-            require("./app").render();
+            require("./chat").newChat();
         });
 
         // Incognito ("privacy mode") toggle, sharing the top row with "New chat" (New
@@ -237,7 +241,7 @@ function openHistory() {
         // toggling swaps the whole session (chat.toggleIncognito) then closes the
         // drawer so the re-rendered chat shows the incognito banner/empty state.
         var incognitoBtn = ui.dom("button", {
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "8px",
             border: "1px solid " + (state.incognito ? color.primary : color.outlineVar),
             borderRadius: "8px", background: "transparent", cursor: "pointer",
             font: "inherit", fontSize: "0.95rem", fontWeight: "500",
@@ -245,6 +249,12 @@ function openHistory() {
             padding: "9px 14px", flex: "1 1 0", minWidth: "0"
         }, { type: "button", title: t(state.incognito ? "incognitoStop" : "incognitoStart") });
         incognitoBtn.setAttribute("aria-pressed", state.incognito ? "true" : "false");
+        // The ghost shows the state it produces -- the same mark the empty-state hero
+        // and the session banner carry -- rather than a borrowed eye-with-a-slash.
+        // Solid when on, hollow when off; both are 22px natively, so the button does
+        // not resize as it toggles.
+        incognitoBtn.appendChild(drawerGlyph(
+            state.incognito ? INCOGNITO_SVG : INCOGNITO_OUTLINE_SVG));
         incognitoBtn.appendChild(ui.setText(ui.dom("span", { whiteSpace: "nowrap" }),
             t("incognitoMode")));
         incognitoBtn.addEventListener("mouseenter", function () { incognitoBtn.style.background = color.surfaceLow; });
@@ -551,7 +561,7 @@ function openHistory() {
         if (item.timestamp) {
             texts.appendChild(ui.setText(ui.dom("div", {
                 fontSize: "0.7rem", color: color.onSurfaceVar, opacity: "0.7"
-            }), formatTimestamp(item.timestamp)));
+            }), formatStamp(item.timestamp)));
         }
 
         var del = ui.dom("button", {
@@ -560,8 +570,9 @@ function openHistory() {
             display: "flex", alignItems: "center", justifyContent: "center",
             color: color.error
         }, { type: "button", title: t("delete") });
-        // Bump the trash glyph up from its 18px default for an easier tap target.
-        ui.setHTML(del, TRASH_SVG.replace('width="18" height="18"', 'width="24" height="24"'));
+        // Its native 18px, as android draws it (18dp in a 36dp icon button); the
+        // 40px button around it is the tap target, so the glyph doesn't have to be.
+        ui.setHTML(del, TRASH_SVG);
         del.addEventListener("click", function () {
             showConfirmModal(
                 t("historyDeleteTitle"), t("historyDeleteMessage"),

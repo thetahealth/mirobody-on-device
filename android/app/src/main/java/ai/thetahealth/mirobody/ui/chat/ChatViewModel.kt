@@ -58,6 +58,13 @@ data class ChatMessage(
     val imageUrls: List<String> = emptyList(),
     // Each entry is an Apache ECharts `option` (JSON object, stringified) rendered as a chart.
     val charts: List<String> = emptyList(),
+    // Answered by the composer itself (a slash command), never by a model. A local
+    // message is shown, then dropped everywhere a message would otherwise travel: it is
+    // not replayed to the on-device model and not written to history. See SlashCommand.
+    val local: Boolean = false,
+    // The on-device engine is loading its model for this turn. @Transient like
+    // `streaming`: a live-only state that is always false once the turn has settled.
+    @Transient val loadingModel: Boolean = false,
     @Transient val streaming: Boolean = false,
     val error: String? = null,
     val costStats: CostStatistics? = null,
@@ -100,6 +107,10 @@ data class ChatUiState(
     // Privacy mode: entering swaps the session for a fresh ephemeral one; while on,
     // turns aren't mirrored locally and each request carries incognito:true.
     val incognito: Boolean = false,
+    // `/probe` was typed. A one-shot request rather than "the probe is open": the
+    // ViewModel has no business owning a dialog's visibility, it only reports that the
+    // command ran. The UI opens the page and calls probeConsumed().
+    val probeRequested: Boolean = false,
 )
 
 class ChatViewModel(
@@ -110,6 +121,9 @@ class ChatViewModel(
     private val history: ChatHistoryStore,
     private val modelManager: ModelManager,
     private val mlKit: MlKitTextService,
+    // The built-in guide for a language tag, injected so the ViewModel needs no Context
+    // (it reads an asset — see SlashCommand.help).
+    private val helpMarkdown: (String) -> String,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatUiState(sessionId = UUID.randomUUID().toString()))
@@ -351,6 +365,11 @@ class ChatViewModel(
         }
     }
 
+    /** The UI has opened the probe; clear the request so it does not reopen. */
+    fun probeConsumed() {
+        _state.update { it.copy(probeRequested = false) }
+    }
+
     fun onInputChange(value: String) {
         _state.update { it.copy(input = value) }
     }
@@ -360,11 +379,67 @@ class ChatViewModel(
         viewModelScope.launch {
             settings.setSelectedProviderName(provider.key)
         }
+        // Start loading the moment it is CHOSEN, not when the first question is sent.
+        // The load costs seconds either way (up to ~14 s on the GPU build, which caches
+        // nothing between processes); this spends the gap while the user is still
+        // typing. Separate launch so a slow load never delays persisting the choice.
+        provider.modelSpec?.let { spec ->
+            viewModelScope.launch { runCatching { repo.preloadOnDevice(spec) } }
+        }
+    }
+
+    /**
+     * Run a slash command, or return false when the draft is not one.
+     *
+     * `/new` and `/incognito` call the SAME methods the drawer's rows do rather than
+     * reimplementing them — a command that drifted from its button would be worse than no
+     * command. Both of those are inert mid-stream by their own guard; `/help` is not, it
+     * only appends a message.
+     */
+    private fun runCommand(text: String): Boolean {
+        val cmd = SlashCommand.match(text)
+        if (cmd.isEmpty()) return false
+        if (cmd == SLASH_HELP) {
+            val doc = helpMarkdown(_state.value.language)
+            // Unreadable asset: fall through and let it be an ordinary question.
+            if (doc.isEmpty()) return false
+            // The document alone — the "/help" the user typed is not echoed back. It was
+            // a control, not something they said, and a conversation that opens with the
+            // user asking for the manual reads wrong on the way back through it.
+            //
+            // No persist() either: `local` messages never reach disk, so the guide lives
+            // on this screen for as long as it is useful and leaves nothing in the
+            // session — not a row, not a message count, not several KB of markdown in
+            // every conversation anyone ever ran /help in.
+            _state.update {
+                it.copy(
+                    input = "",
+                    messages = it.messages + ChatMessage(
+                        id = "help-${System.currentTimeMillis()}",
+                        role = Role.Assistant,
+                        text = doc,
+                        local = true,
+                    ),
+                )
+            }
+            return true
+        }
+        _state.update { it.copy(input = "") }
+        when (cmd) {
+            SLASH_NEW -> newChat()
+            SLASH_INCOGNITO -> toggleIncognito()
+            SLASH_PROBE -> _state.update { it.copy(probeRequested = true) }
+        }
+        return true
     }
 
     fun send() {
         val s = _state.value
         val question = s.input.trim()
+        // A command is answered here and never becomes a turn. Only when nothing is
+        // staged: with a file attached the user means to send it, and "/help" alongside
+        // it is a caption rather than a command.
+        if (s.attachments.isEmpty() && runCommand(question)) return
         val selected = s.selected
         val attachments = s.attachments
         // Allow an attachment-only turn (no text), matching the web composer.
@@ -406,8 +481,11 @@ class ChatViewModel(
                 val flow = if (onDeviceSpec != null) {
                     // Offline path: hand the settled transcript (incl. this new question,
                     // excluding the in-flight placeholder) to the on-device engine.
+                    // `local` messages (the /help guide) are excluded: the composer
+                    // answered those, not the model, and replaying several KB of our own
+                    // documentation as context would be paid for on every later turn.
                     val turns = _state.value.messages
-                        .filter { it.id != assistantMsg.id && it.text.isNotBlank() }
+                        .filter { it.id != assistantMsg.id && it.text.isNotBlank() && !it.local }
                         .map { ChatTurn(fromUser = it.role == Role.User, text = it.text) }
                     repo.chatOnDevice(turns, onDeviceSpec)
                 } else {
@@ -425,7 +503,7 @@ class ChatViewModel(
                 flow.collect { event -> applyEvent(assistantMsg.id, event) }
             }.onFailure { t ->
                 errorBus.emit(t)
-                updateMessage(assistantMsg.id) { it.copy(streaming = false, error = t.message) }
+                updateMessage(assistantMsg.id) { it.copy(streaming = false, loadingModel = false, error = t.message) }
             }
             _state.update { it.copy(sending = false) }
             if (!s.incognito) persist()   // settled turn (reply / error) is now safe to store
@@ -434,8 +512,11 @@ class ChatViewModel(
 
     private fun applyEvent(targetId: String, event: ChatStreamEvent) {
         when (event) {
+            ChatStreamEvent.Loading ->
+                updateMessage(targetId) { it.copy(loadingModel = true) }
             is ChatStreamEvent.Reply ->
-                updateMessage(targetId) { it.copy(text = it.text + event.delta) }
+                // The first delta is also the proof that loading finished.
+                updateMessage(targetId) { it.copy(text = it.text + event.delta, loadingModel = false) }
             is ChatStreamEvent.Thinking ->
                 updateMessage(targetId) { it.copy(thinking = it.thinking + event.delta) }
             is ChatStreamEvent.QueryTitle ->
@@ -462,9 +543,9 @@ class ChatViewModel(
             is ChatStreamEvent.Chart ->
                 updateMessage(targetId) { it.copy(charts = it.charts + event.optionJson) }
             is ChatStreamEvent.Error ->
-                updateMessage(targetId) { it.copy(streaming = false, error = event.message) }
+                updateMessage(targetId) { it.copy(streaming = false, loadingModel = false, error = event.message) }
             ChatStreamEvent.End ->
-                updateMessage(targetId) { it.copy(streaming = false) }
+                updateMessage(targetId) { it.copy(streaming = false, loadingModel = false) }
             is ChatStreamEvent.Stats ->
                 updateMessage(targetId) { it.copy(costStats = event.stats) }
             is ChatStreamEvent.Conversation ->

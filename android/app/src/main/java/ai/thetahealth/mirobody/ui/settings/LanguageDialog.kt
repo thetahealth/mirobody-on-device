@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.theme.MirobodyTheme
 import kotlin.math.abs
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ fun LanguageDialog(
     var staged by remember(current) { mutableStateOf(current) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.chat_language)) },
+        title = { DialogTitleWithClose(stringResource(R.string.chat_language), onDismiss) },
         text = {
             LanguageWheelPicker(
                 options = LANGUAGE_OPTIONS,

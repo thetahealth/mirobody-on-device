@@ -279,6 +279,17 @@ set(MIROBODY_CORE_SOURCES
     src/jwt/google.cpp
     src/jwt/jwt.cpp
     src/platform/log.cpp
+    # The C ABI's pure JSON/string transforms. In the core (not just
+    # mirobody_shared, where c_api.cpp itself lives) so the test binary can
+    # reach them -- see src/platform/c_api_json.hpp.
+    src/platform/c_api_json.cpp
+    # The C ABI's on-device LLM half. In the core for a different reason: the
+    # three platform bridges are mutually exclusive (c_api.cpp desktop,
+    # ios_bridge.mm iOS, android_jni.cpp Android) and nothing in this one is
+    # platform-specific, so hosting it in any single bridge would leave the other
+    # two without it. Compiles to almost nothing when MIROBODY_ONDEVICE_LLM is
+    # OFF -- it calls the stub, whose available() is false.
+    src/platform/c_api_llm.cpp
     src/user/email.cpp
     src/health/vendor_link.cpp
     src/health/vendor_fhir.cpp
@@ -290,11 +301,13 @@ set(MIROBODY_CORE_SOURCES
     src/chat/event/event.cpp
     src/chat/event/filter/filter.cpp
     src/chat/event/filter/chart.cpp
+    src/chat/event/filter/ask.cpp
     src/chat/packet.cpp
     src/chat/agent.cpp
     src/circle/access.cpp
     src/mcp/tool.cpp
     src/mcp/resource.cpp
+    src/mcp/ask.cpp
     src/transcode/file.cpp
     src/transcode/parser.cpp
     src/oauth/pkce.cpp
@@ -481,6 +494,20 @@ if(MIROBODY_ONDEVICE_LLM)
             target_link_libraries(mirobody_core PUBLIC "${${_lib}}")
         endif()
     endforeach()
+    # No ggml-cpu to link against means the SDK was built GGML_BACKEND_DL: the CPU
+    # backend is not one library any more but a set of libggml-cpu-<arch>.so modules,
+    # dlopened at startup so the fastest one THIS chip can run wins (android/build-llama.cmd).
+    # Its absence IS the switch, the same way GGML_VULKAN_LIB's presence is one -- there
+    # is no separate option to keep in sync with what is actually on disk.
+    #
+    # It has to reach C++ because the ggml_cpu_has_*() family lives in those modules and
+    # so cannot be called: with DL, src/llm/local.cpp would not link at all. Those calls
+    # answered "what was this binary compiled for", a question that no longer has one
+    # answer -- which variant got loaded replaces it. See LocalCpuFeatures::variant.
+    if(NOT GGML_CPU_LIB)
+        target_compile_definitions(mirobody_core PUBLIC MIROBODY_ONDEVICE_LLM_DL)
+        message(STATUS "mirobody_core: ggml CPU backends are dlopened at runtime")
+    endif()
     message(STATUS "mirobody_core: on-device LLM ON -> ${LLAMA_LIB}")
 endif()
 
@@ -762,7 +789,18 @@ if(ANDROID)
     target_compile_options(mirobody PRIVATE
         -fvisibility=hidden -fvisibility-inlines-hidden
         -ffunction-sections -fdata-sections)
+    # 16 KB page support. Android 15+ devices may run with a 16 KB kernel page size,
+    # and the loader can only map a segment whose alignment is a multiple of the page
+    # size -- so a .so whose LOAD segments are 4 KB-aligned (the default up to NDK r27;
+    # r28 flipped it) simply will not load there. Play also gates on this. The APK side
+    # is already handled: jniLibs.useLegacyPackaging=false stores the .so uncompressed
+    # and page-aligned in the zip, which is necessary but says nothing about the ELF.
+    #
+    # Not conditional on the NDK version: passing it on a toolchain that already does
+    # this is a no-op, and pinning behaviour to a version we would have to remember to
+    # re-check is how this regresses.
     target_link_options(mirobody PRIVATE
+        -Wl,-z,max-page-size=16384
         -Wl,--gc-sections
         -Wl,--exclude-libs,ALL
         $<$<NOT:$<CONFIG:Debug>>:-Wl,--strip-all>)

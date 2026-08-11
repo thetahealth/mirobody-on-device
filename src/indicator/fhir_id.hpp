@@ -68,6 +68,29 @@ inline const char* system_name(int sys) {
     }
 }
 
+// The canonical URL a FHIR `Coding.system` carries, or "" when this project has
+// no business asserting one.
+//
+// The first five are published identifiers -- HL7 names them, and a receiving
+// system will recognise them. The OBO ontologies use their own PURLs, which FHIR
+// implementations follow by convention rather than by specification. The rest are
+// left empty on purpose: a Coding with no system is weak but honest, while a
+// Coding with an invented system URL is a claim about interoperability that
+// nobody honoured. THETA is ours to define once the minting policy exists -- see
+// fine-tuning/README.md on the 335 concepts no standard carries.
+inline const char* system_url(int sys) {
+    switch (sys) {
+        case SYS_SNOMED_CT: return "http://snomed.info/sct";
+        case SYS_LOINC: return "http://loinc.org";
+        case SYS_RXNORM: return "http://www.nlm.nih.gov/research/umls/rxnorm";
+        case SYS_CVX: return "http://hl7.org/fhir/sid/cvx";
+        case SYS_DCM: return "http://dicom.nema.org/resources/ontology/DCM";
+        case SYS_CHEBI: return "http://purl.obolibrary.org/obo/chebi.owl";
+        case SYS_MONDO: return "http://purl.obolibrary.org/obo/mondo.owl";
+        default: return "";
+    }
+}
+
 // Inverse of system_name; returns -1 for an unknown name.
 inline int system_from_name(const std::string& name) {
     for (int i = 0; i < SYS_COUNT; ++i)

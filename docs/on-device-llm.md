@@ -118,7 +118,7 @@ style: |
 <tr><td colspan="2"><b>Power</b></td><td><span style="color:#BA1A1A">high</span></td><td><span style="color:#8A5E15">medium</span></td><td><span style="color:#2A7248">low</span></td></tr>
 <tr><td colspan="2"><b>Built for</b></td><td>general compute</td><td>parallel math / graphics</td><td>vision &amp; speech</td></tr>
 <tr><td colspan="2"><b>Examples</b></td><td>Intel · AMD<br>Apple / Arm cores</td><td>NVIDIA · AMD<br>Adreno · Mali<br>Apple GPU</td><td>Hexagon (Qualcomm)<br>ANE (Apple)<br>TPU (Pixel)</td></tr>
-<tr><td colspan="2"><b>LLM today</b></td><td><span style="color:#BA1A1A">last resort</span></td><td><span style="color:#2A7248"><b>the practical default</b></span></td><td><span style="color:#8A5E15">early, restricted</span></td></tr>
+<tr><td colspan="2"><b>LLM today</b></td><td><span style="color:#8A5E15">desktop: last resort<br><b>phone: what we ship</b></span></td><td><span style="color:#8A5E15">desktop: the default<br>phone: <b>only where a build exists</b></span></td><td><span style="color:#8A5E15">early, restricted</span></td></tr>
 <tr><td rowspan="5"><b>Runtimes</b></td><td>llama.cpp</td><td><span style="color:#2A7248;font-size:1.2em">●</span></td><td><span style="color:#2A7248;font-size:1.2em">●</span></td><td></td></tr>
 <tr><td>LiteRT-LM</td><td></td><td><span style="color:#2A7248;font-size:1.2em">●</span></td><td><span style="color:#8A5E15">◐</span> early</td></tr>
 <tr><td>ONNX Runtime</td><td><span style="color:#2A7248;font-size:1.2em">●</span></td><td><span style="color:#2A7248;font-size:1.2em">●</span></td><td><span style="color:#2A7248;font-size:1.2em">●</span> QNN</td></tr>
@@ -227,26 +227,98 @@ style: |
 
 ## Our approach: bundle the engine, not the model
 
+<style scoped>
+  p { font-size: 0.8em; line-height: 1.3; margin: 0.7em 0 0.25em; }
+  h2 { margin-bottom: 0.25em; }
+  /* One step down from the deck's 0.62em, and stated once so both tables move
+     together -- the two are read as a pair and a size difference would say
+     something about them that isn't true. */
+  table { font-size: 0.56em; }
+  /* The tier table: max-content sizing gives the Tier column only what the header
+     needs, so "Desktop — Qt · Electron" wraps. Fixed layout with stated widths is
+     the only way to hand a column more than its content asks for. */
+  table:last-of-type { table-layout: fixed; width: 100%; }
+  table:last-of-type th:nth-child(1), table:last-of-type td:nth-child(1) { width: 21%; }
+  table:last-of-type th:nth-child(2), table:last-of-type td:nth-child(2) { width: 27%; }
+  table:last-of-type th:nth-child(3), table:last-of-type td:nth-child(3) { width: 23%; }
+  table:last-of-type th:nth-child(4), table:last-of-type td:nth-child(4) { width: 29%; }
+</style>
+
 **Vendors vs Mirobody:**
 
 | | **Google · Gemini Nano** | **Apple · Foundation Models** | **Mirobody** |
 |---|---|---|---|
-| Model | Gemini Nano (1.8 / 3.25B) | ~3B, 2-bit QAT | any GGUF / Gemma |
+| Model | Gemini Nano (1.8 / 3.25B) | ~3B, 2-bit QAT | any GGUF / `.litertlm` |
 | Runs in | AICore (NPU/TPU) | Neural Engine | bundled engine (llama.cpp / LiteRT-LM) |
 | You get | one fixed model | one fixed model | pick & swap, cross-platform |
 | Available on | recent flagships | Apple silicon | any desktop, most phones |
+| Changing model | with the OS | with the OS | any time — **from the model picker** |
 
-**What we run, per tier:**
+**What we run, per tier — and what limits each catalog:**
 
-| Tier | Runtime · Format | Models |
-|------|------------------|--------|
-| **Desktop** — Qt · Electron | llama.cpp · GGUF | any GGUF — Gemma, Qwen, Llama, Phi… |
-| **Mobile** — Android · iOS | LiteRT-LM · `.litertlm` | Gemma 4 · Qwen |
-| **Mobile** — HarmonyOS | llama.cpp · GGUF | any GGUF — Qwen3.5 2B · 4B |
+| Tier | Runtime · Format | Models | Catalog limited by |
+|---|---|---|---|
+| **Desktop** — Qt · Electron | llama.cpp · GGUF | Gemma · Qwen · Llama · Phi… | nothing — any GGUF |
+| **Mobile** — Android | **both** — LiteRT-LM · `.litertlm` **and** llama.cpp · GGUF | Gemma 4 on LiteRT · dense on llama.cpp | `.litertlm` exists only where someone converted it |
+| **Mobile** — iOS | **both**, same split as Android | Gemma 4 on LiteRT · Qwen3.5 on llama.cpp | llama.cpp lane **written, never compiled** |
+| **Mobile** — HarmonyOS | llama.cpp · GGUF | **Qwen3.5** 2B · 4B | nothing — any GGUF |
 
-<div class="note" style="margin-top:1em">
+---
 
-Engine bundled in-app; the model is downloaded on demand and managed in **⚙ → On-device AI** — swap or update without shipping a new app.
+<!-- _class: secs -->
+
+## Android — two engines, and neither one wins
+
+<style scoped>
+  p { font-size: 0.82em; line-height: 1.3; margin: 0.4em 0 0.25em; }
+  h2 { margin-bottom: 0.2em; }
+  table { font-size: 0.52em; }
+  /* Twelve rows on one slide: the theme's cell padding is what overflows it, not
+     the type size. Trim the padding first -- it costs nothing a reader can name. */
+  th, td { padding: 0.25em 0.55em !important; }
+  table.setup { margin-left: auto !important; margin-right: auto !important; }
+  /* The findings table. Under max-content sizing the first column gets only what
+     its (empty) header asks for, so "anything plainly dense -> llama.cpp" wraps;
+     fixed layout is the only way to hand a column more than its content wants.
+     What Measured gives up goes to Why -- that one is prose and wraps gracefully,
+     the other two do not. */
+  /* The gap the other tables get from their caption paragraph; this one has no
+     caption, so it has to state it. */
+  table:last-of-type { table-layout: fixed; width: 100%; margin: 0.9em auto 0; }
+  table:last-of-type th:nth-child(1), table:last-of-type td:nth-child(1) { width: 24%; }
+  table:last-of-type th:nth-child(2), table:last-of-type td:nth-child(2) { width: 26%; }
+  table:last-of-type th:nth-child(3), table:last-of-type td:nth-child(3) { width: 50%; }
+  .note { font-size: 0.5em; line-height: 1.3; }
+</style>
+
+**Experimental setup:**
+
+<table class="setup">
+<tbody>
+<tr><td><b>Devices</b></td><td>Snapdragon <b>8 Elite Gen 5</b> · 16 GB — and a <b>865</b>, six years older, because one phone proves nothing</td></tr>
+<tr><td><b>Runtimes</b></td><td>LiteRT-LM · <code>.litertlm</code> <b>and</b> llama.cpp · GGUF — both bundled in one APK</td></tr>
+<tr><td><b>Method</b></td><td>one <code>/probe</code> screen drives both — warm runs, 128-token prefill, 64-token decode</td></tr>
+</tbody>
+</table>
+
+**decode, tokens/sec — the winner changes with the model, and again with the chip:**
+
+| | | LiteRT CPU | LiteRT GPU | llama.cpp CPU |
+|---|---|--:|--:|--:|
+| **8 Elite Gen 5** | Gemma 4 E2B | 30.3 | **50.8** | 20.7 |
+| | Qwen3 4B Instruct | 7.8 | *(no GPU build)* | **12.4** |
+| **Snapdragon 865** | Gemma 4 E2B | **12.6** | 11.9 | 5.0 |
+
+| | Measured | Why |
+|---|---|---|
+| **Gemma E-series** → LiteRT | **1.5×** on the 8 Elite, **2.5×** on the 865 | MatFormer + per-layer embeddings — Google's own runtime reads them properly |
+| **anything plainly dense** → llama.cpp | **1.6× decode** | no structure to exploit, so it is down to kernels, and those it has |
+| **CPU** + `i8mm` kernels | **2.3× decode** — the biggest lever | a cross build cannot probe for it, so Android ships all seven and picks at load |
+| **GPU** — where a build exists | 8 Elite: prefill **6×**, decode 1.7×, **13 s cold** · 865: **nothing** | it never warms up; and the 865's CPU already saturates the memory controller |
+
+<div class="note" style="margin-top:0.3em">
+
+A model's spec names the engine it needs (`OnDeviceRuntime`). Full numbers and the open NPU question: [`android/README.md`](../android/README.md).
 
 </div>
 
@@ -257,8 +329,10 @@ Engine bundled in-app; the model is downloaded on demand and managed in **⚙ �
 ## HarmonyOS — and where the compute actually went
 
 <style scoped>
-  p { font-size: 0.9em; line-height: 1.35; margin: 0.45em 0 0.3em; }
-  h2 { margin-bottom: 0.25em; }
+  /* Same as the Android slide before it: the two are read as a pair, and a label
+     that changes size between them would say something about them that isn't true. */
+  p { font-size: 0.82em; line-height: 1.3; margin: 0.4em 0 0.25em; }
+  h2 { margin-bottom: 0.2em; }
   table { font-size: 0.56em; }
   /* The theme sizes tables to max-content, so centering has to be stated rather
      than assumed -- an auto width would fill and there would be nothing to centre. */

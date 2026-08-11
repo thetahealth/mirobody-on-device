@@ -40,11 +40,11 @@ const char* kFontKey     = "mirobody-font-offset";
 const char* kDefaultModel = "gemini-2.5-flash";
 
 // Synthetic, client-only providers that run a local GGUF fully on-device (no server).
-// One picker entry per registered model, named "<model> · On-device"; all share the
-// kOnDeviceCode sentinel and carry the model name in a "model" field. Mirrors
+// One picker entry per downloaded model, named "<model> · On-device"; all share the
+// kOnDeviceCode sentinel and carry the model's registry id in a "model" field. Mirrors
 // ProviderInfo.onDevice on Android/iOS.
 const char* kOnDeviceSuffix = " \xC2\xB7 On-device";  // " · On-device" (UTF-8)
-const char* kOnDeviceCode   = "__ondevice_gemma4__";
+const char* kOnDeviceCode   = "__ondevice__";
 
 // The ten languages the app offers (config.js LANGUAGES); the picker shows
 // these and the chosen code rides on each agent request.
@@ -427,7 +427,7 @@ void AppController::loadProviders() {
 }
 
 // providers_ = the cached server providers + one synthetic entry per on-device model
-// ("<model> · On-device", sentinel code, model name in "model"). Rerun whenever the
+// ("<model> · On-device", sentinel code, model id in "model"). Rerun whenever the
 // server list or the model registry changes; keeps/repairs the current selection.
 void AppController::rebuildProviders() {
     providers_ = serverProviders_;
@@ -435,18 +435,32 @@ void AppController::rebuildProviders() {
     for (const QVariant& v : providers_) names << v.toMap().value("name").toString();
     // Only *downloaded* on-device models appear in the picker; the rest are reached
     // via the manager (the "Manage on-device AI" entry the QML picker appends).
-    for (const QString& model : downloader_->names()) {
-        if (!downloader_->isReady(model)) continue;
-        const QString label = model + QString::fromUtf8(kOnDeviceSuffix);
+    for (const QVariant& v : downloader_->readyModels()) {
+        const QVariantMap model = v.toMap();
+        const QString label = model.value("name").toString() + QString::fromUtf8(kOnDeviceSuffix);
         QVariantMap m;
         m.insert("name", label);
         m.insert("code", QString::fromUtf8(kOnDeviceCode));
-        m.insert("model", model);
+        m.insert("model", model.value("id").toString());
         providers_.push_back(m);
         names << label;
     }
     if (!names.isEmpty() && !names.contains(provider_)) setProvider(names.first());
     emit providersChanged();
+}
+
+// Pick a downloaded on-device model as the current provider, by its registry id. The
+// manager calls this so downloading a model and using it are one errand rather than two
+// (the picker still lists it — that list is the one place every backend is comparable).
+void AppController::selectOnDeviceModel(const QString& id) {
+    for (const QVariant& v : providers_) {
+        const QVariantMap m = v.toMap();
+        if (m.value("code").toString() == QString::fromUtf8(kOnDeviceCode)
+            && m.value("model").toString() == id) {
+            setProvider(m.value("name").toString());
+            return;
+        }
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -523,6 +537,29 @@ void AppController::sendMessage(const QString& text) {
             } else if (type == "costStatistics" && o.contains("cost")) {
                 chat_->setCost(assistantRow, o.value("cost").toObject().toVariantMap());
                 chat_->setProvider(assistantRow, turnProvider);
+            } else if (type == "chart") {
+                // An ECharts `option`, sent as a real nested object (the server
+                // parsed it). Kept as JSON text, which is what the render host takes
+                // and what a ```echarts block in the reply body carries too, so both
+                // paths reach the same renderer.
+                const QJsonObject chart = o.value("chart").toObject();
+                if (!chart.isEmpty()) {
+                    chat_->addChart(assistantRow, QString::fromUtf8(
+                        QJsonDocument(chart).toJson(QJsonDocument::Compact)));
+                }
+            } else if (type == "image") {
+                chat_->addImage(assistantRow, o.value("content").toString());
+            } else if (type == "queryTitle" || type == "queryArguments"
+                       || type == "queryDetail") {
+                // One tool invocation's lifecycle: title (the tool's name), arguments
+                // (the request) and detail (its result), correlated by tool_id. Shown
+                // as an expandable card above the reply.
+                const QString phase = type == QLatin1String("queryTitle")
+                    ? QStringLiteral("title")
+                    : (type == QLatin1String("queryArguments") ? QStringLiteral("arguments")
+                                                               : QStringLiteral("detail"));
+                chat_->toolEvent(assistantRow, phase, o.value("tool_id").toString(),
+                                 o.value("content").toString());
             } else if (type == "error") {
                 if (stream_ == sender()) stream_ = nullptr;
                 failTurn(/*userRow=*/assistantRow - 1, assistantRow,
@@ -546,9 +583,8 @@ void AppController::sendMessage(const QString& text) {
     // The request carries the full conversation (all rows up to and including the
     // new user turn -- i.e. everything except the empty assistant placeholder).
     QJsonArray messages;
-    const QVariantList snap = chat_->snapshot();
-    for (int i = 0; i < assistantRow && i < snap.size(); ++i) {
-        const QVariantMap m = snap.at(i).toMap();
+    for (const QVariant& v : chat_->context(assistantRow)) {
+        const QVariantMap m = v.toMap();
         messages.push_back(QJsonObject{
             {"role", m.value("role").toString()},
             {"content", m.value("content").toString()},
@@ -601,6 +637,9 @@ void AppController::sendMessage(const QString& text) {
 void AppController::finishTurn(int assistantRow, const QString& provider) {
     setStreaming(false);
     if (!provider.isEmpty()) chat_->setProvider(assistantRow, provider);
+    // A tool whose result never arrived would spin forever otherwise: the turn is
+    // over, so every card on it is too.
+    chat_->settleTools(assistantRow);
     saveConversation();
 }
 
@@ -610,6 +649,7 @@ void AppController::failTurn(int userRow, int assistantRow, const QString& error
     // does not persist a turn that errored before completing).
     setStreaming(false);
     chat_->setContent(assistantRow, errorText);
+    chat_->settleTools(assistantRow);   // the stream died mid-call; stop the spinners
     Q_UNUSED(userRow);
     // Persist a snapshot that excludes the failed pair (the trailing user +
     // assistant rows) by temporarily not saving them.
@@ -628,7 +668,7 @@ void AppController::stopStreaming() {
 //------------------------------------------------------------------------------
 // On-device chat (a local GGUF via llama.cpp) — emits the same reply/finish/fail
 // flow the SSE path does, so ChatModel updates identically. `model` is the registry
-// entry name; `label` is the picker's display name (used as the turn's provider tag).
+// entry id; `label` is the picker's display name (used as the turn's provider tag).
 //------------------------------------------------------------------------------
 
 void AppController::sendOnDeviceMessage(const QString& model, const QString& label, int assistantRow) {
@@ -641,15 +681,7 @@ void AppController::sendOnDeviceMessage(const QString& model, const QString& lab
 
     // Conversation context: every row up to and including the new user turn (i.e.
     // all but the empty assistant placeholder at assistantRow).
-    QVariantList history;
-    const QVariantList snap = chat_->snapshot();
-    for (int i = 0; i < assistantRow && i < snap.size(); ++i) {
-        const QVariantMap m = snap.at(i).toMap();
-        history.push_back(QVariantMap{
-            {QStringLiteral("role"), m.value("role").toString()},
-            {QStringLiteral("content"), m.value("content").toString()},
-        });
-    }
+    const QVariantList history = chat_->context(assistantRow);
 
     auto acc   = std::make_shared<QString>();
     auto conns = std::make_shared<QList<QMetaObject::Connection>>();
@@ -822,8 +854,10 @@ void AppController::newChat() {
 void AppController::toggleIncognito() {
     if (streaming_) return;
     if (!incognito_) {
-        // Stash the real conversation and start a blank ephemeral one.
-        incoSavedMessages_ = chat_->snapshot();
+        // Stash the real conversation and start a blank ephemeral one. Locals
+        // included: this stash never touches disk, and a guide the user is
+        // reading should still be there when they leave incognito.
+        incoSavedMessages_ = chat_->snapshot(/*includeLocal=*/true);
         incoSavedConvId_   = conversationId_;
         incoSavedReadOnly_ = readOnly_;
         incoSavedValid_    = true;
@@ -843,6 +877,34 @@ void AppController::toggleIncognito() {
         incoSavedMessages_.clear();
         incoSavedConvId_.clear();
     }
+}
+
+//------------------------------------------------------------------------------
+// Slash commands (qml/slash.js)
+//
+// The typed command is never echoed as a user turn -- it was a control, not
+// something the user said -- so only the answer lands in the thread, and it lands
+// flagged `local`: shown, but invisible to persistence and to the next turn's
+// context. Same treatment the web and Android clients give it.
+//------------------------------------------------------------------------------
+
+void AppController::appendLocalReply(const QString& text) {
+    if (text.isEmpty()) return;
+    chat_->appendMessage(QStringLiteral("assistant"), text,
+                         QDateTime::currentMSecsSinceEpoch(), /*local=*/true);
+}
+
+QString AppController::helpDocument() const {
+    // zh or en, like the other clients -- the guide is prose about this app, not a
+    // UI string table, so it is written rather than translated ten ways.
+    const QString name = language_.startsWith(QLatin1String("zh"))
+        ? QStringLiteral(":/help/help-zh.md")
+        : QStringLiteral(":/help/help-en.md");
+    QFile f(name);
+    if (!f.open(QIODevice::ReadOnly)) return {};
+    const QString text = QString::fromUtf8(f.readAll());
+    f.close();
+    return text;
 }
 
 //------------------------------------------------------------------------------

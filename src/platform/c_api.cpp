@@ -30,6 +30,8 @@
 
 #include "cache/cache.hpp"
 #include "chat/agent.hpp"
+#include "chat/event/event.hpp"
+#include "chat/event/filter/filter.hpp"
 #include "client/http_client.hpp"
 #include "config/config.hpp"
 #include "database/database.hpp"
@@ -38,7 +40,9 @@
 #include "fhir/store.hpp"
 #include "fhir/write.hpp"
 #include "llm/event.hpp"
+#include "mcp/ask.hpp"
 #include "memory/memory.hpp"
+#include "platform/c_api_json.hpp"
 #include "platform/log.hpp"
 #include "storage/storage.hpp"
 #include "transcode/file.hpp"
@@ -439,20 +443,14 @@ int run_chat_turn(const char* provider,
     // the agent name and the model. No '/' => the whole token is one field (an
     // agent name, or -- with the prefix-less list -- a bare model). resolve_agent
     // below sorts that out.
-    const std::string pair = c_to_std(provider);
-    std::string agent_name, model;
-    const std::string::size_type slash = pair.find('/');
-    if (slash == std::string::npos) {
-        agent_name = pair;
-    } else {
-        agent_name = pair.substr(0, slash);
-        model      = pair.substr(slash + 1);
-    }
+    const mirobody::platform::ProviderToken token =
+        mirobody::platform::split_provider(c_to_std(provider));
+    std::string agent_name = token.agent;
 
     mirobody::chat::AgentRequest req;
     req.question = std::move(question);
     req.messages = std::move(messages);
-    req.provider = model;
+    req.provider = token.model;
     req.user_id  = static_cast<std::int64_t>(user_id);
 
     // Hand the locally-executed tools their services (see ChatServices above).
@@ -492,13 +490,34 @@ int run_chat_turn(const char* provider,
     // Adapt the streamed llm events onto the C callback. Returning false from
     // the handler aborts the in-flight turn; we propagate the host's 0 return as
     // that abort signal and remember it so we can report it to the caller.
+    //
+    // The llm stream goes through the CHAT tier's filter pipeline on the way out,
+    // exactly as the server's dispatcher routes it. This used to hand llm::Events
+    // straight to the callback, which meant every filter was server-only: an
+    // embedded client saw the raw render_chart tool triple where an HTTP client
+    // saw one clean "chart" event, and had to re-implement ChartFilter itself to
+    // catch up. One pipeline, one vocabulary, and a filter added to
+    // make_event_pipeline() now reaches both transports by construction.
     bool aborted = false;
-    mirobody::llm::EventHandler sink =
-        [&](const mirobody::llm::Event& e) -> bool {
-            const int keep = on_event(mirobody::llm::to_string(e.type),
-                                      e.content.c_str(), user_data);
+    const mirobody::chat::EventPipeline pipeline = mirobody::chat::make_event_pipeline();
+
+    const mirobody::chat::EventFilter::Sink out =
+        [&](const mirobody::chat::Event& ev) -> bool {
+            // payload(), not to_json(): the C ABI carries a flat (type, content)
+            // pair, so a chart arrives as its ECharts option ready to parse.
+            const std::string body = ev.payload();
+            const int keep = on_event(ev.type(), body.c_str(), user_data);
             if (keep == 0) { aborted = true; return false; }
             return true;
+        };
+
+    mirobody::llm::EventHandler sink =
+        [&](const mirobody::llm::Event& e) -> bool {
+            const std::unique_ptr<mirobody::chat::Event> ce = mirobody::chat::event_from_llm(e);
+            // An llm event with no chat counterpart is dropped rather than
+            // guessed at; event_from_llm covers every type today.
+            if (!ce) return true;
+            return pipeline.feed(*ce, out);
         };
 
     try {
@@ -542,38 +561,31 @@ extern "C" int mirobody_chat_messages(
 
     if (!on_event) return -1;
 
-    rapidjson::Document d;
-    if (!messages_json || d.Parse(messages_json).HasParseError() || !d.IsArray()) {
-        mirobody::platform::log_error("mirobody_chat_messages: messages_json is not a JSON array");
-        return -1;
-    }
-
     // Tolerant extraction: an entry missing role or content is skipped rather
     // than failing the turn. `question` is the LAST user turn -- the summary
     // persist_history records, and what history-keyed features key off.
-    std::vector<mirobody::llm::ChatMessage> messages;
-    std::string question;
-    for (rapidjson::SizeType i = 0; i < d.Size(); ++i) {
-        const rapidjson::Value& m = d[i];
-        if (!m.IsObject()) continue;
-        rapidjson::Value::ConstMemberIterator role    = m.FindMember("role");
-        rapidjson::Value::ConstMemberIterator content = m.FindMember("content");
-        if (role == m.MemberEnd()    || !role->value.IsString())    continue;
-        if (content == m.MemberEnd() || !content->value.IsString()) continue;
-
-        mirobody::llm::ChatMessage msg;
-        msg.role.assign(role->value.GetString(), role->value.GetStringLength());
-        msg.content.assign(content->value.GetString(), content->value.GetStringLength());
-        if (msg.role == "user") question = msg.content;
-        messages.push_back(std::move(msg));
+    mirobody::platform::ChatInput in = mirobody::platform::parse_chat_messages(messages_json);
+    if (in.error == mirobody::platform::ChatInputError::NotAnArray) {
+        mirobody::platform::log_error("mirobody_chat_messages: messages_json is not a JSON array");
+        return -1;
     }
-    if (messages.empty()) {
+    if (in.error == mirobody::platform::ChatInputError::NoUsableMessages) {
         mirobody::platform::log_error("mirobody_chat_messages: no usable messages");
         return -1;
     }
 
-    return run_chat_turn(provider, std::move(messages), std::move(question),
+    return run_chat_turn(provider, std::move(in.messages), std::move(in.question),
                          user_id, on_event, user_data);
+}
+
+extern "C" int mirobody_chat_answer(const char* ask_id, const char* answer_json) {
+    const std::string id = c_to_std(ask_id);
+    if (id.empty()) return 0;
+    return mirobody::mcp::AskBroker::instance().answer(id, c_to_std(answer_json)) ? 1 : 0;
+}
+
+extern "C" void mirobody_chat_answer_cancel_all(void) {
+    mirobody::mcp::AskBroker::instance().cancel_all();
 }
 
 //------------------------------------------------------------------------------
@@ -812,34 +824,10 @@ long long health_subject(long long user_id) {
     return user_id;
 }
 
-// The first string member of `v` matching `name`, else "".
-std::string json_str(const rapidjson::Value& v, const char* name) {
-    rapidjson::Value::ConstMemberIterator it = v.FindMember(name);
-    if (it == v.MemberEnd() || !it->value.IsString()) return std::string();
-    return std::string(it->value.GetString(), it->value.GetStringLength());
-}
-
 void json_add(rapidjson::Value& obj, const char* key, const std::string& val,
               rapidjson::Document::AllocatorType& a) {
     obj.AddMember(rapidjson::StringRef(key),
                   rapidjson::Value(val.c_str(), static_cast<rapidjson::SizeType>(val.size()), a), a);
-}
-
-// One flattened Observation for mirobody_health_recent.
-struct HealthItem {
-    std::string code, display, unit, when, source;
-    double      value     = 0.0;
-    bool        has_value = false;
-};
-
-// Newest READING first. The store pages by updated_at (write time), which within
-// one sync is effectively one instant, so its tie-break -- resource_id -- would
-// group a batch by metric name instead of ordering it in time. FHIR instants are
-// ISO-8601 UTC, so comparing the strings orders them; an item with no effective
-// time sorts last rather than being dropped.
-bool later_reading(const HealthItem& a, const HealthItem& b) {
-    if (a.when.empty() != b.when.empty()) return !a.when.empty();
-    return a.when > b.when;
 }
 
 }  // namespace
@@ -941,88 +929,25 @@ extern "C" const char* mirobody_health_recent(long long user_id, int count) {
         const std::vector<mirobody::fhir::StoredResource> hits = store.search(
             static_cast<std::int64_t>(subject), "Observation", std::string(), count, 0, total);
 
-        std::vector<HealthItem> items_out;
+        std::vector<mirobody::platform::HealthItem> items_out;
         items_out.reserve(hits.size());
 
         for (std::size_t i = 0; i < hits.size(); ++i) {
-            rapidjson::Document res;
-            if (res.Parse(hits[i].content.c_str(), hits[i].content.size()).HasParseError() ||
-                !res.IsObject()) {
-                continue;   // unreadable row: skip rather than fail the listing
+            // An unreadable row is skipped rather than failing the listing.
+            mirobody::platform::HealthItem item;
+            if (mirobody::platform::flatten_observation_json(
+                    hits[i].content.c_str(), hits[i].content.size(), item)) {
+                items_out.push_back(item);
             }
-
-            // code.coding[0] -- the LOINC code + display we wrote on ingest.
-            std::string code, display;
-            rapidjson::Value::ConstMemberIterator c = res.FindMember("code");
-            if (c != res.MemberEnd() && c->value.IsObject()) {
-                rapidjson::Value::ConstMemberIterator cg = c->value.FindMember("coding");
-                if (cg != c->value.MemberEnd() && cg->value.IsArray() && cg->value.Size() > 0 &&
-                    cg->value[0].IsObject()) {
-                    code    = json_str(cg->value[0], "code");
-                    display = json_str(cg->value[0], "display");
-                }
-            }
-
-            // valueQuantity, or the panel's first component (blood pressure).
-            double value = 0.0;
-            bool has_value = false;
-            std::string unit;
-            rapidjson::Value::ConstMemberIterator vq = res.FindMember("valueQuantity");
-            if (vq == res.MemberEnd() || !vq->value.IsObject()) {
-                rapidjson::Value::ConstMemberIterator comp = res.FindMember("component");
-                if (comp != res.MemberEnd() && comp->value.IsArray() && comp->value.Size() > 0 &&
-                    comp->value[0].IsObject()) {
-                    vq = comp->value[0].FindMember("valueQuantity");
-                    if (vq == comp->value[0].MemberEnd()) vq = res.MemberEnd();
-                }
-            }
-            if (vq != res.MemberEnd() && vq->value.IsObject()) {
-                rapidjson::Value::ConstMemberIterator v = vq->value.FindMember("value");
-                if (v != vq->value.MemberEnd() && v->value.IsNumber()) {
-                    value = v->value.GetDouble();
-                    has_value = true;
-                }
-                unit = json_str(vq->value, "code");
-                if (unit.empty()) unit = json_str(vq->value, "unit");
-            }
-
-            // An instant sample carries effectiveDateTime; an interval one
-            // (a day's steps, a night's sleep) carries effectivePeriod.start.
-            std::string when = json_str(res, "effectiveDateTime");
-            if (when.empty()) {
-                rapidjson::Value::ConstMemberIterator p = res.FindMember("effectivePeriod");
-                if (p != res.MemberEnd() && p->value.IsObject()) when = json_str(p->value, "start");
-            }
-
-            // method.coding[0].display -- the ingesting source, set on ingest.
-            std::string source;
-            rapidjson::Value::ConstMemberIterator m = res.FindMember("method");
-            if (m != res.MemberEnd() && m->value.IsObject()) {
-                rapidjson::Value::ConstMemberIterator mg = m->value.FindMember("coding");
-                if (mg != m->value.MemberEnd() && mg->value.IsArray() && mg->value.Size() > 0 &&
-                    mg->value[0].IsObject()) {
-                    source = json_str(mg->value[0], "display");
-                }
-            }
-
-            HealthItem item;
-            item.code      = code;
-            item.display   = display;
-            item.value     = value;
-            item.has_value = has_value;
-            item.unit      = unit;
-            item.when      = when;
-            item.source    = source;
-            items_out.push_back(item);
         }
-        std::sort(items_out.begin(), items_out.end(), later_reading);
+        std::sort(items_out.begin(), items_out.end(), mirobody::platform::later_reading);
 
         rapidjson::Document d;
         d.SetObject();
         rapidjson::Document::AllocatorType& a = d.GetAllocator();
         rapidjson::Value items(rapidjson::kArrayType);
         for (std::size_t i = 0; i < items_out.size(); ++i) {
-            const HealthItem& it = items_out[i];
+            const mirobody::platform::HealthItem& it = items_out[i];
             rapidjson::Value item(rapidjson::kObjectType);
             json_add(item, "code", it.code, a);
             json_add(item, "display", it.display, a);

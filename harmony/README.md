@@ -345,6 +345,32 @@ snapshotting — and the results are written as files that the list draws as nat
 that double as a cross-launch disk cache. Failures are cached too, or a formula MathJax
 rejects would re-queue on every rebuild.
 
+Which markdown this parser accepts, how the other clients compare, and what is deliberately
+refused (raw HTML, remote images) is [`docs/markdown.md`](../docs/markdown.md).
+
+### Checking it
+
+```sh
+node harmony/tools/check-markdown.js
+```
+
+No device, no model, no network, and nothing to install — it finds TypeScript in a normal
+install or in DevEco's bundled copy. It transpiles `Markdown.ets` and runs it directly
+(the file is pure logic, no ArkUI decorators), lifts `RenderHost.ets`'s two SVG gatekeepers
+out by name, and asserts:
+
+- every block and inline construct, including the three defects this parser has already
+  shipped — emphasis that swallowed the math inside it, a ` ```` ` fence that ate the rest of
+  the message, and escapes that corrupted rather than passed through;
+- that styles **compose** (`**~~a~~**` is bold *and* struck), which is why they are flags;
+- that a half-streamed marker stays literal instead of eating the tail;
+- that the built-in `/help` documents still exercise every construct, that their embedded
+  figure survives our own SVG validator, and that their chart option is valid JSON;
+- that the command palette and the help table agree — and that `/probe` stays out of both.
+
+Run it after touching `Markdown.ets`, `RenderHost.ets`, `SlashCommand.ets` or
+`rawfile/help/`. It exits non-zero on failure.
+
 ## UI conventions
 
 One hamburger opens everything: the left [`HistoryDrawer`](entry/src/main/ets/components/HistoryDrawer.ets)
@@ -353,9 +379,18 @@ a pinned footer with Language / Font size / Appearance. Sessions are local
 (`chat_sessions` preferences: a small index plus one `msg.<id>` blob per session, oldest
 trimmed past `MAX_SESSIONS`), so closing the app no longer discards a conversation.
 
-`pages/NativeProbe.ets` ("Native probe" in the menu) is a **temporary** developer page: init
-the core and list what it can run, run one real turn with arrival offsets, exercise cancel,
-and read the device probes. Remove it once the native transport has proven out on devices.
+`pages/NativeProbe.ets` is a **temporary** developer page: init the core and list what it can
+run, run one real turn with arrival offsets, exercise cancel, and read the device probes.
+Remove it once the native transport has proven out on devices.
+
+**You reach it by typing `/probe` in the composer** — there is no menu item and no palette row.
+It is undocumented on purpose: a page of file pickers and a raw event log is a debugging screen,
+and listing it would offer it as a feature. Typing the word in full still runs it, which is the
+whole distinction between undocumented and unavailable, and `check-markdown.js` asserts it stays
+out of the palette and the help table. The name follows the vocabulary the rest of the port uses
+(`nativeProbePath`, the bandwidth probe, "device probes" above) rather than the more guessable
+`/debug` — which stays free for a real verbose-logging toggle, the shape people expect that word
+to have.
 
 ## Machine-local, not in git
 

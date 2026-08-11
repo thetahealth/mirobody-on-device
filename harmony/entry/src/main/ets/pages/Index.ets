@@ -1,5 +1,7 @@
 import { common } from '@kit.AbilityKit';
-import { promptAction, display, router } from '@kit.ArkUI';
+import { pasteboard } from '@kit.BasicServicesKit';
+import { vibrator } from '@kit.SensorServiceKit';
+import { promptAction, display, router, LengthMetrics } from '@kit.ArkUI';
 import { ChatMessage, MessagePart, StreamCallbacks, Lane, RouteDecision, Canceler } from '../model/Chat';
 import { RichMessage } from '../components/RichMessage';
 import { RenderHost } from '../core/RenderHost';
@@ -15,7 +17,72 @@ import { HealthRepository } from '../core/HealthRepository';
 import { LocalModelStore, LocalModel, LOCAL_PROVIDER_ID } from '../core/LocalModelStore';
 import { HistoryDrawer } from '../components/HistoryDrawer';
 import { SessionStore, SessionMeta } from '../core/SessionStore';
+import { NativeCore } from '../core/NativeCore';
+import { SlashCommand, SlashSpec, SLASH_HELP, SLASH_PROBE, SLASH_NEW, SLASH_INCOGNITO }
+  from '../core/SlashCommand';
 import { FONT, ICON } from '../model/Typography';
+
+/**
+ * The display encoding for a chart: core/Markdown.ets's `chart` block IR.
+ *
+ * A chart arrives on its own stream event, with no position of its own. Appending
+ * it to the text as a fence is what puts it back where the model asked for it —
+ * between the paragraph that introduces it and the one that reads it — with no
+ * second ordered structure to maintain. Written here and stripped in
+ * stripCharts(); a model never writes these.
+ */
+const CHART_OPEN = '\n```echarts\n';
+const CHART_CLOSE = '\n```\n';
+
+function pad2(n: number): string {
+  return n < 10 ? '0' + n : n.toString();
+}
+
+/**
+ * A message's own timestamp: bare clock time today, date-prefixed once it isn't.
+ *
+ * Deliberately NOT HistoryDrawer's relative stamp ("12 分钟前"). That one labels a
+ * whole session in a list the user scans; inside a thread the messages are already
+ * in order, so relative ages restate what the position says while the one thing the
+ * reader actually wants — when did I ask this — goes missing. The date appears only
+ * when it disambiguates, because a bare clock on a three-week-old turn reads as today.
+ */
+function localTime(ms: number): string {
+  const d = new Date(ms);
+  const time = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  const now = new Date();
+  if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      && d.getDate() === now.getDate()) {
+    return time;
+  }
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + ' ' + time;
+}
+
+/**
+ * A question the model is waiting on, decoded from an `ask` event.
+ *
+ * `askId` is the routing token: the turn is parked inside the ask_user tool and
+ * mirobody.nativeChatAnswer(askId, …) is the only thing that lets it continue.
+ */
+interface PendingAsk {
+  askId: string;
+  question: string;
+  options: string[];
+  multiSelect: boolean;
+}
+
+/** The `ask` event's payload, as the core sends it. */
+interface AskPayload {
+  ask_id?: string;
+  question?: string;
+  options?: string[];
+  multi_select?: boolean;
+}
+
+/** What the answer looks like to the model — it becomes the tool's result verbatim. */
+interface AskAnswer {
+  selected: string[];
+}
 
 // User-added models grouped under one provider header in the dropdown.
 interface ProviderGroup {
@@ -89,6 +156,19 @@ struct Index {
   // UI again. A shared "cancelled" flag can't do this: the next send resets it, which lets the
   // old stream's late onDone/onError commit or wipe the NEW turn's text.
   private turnSeq: number = 0;
+  // The in-flight turn's model, as the reply footer will name it. Snapshotted beside
+  // turnProviderId/turnModel in onSend, and read back in assembleAssistant.
+  private turnModelLabel: string = '';
+  /**
+   * The question the model is waiting on, or undefined.
+   *
+   * Its own state rather than a message in `history`: the turn has not finished, so
+   * there is no message yet — and once answered the question is spent. It renders
+   * under the streaming bubble, where the answer belongs in reading order.
+   */
+  @State private pendingAsk: PendingAsk | undefined = undefined;
+  // Choices ticked so far, for a multi-select question.
+  @State private askPicked: string[] = [];
   // App-wide font scale from the settings menu (persisted; see EntryAbility).
   @StorageLink('fontScale') private fontScale: number = 1;
 
@@ -522,8 +602,21 @@ struct Index {
    * from creating an empty row.
    */
   private persist(): void {
+    // `local` messages are this screen's, not the conversation's: a slash command's
+    // answer is the app talking, so it is dropped here for the same reason the
+    // transports drop it when building the wire. Filtering at the SAVE rather than at
+    // the append is what makes that hold — a later turn calls persist() too, and
+    // would otherwise write the help document it found sitting in `history`.
+    const durable: ChatMessage[] = [];
+    for (const m of this.history) {
+      if (m.local !== true) {
+        durable.push(m);
+      }
+    }
     // The whole point of incognito: nothing reaches disk, including the index row.
-    if (this.incognito || this.history.length === 0) {
+    // An empty `durable` also means no row — a session whose only content was a
+    // slash command is not a conversation.
+    if (this.incognito || durable.length === 0) {
       return;
     }
     if (this.sessionId.length === 0) {
@@ -531,7 +624,7 @@ struct Index {
     }
     // Deliberately not awaited: a turn must not wait on disk. A failed write costs the
     // history row, not the conversation on screen.
-    SessionStore.save(this.ctx(), this.sessionId, this.history);
+    SessionStore.save(this.ctx(), this.sessionId, durable);
   }
 
   private async openDrawer(): Promise<void> {
@@ -586,6 +679,7 @@ struct Index {
     if (this.busy) {
       this.onStop();
     }
+    this.cancelAsk();
     this.history = [];
     this.streaming = '';
     this.streamingThinking = '';
@@ -641,15 +735,147 @@ struct Index {
     }
   }
 
+  /**
+   * The prose of a reply, with every ```echarts block removed.
+   *
+   * A chart arrives as its own stream event and is appended to the DISPLAY text as
+   * a fence, because that is the markdown parser's chart IR and it puts the figure
+   * at its true position in the answer. It must not survive into `content`, which
+   * is a different job: content is replayed to the model as context on every later
+   * turn and is what a long press copies. An ECharts option is hundreds of tokens
+   * of machine plumbing — re-tokenized every turn it crowds the window we just went
+   * to some trouble to fit the conversation into, and pasted into a note it is
+   * noise. Same separation `thinking` already gets, and for the same reason.
+   *
+   * Cheap and exact rather than clever: these fences are written by onChart below,
+   * never by a model, so the opener and closer are known verbatim.
+   */
+  private static stripCharts(text: string): string {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      const open = text.indexOf(CHART_OPEN, i);
+      if (open < 0) {
+        out += text.substring(i);
+        break;
+      }
+      out += text.substring(i, open);
+      const close = text.indexOf(CHART_CLOSE, open + CHART_OPEN.length);
+      if (close < 0) {
+        break;      // still streaming: the rest is a half-written option
+      }
+      i = close + CHART_CLOSE.length;
+    }
+    return out;
+  }
+
   private assembleAssistant(): ChatMessage {
     const parts: MessagePart[] = [];
     if (this.streamingThinking.trim().length > 0) {
       parts.push({ kind: 'thinking', content: this.streamingThinking });
     }
+    // The text part carries the DISPLAY form, fences and all, so a reloaded
+    // conversation still draws its charts; `content` below carries the prose.
     if (this.streaming.length > 0) {
       parts.push({ kind: 'text', content: this.streaming });
     }
-    return { role: 'assistant', content: this.streaming, parts: parts };
+    // turnModelLabel, not pickerLabel(): both callers can run long after the picker
+    // moved on — onStop() by definition, onDone() whenever the user re-picks while
+    // waiting — and the footer must name what actually answered.
+    return {
+      role: 'assistant',
+      content: Index.stripCharts(this.streaming),
+      parts: parts,
+      ts: new Date().getTime(),
+      model: this.turnModelLabel
+    };
+  }
+
+  /**
+   * One short tick, fired only once the clipboard has actually taken the text.
+   *
+   * A crisp single effect rather than haptic.notice.success, which is a multi-pulse
+   * pattern: copying is an acknowledgement, not an event worth a fanfare. Support is
+   * checked because the effect set is per-device — an unsupported id would throw from
+   * startVibration and the promise's catch would eat it either way, but asking first
+   * keeps that a silent no-op instead of an exception per press.
+   *
+   * Every failure path here is deliberately quiet. The toast has already confirmed the
+   * copy; a phone with haptics switched off (or no motor at all) is not a situation the
+   * user needs told about.
+   */
+  private static buzz(): void {
+    const effect = 'haptic.effect.sharp';
+    try {
+      if (!vibrator.isSupportEffectSync(effect)) {
+        return;
+      }
+      const preset: vibrator.VibratePreset = { type: 'preset', effectId: effect, count: 1 };
+      const attr: vibrator.VibrateAttribute = { usage: 'physicalFeedback' };
+      vibrator.startVibration(preset, attr).catch(() => {});
+    } catch (e) {
+      // No motor, haptics off, or the permission was dropped from module.json5.
+    }
+  }
+
+  /**
+   * Send the user's choice back to the parked turn.
+   *
+   * Clearing `pendingAsk` before the call, not after: the card is spent the moment
+   * it is tapped, and a question left on screen while the model is already writing
+   * the next sentence invites a second tap that nobody is waiting for.
+   */
+  private answerAsk(selected: string[]): void {
+    const ask = this.pendingAsk;
+    if (ask === undefined || selected.length === 0) {
+      return;
+    }
+    this.pendingAsk = undefined;
+    this.askPicked = [];
+    const answer: AskAnswer = { selected: selected };
+    NativeCore.answerAsk(ask.askId, JSON.stringify(answer));
+    this.scrollToEnd();
+  }
+
+  /**
+   * Release a question nobody will answer — the turn was stopped, or a new one
+   * started. Without this the tool would hold its thread until the timeout, and a
+   * dead card would sit in the thread.
+   */
+  private cancelAsk(): void {
+    const ask = this.pendingAsk;
+    this.pendingAsk = undefined;
+    this.askPicked = [];
+    if (ask !== undefined) {
+      // An empty answer IS the release: the tool reports "the user did not answer"
+      // and the model carries on with a default rather than the thread parking
+      // until the timeout.
+      NativeCore.answerAsk(ask.askId, '');
+    }
+  }
+
+  /**
+   * Copy a message to the clipboard. Reached from the reply footer's button and from
+   * a long press on either bubble — a user message has no footer of its own, and on a
+   * phone the press is the gesture people try first anyway.
+   *
+   * `haptic` is what separates the two: a button answers a tap by LOOKING pressed, so
+   * the toast is confirmation enough, while a long press has no affordance at all and
+   * a threshold the user cannot see. The tick is what tells them the gesture landed.
+   */
+  private copyText(text: string, haptic: boolean = false): void {
+    if (text.length === 0) {
+      return;
+    }
+    const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+    pasteboard.getSystemPasteboard().setData(data).then(() => {
+      if (haptic) {
+        Index.buzz();
+      }
+      promptAction.showToast({ message: this.rs($r('app.string.toast_copied')), duration: 1500 });
+    }).catch(() => {
+      // Nothing useful to say: the clipboard either took it or it didn't.
+    });
   }
 
   // Abort the in-flight turn (slow/stuck response). Finalize the UI immediately — don't wait
@@ -660,6 +886,7 @@ struct Index {
       return;
     }
     this.turnSeq++;
+    this.cancelAsk();          // release a tool parked on an answer nobody will give
     this.canceler.stopped = true;
     this.canceler.cancel(); // best-effort: stop the network request
     if (this.streaming.length > 0 || this.streamingThinking.trim().length > 0) {
@@ -672,16 +899,76 @@ struct Index {
     this.scrollToEnd();
   }
 
+  /**
+   * Run a slash command. Returns false when the draft is not one.
+   *
+   * Two shapes of answer, and the command decides which: `/help` is a document, so
+   * it lands in the thread as a message; `/probe` is a screen with buttons and a
+   * live event log, so it navigates. Both clear the draft — the command was
+   * consumed either way.
+   */
+  private runCommand(text: string): boolean {
+    const cmd = SlashCommand.match(text);
+    if (cmd === SLASH_PROBE) {
+      this.draft = '';
+      router.pushUrl({ url: 'pages/NativeProbe' });
+      return true;
+    }
+    // /new and /incognito call the SAME methods the drawer's rows do rather than
+    // reimplementing them — a command that drifted from its button would be worse
+    // than no command.
+    if (cmd === SLASH_NEW) {
+      this.draft = '';
+      this.newChat();
+      return true;
+    }
+    if (cmd === SLASH_INCOGNITO) {
+      this.draft = '';
+      this.toggleIncognito();
+      return true;
+    }
+    if (cmd !== SLASH_HELP) {
+      return false;
+    }
+    const doc = SlashCommand.help(this.ctx());
+    if (doc.length === 0) {
+      return false;      // unreadable rawfile: fall through and let it be a question
+    }
+    // The document alone — the "/help" the user typed is not echoed back. It was a
+    // control, not something they said, and a conversation that opens with the user
+    // asking for the manual reads wrong on the way back through it.
+    //
+    // No persist() either: `local` messages never reach disk (see persist), so the
+    // guide lives on this screen for as long as it is useful and leaves nothing in
+    // the session — not a row, not a message count, not several KB of markdown in
+    // every conversation anyone ever ran /help in.
+    this.history = this.history.concat({
+      role: 'assistant',
+      content: doc,
+      parts: [{ kind: 'text', content: doc }],
+      local: true
+    });
+    this.draft = '';
+    this.stickToBottom = true;
+    this.scrollToEnd();
+    return true;
+  }
+
   private async onSend(): Promise<void> {
     const text = this.draft.trim();
     if (text.length === 0 || this.busy) {
+      return;
+    }
+    // Before the model check: a command is answered by the app, so requiring a
+    // model first would gate the help on the very setup it explains.
+    if (this.runCommand(text)) {
       return;
     }
     if (this.activeModel.length === 0) {
       promptAction.showToast({ message: this.rs($r('app.string.chat_need_model')), duration: 2500 });
       return;
     }
-    const userMsg: ChatMessage = { role: 'user', content: text };
+    const userMsg: ChatMessage = { role: 'user', content: text, ts: new Date().getTime() };
     this.history = this.history.concat(userMsg);
     this.persist();
     this.draft = '';
@@ -701,6 +988,8 @@ struct Index {
     // mid-flight can't retarget the request or misattribute a failure.
     const turnProviderId = this.activeProviderId;
     const turnModel = this.activeModel;
+    // Snapshot for the reply footer, for the same reason and at the same moment.
+    this.turnModelLabel = this.pickerLabel();
 
     const isLocalTurn = turnProviderId === LOCAL_PROVIDER_ID;
     const turnLocalPath = isLocalTurn
@@ -738,6 +1027,39 @@ struct Index {
           return;
         }
         this.streamingThinking += t;
+        this.scrollToEnd();
+      },
+      onAsk: (json: string) => {
+        if (turnId !== this.turnSeq) {
+          // A stopped turn's question must not appear, and its tool is already
+          // being released by cancelAsk() below.
+          return;
+        }
+        try {
+          const p = JSON.parse(json) as AskPayload;
+          const id = p.ask_id ?? '';
+          const q = p.question ?? '';
+          if (id.length > 0 && q.length > 0 && p.options !== undefined && p.options.length > 0) {
+            this.askPicked = [];
+            this.pendingAsk = {
+              askId: id, question: q, options: p.options,
+              multiSelect: p.multi_select === true
+            };
+            this.scrollToEnd();
+          }
+        } catch (e) {
+          // Unreadable question: leave the turn to the tool's timeout rather than
+          // showing a card with nothing to pick.
+        }
+      },
+      onChart: (optionJson: string) => {
+        if (turnId !== this.turnSeq) {
+          return;
+        }
+        // The option is already a compact JSON object string from the core, so
+        // it goes in verbatim — no parse/re-stringify round trip.
+        gotContent = true;
+        this.streaming += CHART_OPEN + optionJson + CHART_CLOSE;
         this.scrollToEnd();
       },
       onDone: () => {
@@ -846,6 +1168,26 @@ struct Index {
     promptAction.showToast({ message: hint, duration: 3500 });
   }
 
+  /**
+   * What to DRAW for a finished reply: the text part when there is one, else
+   * `content`.
+   *
+   * The two differ exactly when the turn produced a chart — the part keeps the
+   * ```echarts fence, `content` does not (see stripCharts). Falling back to
+   * `content` keeps every message written before parts existed rendering as it
+   * always did; such a message has no chart to lose.
+   */
+  private static displayOf(msg: ChatMessage): string {
+    if (msg.parts !== undefined) {
+      for (const p of msg.parts) {
+        if (p.kind === 'text') {
+          return p.content;
+        }
+      }
+    }
+    return msg.content;
+  }
+
   /** A finished message's display fields: thinking part (if any) and answer text. */
   private static thinkingOf(msg: ChatMessage): string {
     if (msg.parts !== undefined) {
@@ -858,40 +1200,232 @@ struct Index {
     return '';
   }
 
+  /**
+   * The model's question, with its choices. Native rows, not HTML — the whole point
+   * of a declarative question is that every client can draw it without running
+   * anything the model sent.
+   *
+   * Single-select answers on the tap: one tap, one answer, no confirm step. Multi
+   * ticks and waits for the button, because there is no other moment at which the
+   * user is finished choosing.
+   */
   @Builder
-  private bubble(msg: ChatMessage) {
-    Row() {
-      if (msg.role === 'user') {
-        Text(msg.content)
-          .fontSize(16 * this.fontScale)
-          .fontColor($r('app.color.on_brand'))
-          .backgroundColor($r('app.color.brand'))
-          .borderRadius(14)
-          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-          .constraintSize({ maxWidth: '90%' })
-      } else {
-        // Full width, and definite on purpose: the code blocks inside size
-        // against their parent, and a horizontal Scroll only engages when that
-        // parent has a real width to clip to — a content-sized bubble would let
-        // long code lines push it past the screen instead of scrolling.
-        Column() {
-          RichMessage({
-            text: msg.content,
-            thinking: Index.thinkingOf(msg),
-            streaming: false,
-            fontScale: this.fontScale
-          })
-        }
-        .backgroundColor($r('app.color.bg_bubble'))
-        .borderRadius(14)
-        .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+  private askCard(ask: PendingAsk) {
+    Column({ space: 8 }) {
+      Text(ask.question)
+        .fontSize(15 * this.fontScale)
+        .fontColor($r('app.color.text_primary'))
         .width('100%')
-        .alignItems(HorizontalAlign.Start)
+
+      ForEach(ask.options, (opt: string) => {
+        Row({ space: 8 }) {
+          if (ask.multiSelect) {
+            Text(this.askPicked.includes(opt) ? '☑' : '☐')
+              .fontSize(15 * this.fontScale)
+              .fontColor(this.askPicked.includes(opt)
+                ? $r('app.color.brand_text') : $r('app.color.text_tertiary'))
+          }
+          Text(opt)
+            .fontSize(15 * this.fontScale)
+            .fontColor($r('app.color.text_primary'))
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .padding({ left: 12, right: 12, top: 11, bottom: 11 })
+        .borderRadius(10)
+        .backgroundColor($r('app.color.bg_page'))
+        .onClick(() => {
+          if (!ask.multiSelect) {
+            this.answerAsk([opt]);
+            return;
+          }
+          const next: string[] = [];
+          let removed = false;
+          for (const p of this.askPicked) {
+            if (p === opt) {
+              removed = true;
+            } else {
+              next.push(p);
+            }
+          }
+          if (!removed) {
+            next.push(opt);
+          }
+          this.askPicked = next;
+        })
+      }, (opt: string) => opt)
+
+      if (ask.multiSelect) {
+        Button($r('app.string.ask_confirm'))
+          .fontSize(14 * this.fontScale)
+          .width('100%')
+          .backgroundColor($r('app.color.brand'))
+          .fontColor($r('app.color.on_brand'))
+          .enabled(this.askPicked.length > 0)
+          .onClick(() => {
+            this.answerAsk(this.askPicked);
+          })
       }
     }
     .width('100%')
-    .justifyContent(msg.role === 'user' ? FlexAlign.End : FlexAlign.Start)
+    .alignItems(HorizontalAlign.Start)
+    .padding(12)
+    .margin({ left: 12, right: 12, top: 4, bottom: 4 })
+    .borderRadius(14)
+    .border({ width: 1, color: $r('app.color.border') })
+    .backgroundColor($r('app.color.bg_surface'))
+  }
+
+  /**
+   * The slash-command list. Tapping a row RUNS it rather than completing the text:
+   * every command here is a single word with no arguments, so filling the box and
+   * asking for a second tap would only add a step.
+   */
+  @Builder
+  private slashPalette() {
+    Column() {
+      ForEach(SlashCommand.suggest(this.draft), (s: SlashSpec, i: number) => {
+        Row({ space: 10 }) {
+          Text(s.name)
+            .fontSize(FONT.body)
+            .fontFamily('monospace')
+            .fontColor($r('app.color.text_primary'))
+          Text(s.desc)
+            .fontSize(FONT.caption)
+            .fontColor($r('app.color.text_tertiary'))
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .padding({ left: 14, right: 14, top: 11, bottom: 11 })
+        .border(i > 0 ? { width: { top: 0.5 }, color: $r('app.color.divider') } : {})
+        .onClick(() => {
+          this.draft = s.name;
+          this.onSend();
+        })
+      }, (s: SlashSpec) => s.name)
+    }
+    .width('100%')
+    .margin({ bottom: 8 })
+    .borderRadius(16)
+    .clip(true)
+    .border({ width: 1, color: $r('app.color.border') })
+    .backgroundColor($r('app.color.bg_surface'))
+  }
+
+  @Builder
+  private bubble(msg: ChatMessage) {
+    Column({ space: 4 }) {
+      Row() {
+        if (msg.role === 'user') {
+          Text(msg.content)
+            .fontSize(16 * this.fontScale)
+            .lineHeight(28 * this.fontScale)
+            .fontColor($r('app.color.on_brand'))
+            .backgroundColor($r('app.color.brand'))
+            // Square tail at the top-trailing corner, the other three rounded — the
+            // web client's shape, in LOGICAL corners so RTL mirrors it for free
+            // rather than pointing the tail away from the sender.
+            .borderRadius({
+              topStart: LengthMetrics.vp(14),
+              topEnd: LengthMetrics.vp(4),
+              bottomEnd: LengthMetrics.vp(14),
+              bottomStart: LengthMetrics.vp(14)
+            })
+            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+            .constraintSize({ maxWidth: '85%' })
+            .gesture(LongPressGesture().onAction(() => {
+              this.copyText(msg.content, true);
+            }))
+        } else {
+          // Full width, and definite on purpose: the code blocks inside size
+          // against their parent, and a horizontal Scroll only engages when that
+          // parent has a real width to clip to — a content-sized bubble would let
+          // long code lines push it past the screen instead of scrolling.
+          Column() {
+            RichMessage({
+              text: Index.displayOf(msg),
+              thinking: Index.thinkingOf(msg),
+              streaming: false,
+              fontScale: this.fontScale
+            })
+          }
+          .backgroundColor($r('app.color.bg_bubble'))
+          .borderRadius(14)
+          .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .gesture(LongPressGesture().onAction(() => {
+            this.copyText(msg.content, true);
+          }))
+        }
+      }
+      .width('100%')
+      .justifyContent(msg.role === 'user' ? FlexAlign.End : FlexAlign.Start)
+
+      if (msg.role === 'user') {
+        this.sentAt(msg)
+      } else {
+        this.replyFooter(msg)
+      }
+    }
+    .width('100%')
     .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+  }
+
+  /** Send time, tucked under the user's own bubble on the trailing edge. */
+  @Builder
+  private sentAt(msg: ChatMessage) {
+    if (msg.ts !== undefined && msg.ts > 0) {
+      Row() {
+        Text(localTime(msg.ts))
+          .fontSize(FONT.footnote)
+          .fontColor($r('app.color.text_tertiary'))
+          .opacity(0.7)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+    }
+  }
+
+  /**
+   * Under a finished reply: which model wrote it, and nothing else.
+   *
+   * NO copy button. It was the web client's shape, and the web client needs it: a
+   * browser has no long press to offer. Here the gesture already copies BOTH bubbles,
+   * and a button on only one of them makes the affordance look like it belongs to
+   * replies alone. One gesture, one mental model.
+   *
+   * NO timestamp either, though `ts` is stamped and would have fit where the button
+   * was. A reply lands seconds after the question whose time is already printed right
+   * above it, so a second clock says nothing the first did not — and two stamps per
+   * turn turn a conversation into a log. The question is the event worth timing.
+   *
+   * Outside the bubble rather than in it, so the attribution reads as a note ABOUT the
+   * answer instead of the last line OF it — a model that ends on a caveat and a footer
+   * that names the model are easy to run together otherwise. Only for finished turns:
+   * streamingBubble has no footer, because there is nothing to attribute until the
+   * answer stops moving.
+   *
+   * Nothing to name, nothing drawn: a session written before `model` existed skips the
+   * row rather than reserving an empty strip under every reply.
+   */
+  @Builder
+  private replyFooter(msg: ChatMessage) {
+    if (msg.model !== undefined && msg.model.length > 0) {
+      Text(msg.model)
+        .fontSize(FONT.footnote)
+        .fontColor($r('app.color.text_tertiary'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+        // Matches the user stamp's own dimming, so the two annotations under a turn
+        // read at the same weight.
+        .opacity(0.7)
+    }
   }
 
   /** The in-flight assistant bubble — same shell, live thinking + growing text. */
@@ -919,6 +1453,25 @@ struct Index {
 
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
+
+    // Paint-only layer, behind everything: the page's own colour carried INTO the
+    // system safe areas.
+    //
+    // A page lays out inside the safe areas by default, so the status-bar strip and
+    // the gesture-indicator strip are not the page's to paint and showed the window's
+    // white — a hard edge against bg_page's warm #F2EFE9, most visible under the
+    // composer where the eye already is.
+    //
+    // It has to be a SIBLING rather than expandSafeArea on the Stack itself: expanding
+    // the Stack expands its height('100%') children with it, which would slide the
+    // composer under the gesture bar. This one only draws, so every other component
+    // stays exactly where it was laid out.
+    Column()
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.bg_page'))
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+      .hitTestBehavior(HitTestMode.None)
 
     // Offscreen render host: one invisible webview running MathJax + ECharts
     // for the whole page (core/RenderHost.ets). First child of the Stack so
@@ -1003,6 +1556,14 @@ struct Index {
             this.streamingBubble()
           }
         }
+
+        // Below the reply, because the model asks after saying why it needs to.
+        // Outside the bubble, because it is a control rather than something said.
+        if (this.pendingAsk !== undefined) {
+          ListItem() {
+            this.askCard(this.pendingAsk)
+          }
+        }
       }
       .layoutWeight(1)
       .width('100%')
@@ -1025,6 +1586,14 @@ struct Index {
       // Composer — rounded pill: input on top, control row (attach · model picker ·
       // send) below.
       Column() {
+        // Command palette. Above the pill and only while a command is being typed,
+        // so it never costs layout otherwise. Its job is DISCOVERY: nobody should
+        // have to already know a command to find one, which is also why every entry
+        // here still has its button in the drawer.
+        if (SlashCommand.suggest(this.draft).length > 0) {
+          this.slashPalette()
+        }
+
         Column({ space: 6 }) {
           TextInput({ text: this.draft, placeholder: $r('app.string.chat_input_hint') })
             .fontSize(16 * this.fontScale)
@@ -1114,6 +1683,17 @@ struct Index {
         .borderRadius(24)
         .border({ width: 1, color: $r('app.color.border') })
         .backgroundColor($r('app.color.bg_surface'))
+
+        // "AI can be wrong", under the composer like every other chat client. Inside
+        // the composer's own column so it tracks the bar's width and padding, and so
+        // anything that later hides the composer takes the caption with it — there is
+        // nothing to double-check in a conversation you cannot add to.
+        Text($r('app.string.chat_ai_disclaimer'))
+          .fontSize(FONT.footnote)
+          .fontColor($r('app.color.text_tertiary'))
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .margin({ top: 8 })
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 10, bottom: 16 })
@@ -1162,8 +1742,7 @@ struct Index {
         onFontSize: () => { this.fontController.open(); },
         onTheme: () => { this.themeController.open(); },
         healthLastSync: this.healthLastSync,
-        onHealthData: () => { this.healthController.open(); },
-        onNativeProbe: () => { router.pushUrl({ url: 'pages/NativeProbe' }); }
+        onHealthData: () => { this.healthController.open(); }
       })
     }
     }

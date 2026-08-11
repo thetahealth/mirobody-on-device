@@ -18,6 +18,7 @@ add_executable(mirobody_tests
     llm/openai_realtime_client_test.cpp
     mcp/tool_test.cpp
     mcp/resource_test.cpp
+    mcp/ask_test.cpp
     memory/memory_test.cpp
     transcode/file_test.cpp
     oauth/pkce_test.cpp
@@ -38,6 +39,7 @@ add_executable(mirobody_tests
     fhir/write_test.cpp
     indicator/normalize_test.cpp
     indicator/resolve_test.cpp
+    platform/c_api_json_test.cpp
 )
 
 # Link the self-registering MCP tool and agent objects directly into the test

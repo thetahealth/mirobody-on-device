@@ -203,7 +203,10 @@ struct LocalCpuFeatures {
     bool has_sve2    = false;
     bool has_sme     = false;
 
-    // This build (ggml's compile-time view).
+    // This build (ggml's compile-time view). All false when `variant` is set: with
+    // runtime dispatch the CPU kernels live in a module this binary never linked, so
+    // ggml_cpu_has_*() is not callable and, more to the point, no longer means
+    // anything — there is no single set of kernels the build was compiled for.
     bool built_neon    = false;
     bool built_fma     = false;
     bool built_fp16    = false;
@@ -211,6 +214,16 @@ struct LocalCpuFeatures {
     bool built_i8mm    = false;
     bool built_sve     = false;
     bool built_sme     = false;
+
+    /**
+     * Which CPU backend actually got loaded, e.g. "android_armv8.6_1" — the answer
+     * that replaces the built_* flags in a GGML_CPU_ALL_VARIANTS build.
+     *
+     * Empty in a statically linked build (there was nothing to choose) and, more
+     * usefully, empty when dispatch was configured but the modules were not found —
+     * which is a shipping mistake that otherwise shows up only as slow inference.
+     */
+    std::string variant;
 };
 
 /**
@@ -270,6 +283,18 @@ public:
     /// True when compiled against llama.cpp (MIROBODY_ONDEVICE_LLM).
     static bool available();
 
+    /**
+     * Directory to dlopen ggml's backend modules from. Call once, before anything
+     * else on this class; a no-op afterwards, and in a statically linked build.
+     *
+     * Needed because ggml's own search looks beside the executable, which on Android
+     * is /system/bin/app_process — never where an app's libraries are. The right
+     * argument there is ApplicationInfo.nativeLibraryDir, and only Java knows it.
+     * That directory also has to hold real files, so the APK must not keep its
+     * libraries compressed (android/app/build.gradle.kts).
+     */
+    static void backendPath(const std::string& dir);
+
     /// What this build was COMPILED to offload to: "cpu", "vulkan", or "none".
     static const char* backend();
 
@@ -320,6 +345,18 @@ public:
 
     /// True once the model is resident (i.e. after a successful first turn).
     bool loaded() const;
+
+    /**
+     * Read the weights now, so the first turn does not pay for them.
+     *
+     * The load is the dominant cost of an on-device turn (seconds, a few GB off disk)
+     * and it cannot be made cheaper — only moved somewhere nobody is waiting. A UI that
+     * knows which model the user picked can call this while they are still typing.
+     *
+     * Idempotent; returns false with `err` set if the file will not load. A no-op
+     * returning false in the stub build.
+     */
+    bool load(std::string& err);
 
     LocalStats stats() const;
 

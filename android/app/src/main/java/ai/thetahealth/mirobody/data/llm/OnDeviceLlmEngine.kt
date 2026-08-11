@@ -24,6 +24,17 @@ interface OnDeviceLlmEngine {
      */
     fun generate(history: List<ChatTurn>, model: OnDeviceModelSpec): Flow<ChatStreamEvent>
 
+    /**
+     * Load [model] now, so the first turn does not pay for it.
+     *
+     * Loading is the dominant cost of an on-device turn and it cannot be made cheaper —
+     * only moved. Called when the user PICKS a model, which buys the seconds between
+     * choosing and typing a question. Idempotent: a model already loaded returns at once.
+     *
+     * Default no-op so an implementation with nothing to warm need not care.
+     */
+    suspend fun preload(model: OnDeviceModelSpec) = Unit
+
     /** Release native resources (the model file stays on disk). Safe to call repeatedly. */
     fun close()
 }

@@ -26,6 +26,15 @@ var CARET_SVG =
 var PLUS_SVG =
     '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">' +
     '<path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>';
+// Plus IN A CIRCLE: the leading glyph on the drawer's "New chat" button. The bare
+// plus above is the near-miss to avoid here -- with no circle it reads as "add an
+// item to this list", which is what the list below it is. Harmony uses
+// sys.symbol.plus_circle and android Icons.Outlined.AddCircleOutline for the same
+// button; this is that glyph.
+var PLUS_CIRCLE_SVG =
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
+    '<path d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10' +
+    'S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>';
 // Hamburger: the top-left button that opens the nav drawer. A nav glyph rather than
 // a person glyph because the drawer's primary content is the conversation list (its
 // only scrolling band) -- account is one pinned row at the bottom. Same plain
@@ -39,9 +48,13 @@ var MENU_SVG =
 var BACK_SVG =
     '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">' +
     '<path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>';
+// Trash: OUTLINED, matching android's Icons.Outlined.DeleteOutline and harmony's
+// sys.symbol.trash on the same row. A solid bin (what this was) is a heavy mark to
+// repeat down a list of conversations, and it was the only filled glyph in the
+// drawer. Red is the callers' doing, not the glyph's -- it stays currentColor.
 var TRASH_SVG =
     '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
-    '<path d="M6 7h12v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7zm2 2v9h2V9H8zm4 0v9h2V9h-2zM9 4h6l1 1h4v2H4V5h4l1-1z"/></svg>';
+    '<path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/></svg>';
 // The Mirobody logo mark (assets/mirobody.svg, which stays the favicon). Inlined
 // here so the upper glyph can follow the theme: it is drawn in currentColor --
 // the caller tints it with `wordmark` (near-black / white), exactly as android's
@@ -185,6 +198,7 @@ var SEND_ARROW_SVG =
 exports.SETTINGS_SVG = SETTINGS_SVG;
 exports.CARET_SVG    = CARET_SVG;
 exports.PLUS_SVG     = PLUS_SVG;
+exports.PLUS_CIRCLE_SVG = PLUS_CIRCLE_SVG;
 exports.MENU_SVG     = MENU_SVG;
 exports.BACK_SVG     = BACK_SVG;
 exports.TRASH_SVG    = TRASH_SVG;

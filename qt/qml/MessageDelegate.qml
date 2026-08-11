@@ -3,11 +3,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Mirobody
 
-// One transcript row, mirroring chat.js appendMessage + appendFooter: a user
-// turn as a right-aligned brand-tinted bubble (with a centered timestamp above
-// it), or an assistant turn as rendered Markdown on the background -- optionally
-// preceded by a dim "thinking" block and followed by a provider/stats/copy
-// footer.
+// One transcript row, mirroring chat.js appendMessage + appendFooter and the
+// Android MessageBubble: a user turn as a right-aligned navy bubble with a sharp
+// "tail" corner (its timestamp tucked under it, right-aligned), or an assistant
+// turn as rendered Markdown on the background -- optionally preceded by a dim
+// "thinking" block and followed by a provider/stats/copy footer.
 Item {
     id: del
 
@@ -25,6 +25,17 @@ Item {
     // item asking for it gets undefined and the binding quietly evaluates false.
     readonly property bool isLastRow: ListView.view ? index === ListView.view.count - 1 : false
 
+    // The row's data, hoisted onto the root.
+    //
+    // Not a convenience: `model` is a context property injected into the delegate, and
+    // inside a Repeater it resolves to the REPEATER's own `model` instead. Everything
+    // below that sits in one reads these.
+    readonly property string content: model.content
+    readonly property var    tools:   model.tools
+    readonly property var    charts:  model.charts
+    readonly property var    images:  model.images
+    readonly property bool   isAssistant: model.role === "assistant"
+
     function pad(n) { return (n < 10 ? "0" : "") + n; }
     function formatLocalTime(ms) {
         var d = new Date(ms);
@@ -41,17 +52,6 @@ Item {
         width: parent.width
         spacing: 4
 
-        // Timestamp above a user turn (introduces the Q&A pair).
-        Label {
-            visible: model.role === "user" && model.ts > 0
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: formatLocalTime(model.ts)
-            color: Theme.surfaceVarFg
-            opacity: 0.7
-            font.pointSize: Theme.baseSize - 3
-        }
-
         // Assistant "thinking" stream (dim italic), shown above the reply.
         Label {
             visible: model.role === "assistant" && model.thinking && model.thinking.length > 0
@@ -64,6 +64,13 @@ Item {
         }
 
         // User bubble (right-aligned, content-sized, capped width).
+        //
+        // The shape is the web client's and Android's: 8px corners with a sharp 2px
+        // "tail" at the top-inline-end corner, which is what marks the turn as the
+        // user's without a second colour or an avatar. Rectangle carries ONE radius
+        // before Qt 6.7 (per-corner radii landed there; this module's floor is 6.5),
+        // so the tail is a patch -- a small square-ish rectangle of the same colour
+        // laid over that corner, overriding the 8px arc with a 2px one.
         Item {
             visible: model.role === "user"
             width: parent.width
@@ -72,13 +79,24 @@ Item {
                 id: userBubble
                 anchors.right: parent.right
                 color: Theme.userBubble
-                radius: 14
+                radius: 8
                 width: userText.contentWidth + 28
                 height: userText.contentHeight + 20
+                Rectangle {
+                    // The tail. LayoutMirroring flips `anchors.right` for RTL, so it
+                    // follows the bubble to the top-inline-end corner by itself.
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    width: 8; height: 8
+                    radius: 2
+                    color: parent.color
+                }
                 Text {
                     id: userText
                     x: 14; y: 10
-                    width: del.width * 0.85 - 28
+                    // Capped at the same 320px the web client and Android use, so a
+                    // long turn wraps into a column rather than spanning the window.
+                    width: Math.min(del.width * 0.85, 320) - 28
                     text: model.content
                     wrapMode: Text.Wrap
                     color: Theme.userBubbleText
@@ -87,16 +105,68 @@ Item {
             }
         }
 
-        // Assistant reply, rendered as Markdown.
-        Text {
-            visible: model.role === "assistant"
+        // The user turn's timestamp, tucked UNDER the bubble and right-aligned
+        // (chat.js appendMessage): it dates the exchange without breaking the
+        // thread the way a full-width centered header does.
+        Label {
+            visible: model.role === "user" && model.ts > 0
             width: parent.width
-            text: model.content
-            textFormat: Text.MarkdownText
-            wrapMode: Text.Wrap
-            color: Theme.surfaceFg
-            font.pointSize: Theme.baseSize
-            onLinkActivated: function (link) { Qt.openUrlExternally(link); }
+            horizontalAlignment: Text.AlignRight
+            text: formatLocalTime(model.ts)
+            color: Theme.surfaceVarFg
+            opacity: 0.7
+            font.pointSize: Theme.baseSize - 3
+        }
+
+        // Tool invocations, above the reply: one expandable card per call, showing
+        // "Calling <tool>…" while it runs and "Called <tool>" once it returns, with
+        // the arguments and the result inside. Mirrors the web status block.
+        Repeater {
+            model: del.isAssistant ? del.tools : []
+            ToolCard {
+                required property var modelData
+                width: col.width
+                call: modelData
+            }
+        }
+
+        // Assistant reply: prose, formulas, ```svg figures and ```echarts charts.
+        ReplyBody {
+            visible: del.isAssistant
+            width: parent.width
+            // Empty for a user turn rather than hidden-but-populated: the split and the
+            // math scan would otherwise run on every user message too, for a body
+            // nothing draws.
+            source: del.isAssistant ? del.content : ""
+        }
+
+        // Charts the backend sent as their own `chart` events (an agent drawing a
+        // trend), rather than as a fence inside the reply. Same renderer either way.
+        Repeater {
+            model: del.isAssistant ? del.charts : []
+            ReplySegment {
+                required property var modelData
+                width: col.width
+                segment: ({ kind: "chart", text: modelData })
+            }
+        }
+
+        // Images the backend served (`image` events). Remote by nature, so they load
+        // asynchronously and are capped to the column width.
+        Repeater {
+            model: del.isAssistant ? del.images : []
+            Image {
+                required property var modelData
+                // Capped at the column, never upscaled past the picture's own size.
+                // The height is DERIVED: with only a width set, an Image keeps its
+                // natural height, so a wide picture squeezed into the column would
+                // sit in a box far taller than the pixels it draws.
+                width: Math.min(col.width, implicitWidth > 0 ? implicitWidth : col.width)
+                height: implicitWidth > 0 ? width * implicitHeight / implicitWidth : 0
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                source: modelData
+            }
         }
 
         // Waiting indicator: three dots holding the reply's place from the moment
@@ -166,12 +236,21 @@ Item {
                 text: "⧉"
                 ToolTip.visible: hovered
                 ToolTip.text: I18n.t("copyReply")
-                onClicked: { clip.text = model.content; clip.selectAll(); clip.copy(); }
+                onClicked: {
+                    clipboardHelper.text = model.content;
+                    clipboardHelper.selectAll();
+                    clipboardHelper.copy();
+                }
             }
         }
     }
 
     // Hidden helper to put the reply text on the clipboard (QML has no direct
     // clipboard API; TextEdit.copy() is the standard workaround).
-    TextEdit { id: clip; visible: false }
+    //
+    // NOT `id: clip`: every Item already has a `clip` property, and inside the
+    // ToolButton above the name resolves to THAT bool -- scope-object properties
+    // are looked up before component ids -- so the copy silently assigned to a
+    // boolean instead of reaching this editor.
+    TextEdit { id: clipboardHelper; visible: false }
 }

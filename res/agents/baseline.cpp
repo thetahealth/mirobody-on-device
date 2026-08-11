@@ -606,6 +606,76 @@ ClientMap load_clients(const mirobody::Config& cfg) {
               mirobody::llm::make_client<mirobody::llm::MiroThinkerClient>(opt));
     }
 
+    // Any other OpenAI-compatible provider, declared entirely by config.
+    //
+    // WHY THIS EXISTS: the blocks above name their models at build time, which is
+    // right for a curated free tier but wrong for a BYOK client whose user picks
+    // models from the provider's live catalog. Those turns used to fall back to the
+    // client's own direct SSE transport -- same upstream call, but outside the agent
+    // pipeline, so no tools: no render_chart, no ask_user, no family_health. The
+    // gap was never "BYOK cannot call tools", it was "the core had not been told
+    // about this provider", and a client cannot fix it by parsing tool_calls itself
+    // because the tools live here.
+    //
+    // Config, per provider id (the client injects these through mirobody_set_config
+    // and then reloads):
+    //
+    //   <ID>_API_KEY    required; absent => the provider is not offered at all
+    //   <ID>_BASE_URL   required; the OpenAI-compatible root, /chat/completions is
+    //                   appended by the client. No default: guessing a URL for a
+    //                   provider we have not tested is how you ship a broken entry.
+    //   <ID>_MODELS     comma-separated model ids to register
+    //
+    // The selector key is the model id's LAST path segment, matching how the
+    // NVIDIA block keys "z-ai/glm-5.2" as "glm-5.2" and how the clients resolve a
+    // model to a provider. Two providers offering the same short name collide, and
+    // last registration wins -- the same property the curated blocks already have.
+    {
+        const char* const kCompatIds[] = { "OPENROUTER", "GROQ", "CEREBRAS" };
+        for (std::size_t i = 0; i < sizeof(kCompatIds) / sizeof(kCompatIds[0]); ++i) {
+            const std::string id  = kCompatIds[i];
+            const std::string key = cfg.store.get_str(id + "_API_KEY");
+            const std::string base = cfg.store.get_str(id + "_BASE_URL");
+            const std::string models = cfg.store.get_str(id + "_MODELS");
+            if (key.empty() || base.empty() || models.empty()) continue;
+
+            std::size_t from = 0;
+            while (from <= models.size()) {
+                const std::size_t comma = models.find(',', from);
+                const std::size_t end = (comma == std::string::npos) ? models.size() : comma;
+                std::string model = models.substr(from, end - from);
+                from = end + 1;
+
+                // Tolerate spaces around the separators; skip empties rather than
+                // registering a client for "".
+                while (!model.empty() && model[0] == ' ') model.erase(0, 1);
+                while (!model.empty() && model[model.size() - 1] == ' ') model.erase(model.size() - 1);
+                if (model.empty()) { if (comma == std::string::npos) break; continue; }
+
+                const std::size_t slash = model.rfind('/');
+                const std::string selector =
+                    (slash == std::string::npos) ? model : model.substr(slash + 1);
+
+                mirobody::llm::OpenAIChatOptions opt;
+                opt.api_key       = key;
+                opt.base_url      = base;
+                opt.model         = model;
+                // BYOK: the user's own account is billed, and we have no price
+                // table for an arbitrary catalog entry. Reporting zero would be a
+                // lie the cost summary repeats; reporting nothing is honest.
+                opt.input_price   = 0.0;
+                opt.output_price  = 0.0;
+                opt.tools_json    = openai_tools;
+                opt.tool_executor = &run_tool_for_user;
+                // c_str() is safe: offer() inserts into a std::string-keyed map.
+                offer(clients, selector.c_str(), key,
+                      mirobody::llm::make_client<mirobody::llm::OpenAIChatClient>(opt));
+
+                if (comma == std::string::npos) break;
+            }
+        }
+    }
+
     // gemma-4-e2b -- the same model the native apps run on-device (Gemma 4 E2B),
     // served here over a local OpenAI-compatible endpoint (Ollama / llama.cpp /
     // vLLM). Lets the mobile clients chat with a server-hosted copy -- handy for

@@ -106,4 +106,4 @@ desktop.ini
 # ...and the training config, which has to travel with the corpus it trains on.
 # Negated rather than force-added: a tracked-but-ignored file never shows up in
 # `git status` again, so edits to it silently go nowhere.
-!fine-tuning/units/qwen3.5_2b_full_sft.yml
+!fine-tuning/config_qwen3.5_2b_full_sft.yml

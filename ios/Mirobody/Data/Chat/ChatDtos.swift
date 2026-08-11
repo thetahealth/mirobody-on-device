@@ -84,6 +84,9 @@ struct SessionSummary: Decodable, Identifiable {
     let sessionId: String
     /// Epoch milliseconds (UTC); 0 when absent.
     let timestamp: Int64
+    /// Turns in this conversation. 0 when the backend is older than the field, which
+    /// is why the row draws the separator only when both halves are present.
+    let messageCount: Int
     let summary: String
     let queryUserId: String
     let owned: Bool
@@ -96,6 +99,7 @@ struct SessionSummary: Decodable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case sessionId = "session_id"
         case timestamp
+        case messageCount = "message_count"
         case summary
         case queryUserId = "query_user_id"
         case owned
@@ -106,6 +110,7 @@ struct SessionSummary: Decodable, Identifiable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? ""
         timestamp = try c.decodeIfPresent(Int64.self, forKey: .timestamp) ?? 0
+        messageCount = try c.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
         summary = try c.decodeIfPresent(String.self, forKey: .summary) ?? ""
         queryUserId = try c.decodeIfPresent(String.self, forKey: .queryUserId) ?? ""
         owned = try c.decodeIfPresent(Bool.self, forKey: .owned) ?? true

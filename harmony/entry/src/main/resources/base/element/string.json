@@ -25,6 +25,10 @@
       "value": "保持你选定的模型文件在重启后依然可读(模型文件始终留在你自己的目录里)"
     },
     {
+      "name": "perm_vibrate_reason",
+      "value": "长按复制成功时轻震一下作为反馈"
+    },
+    {
       "name": "chat_pick_model",
       "value": "选择模型"
     },
@@ -99,6 +103,30 @@
     {
       "name": "toast_added",
       "value": "已添加 %s"
+    },
+    {
+      "name": "slash_help_desc",
+      "value": "查看使用帮助"
+    },
+    {
+      "name": "slash_new_desc",
+      "value": "开始新对话"
+    },
+    {
+      "name": "slash_incognito_desc",
+      "value": "隐私模式,本轮不保存"
+    },
+    {
+      "name": "ask_confirm",
+      "value": "确定"
+    },
+    {
+      "name": "toast_copied",
+      "value": "已复制"
+    },
+    {
+      "name": "chat_ai_disclaimer",
+      "value": "Mirobody 是 AI，可能会出错，请自行核实回答内容。"
     },
     {
       "name": "model_dialog_title",

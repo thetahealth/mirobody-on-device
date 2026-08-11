@@ -86,8 +86,11 @@ private struct HistoryRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).mbFont(.bodyLarge).foregroundColor(colors.onSurface).lineLimit(2)
-                if item.timestamp > 0 {
-                    Text(formatHistoryTimestamp(item.timestamp))
+                // Either half can be missing — a row with no timestamp, or a backend
+                // that does not send message_count yet — so the separator is drawn only
+                // when both are there rather than leaving a dangling "·".
+                if !subtitle.isEmpty {
+                    Text(subtitle)
                         .mbFont(.labelSmall)
                         .foregroundColor(colors.onSurfaceVariant.opacity(0.6))
                 }
@@ -104,14 +107,65 @@ private struct HistoryRow: View {
     private var title: String {
         item.summary.nonBlank ?? item.sessionId.nonBlank ?? L("history_untitled", lang)
     }
+
+    private var subtitle: String { historySubtitle(item) }
 }
 
-/// Formats the backend's epoch-millisecond timestamp (UTC) in the device's local
-/// zone. Mirrors `formatTimestamp` in HistoryScreen.kt.
-func formatHistoryTimestamp(_ millis: Int64) -> String {
+/// "2 hours ago · 6 messages" for a history row, in either list.
+///
+/// Shared because the drawer and the full history screen render the same rows, and the
+/// version where each formatted its own is how one of them ends up a release behind.
+///
+/// The count goes through `.stringsdict`, not string interpolation: "1 messages" is
+/// wrong in English and the rule differs again in Russian (few/many) and Arabic (six
+/// categories). Foundation applies the locale's own rule; the forms come from the same
+/// reviewed translations Android ships.
+func historySubtitle(_ item: SessionSummary) -> String {
+    let stamp = item.timestamp > 0 ? relativeHistoryStamp(item.timestamp) : ""
+    let count = item.messageCount > 0
+        ? String.localizedStringWithFormat(
+            NSLocalizedString("history_message_count", comment: "turns in a conversation"),
+            item.messageCount)
+        : ""
+    return [stamp, count].filter { !$0.isEmpty }.joined(separator: " · ")
+}
+
+/// How long ago, not when. Mirrors `relativeStamp` in HistoryScreen.kt.
+///
+/// A history list is scanned for "which conversation was that", and "2 hours ago"
+/// answers it where "2026-08-09 14:31" has to be decoded first. Past a week the
+/// relative form stops helping ("37 days ago" is not a date anyone pictures), so it
+/// switches to an absolute one.
+///
+/// `RelativeDateTimeFormatter` rather than the hand-rolled ladder Android needs:
+/// Foundation already knows every locale's wording AND its plural rules, so there are
+/// no `history_mins_ago` strings to write or keep in step across ten languages.
+///
+/// Likewise the absolute form is built from a TEMPLATE, not a pattern. "MMM d" hardcodes
+/// the English field order; `setLocalizedDateFormatFromTemplate` asks the locale for its
+/// own, which is how ja gets 8月9日 rather than 8 9. The year is carried only when it is
+/// not the current one — always omitting it leaves "Mar 15" ambiguous once a
+/// conversation is more than a year old.
+func relativeHistoryStamp(_ millis: Int64) -> String {
     let date = Date(timeIntervalSince1970: Double(millis) / 1000.0)
+    let now = Date()
+    // Clamped at zero: a server clock a few seconds ahead of the phone would otherwise
+    // render "in 1 minute".
+    let elapsed = max(0, now.timeIntervalSince(date))
+
+    if elapsed < 7 * 24 * 3600 {
+        let rel = RelativeDateTimeFormatter()
+        // .named so the locale may say "yesterday" where it has a word for it; it falls
+        // back to the numeric form by itself everywhere else.
+        rel.dateTimeStyle = .named
+        rel.unitsStyle = .short
+        return rel.localizedString(for: now.addingTimeInterval(-elapsed), relativeTo: now)
+    }
+
+    let sameYear = Calendar.current.component(.year, from: date)
+        == Calendar.current.component(.year, from: now)
     let out = DateFormatter()
-    out.dateFormat = "yyyy-MM-dd HH:mm"
     out.timeZone = .current
+    out.setLocalizedDateFormatFromTemplate(sameYear ? "MMMd" : "MMMdyyyy")
     return out.string(from: date)
 }

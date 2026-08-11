@@ -1,18 +1,19 @@
 #pragma once
 
-// On-device LLM (Gemma 4 via LiteRT-LM C++) for the Qt client. Emits the same
+// On-device LLM (any GGUF via llama.cpp) for the Qt client. Emits the same
 // reply/finished/failed events the SSE path produces, so AppController drives
-// ChatModel identically for local turns. The Qt analogue of Android's
-// LiteRtLlmEngine / iOS's LiteRtLlmEngine.
+// ChatModel identically for local turns. The Qt analogue of Android's LlamaCppEngine.
 //
-// The real engine links the LiteRT-LM **C API** shared library (its //c:litert-lm
-// Bazel target -> litert-lm.dll + engine.h; the C ABI links from either an MSVC or a
-// GCC/Clang build). It is compiled ONLY when configured with -DMIROBODY_ONDEVICE_LLM=ON
-// and pointed at a LiteRT-LM SDK via -DLITERT_LM_SDK_DIR (include/engine.h + lib/). No
-// Windows/Linux prebuilt library is published, so build the C API DLL from source first
-// (see qt/README.md). Otherwise a stub is built and the app still compiles/links —
-// on-device turns then report "not built in", mirroring the graceful degradation used
-// elsewhere in this repo (e.g. the absent JNI .so).
+// One engine, one format. Android carries a second runtime (LiteRT-LM) because Google
+// publishes `.litertlm` builds that are faster on a phone; on the desktop llama.cpp
+// reads every model the catalog offers, so a second lane would buy nothing.
+//
+// The real engine links llama.cpp's shared library. It is compiled ONLY when configured
+// with -DMIROBODY_ONDEVICE_LLM=ON and pointed at an SDK via -DLLAMA_CPP_DIR (include/ +
+// lib/ + bin/); build-qt builds and caches one per backend (see qt/README.md).
+// Otherwise a stub is built and the app still compiles/links — on-device turns then
+// report "not built in", mirroring the graceful degradation used elsewhere in this repo
+// (e.g. the absent JNI .so).
 
 #include <QObject>
 #include <QString>

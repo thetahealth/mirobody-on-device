@@ -200,9 +200,15 @@ void ChatService::handle_history(const server::Request& req, server::Response& r
         try {
 #if defined(MIROBODY_DATABASE_PG_LEGACY)
             // Legacy: owner-only, no care-circle sharing.
+            // th_messages keys on the string session_id and soft-deletes with is_del,
+            // so the count here needs neither the root-row special case nor the
+            // deleted_at predicate the modern branch does.
             database::Result r = db_.execute(
-                "SELECT session_id, summary, created_at FROM th_sessions "
-                "WHERE user_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?;",
+                "SELECT s.session_id, s.summary, s.created_at, "
+                "(SELECT count(*) FROM th_messages m "
+                "   WHERE m.session_id=s.session_id AND m.is_del=FALSE) "
+                "FROM th_sessions s "
+                "WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT ? OFFSET ?;",
                 {uid_text, page_size, offset});
             for (std::size_t i = 0; i < r.rows.size(); ++i) {
                 const std::vector<database::Value>& row = r.rows[i];
@@ -226,6 +232,8 @@ void ChatService::handle_history(const server::Request& req, server::Response& r
                 addstr(item, "summary", summary);
                 addstr(item, "query_user_id", uid_text);
                 item.AddMember("owned", true, a);
+                item.AddMember("message_count",
+                               row[3].is_null() ? 0 : static_cast<int>(row[3].as_int()), a);
                 summaries.PushBack(item, a);
             }
 #else
@@ -234,11 +242,25 @@ void ChatService::handle_history(const server::Request& req, server::Response& r
             // the client can badge "shared by <owner>" / "shared with N". The
             // three bound uids are: the owned-flag CASE, the owner filter, and
             // the shared-to-me subquery -- in that placeholder order.
+            //
+            // message_count is TWO subqueries, and both halves are load-bearing: the
+            // opening question carries conversation_id=NULL (its own id IS the
+            // conversation id -- see res/sql/pg/1_chat.sql), so counting only the
+            // conversation_id matches is short by exactly one on every thread. That is
+            // the same "(id=? OR conversation_id=?)" the detail query below uses,
+            // written as two index-friendly probes -- a range on
+            // idx_messages_conversation_id plus a primary-key lookup -- rather than an
+            // OR the planner would have to satisfy with a scan, since this runs once
+            // per row of the page.
             database::Result r = db_.execute(
                 "SELECT c.id, c.summary, COALESCE(c.updated_at, c.created_at), c.user_id, "
                 "(CASE WHEN c.user_id=? THEN 1 ELSE 0 END), u.email, "
                 "(SELECT count(*) FROM conversation_shares s "
-                "   WHERE s.conversation_id=c.id AND s.deleted_at IS NULL) "
+                "   WHERE s.conversation_id=c.id AND s.deleted_at IS NULL), "
+                "(SELECT count(*) FROM messages m "
+                "   WHERE m.conversation_id=c.id AND m.deleted_at IS NULL) "
+                "+ (SELECT count(*) FROM messages q "
+                "     WHERE q.id=c.id AND q.deleted_at IS NULL) "
                 "FROM conversations c LEFT JOIN users u ON u.id=c.user_id "
                 "WHERE c.deleted_at IS NULL AND (c.user_id=? OR c.id IN "
                 "  (SELECT conversation_id FROM conversation_shares "
@@ -253,6 +275,7 @@ void ChatService::handle_history(const server::Request& req, server::Response& r
                 const bool        owned     = !row[4].is_null() && row[4].as_int() != 0;
                 const std::string owner_em  = (!row[5].is_null()) ? row[5].as_text() : std::string();
                 const std::int64_t shares   = row[6].is_null() ? 0 : row[6].as_int();
+                const std::int64_t msgs     = row[7].is_null() ? 0 : row[7].as_int();
 
                 rapidjson::Value item(rapidjson::kObjectType);
                 addstr(item, "session_id", sid);
@@ -261,6 +284,7 @@ void ChatService::handle_history(const server::Request& req, server::Response& r
                 addstr(item, "summary", summary);
                 addstr(item, "query_user_id", owner_id);   // whose conversation it is
                 item.AddMember("owned", owned, a);
+                item.AddMember("message_count", static_cast<int>(msgs), a);
                 if (owned) {
                     item.AddMember("shared_with_count", static_cast<int>(shares), a);
                 } else {

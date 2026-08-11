@@ -51,10 +51,17 @@ final class AppContainer: ObservableObject {
         self.xAuthRepository = XAuthRepository(api: apiClient, settings: settings)
         let modelManager = ModelManager()
         self.modelManager = modelManager
+        // Two on-device runtimes, chosen per model rather than per app: LiteRT-LM runs
+        // the `.litertlm` builds Google publishes for Gemma's E-series, llama.cpp runs
+        // any GGUF — which is the only lane the current Qwen generation exists in.
+        // Neither wins outright; docs/on-device-llm.md has the measurements.
         self.chatRepository = ChatRepository(
             api: apiClient,
             settings: settings,
-            onDeviceEngine: LiteRtLlmEngine(models: modelManager)
+            onDeviceEngine: OnDeviceEngines(
+                liteRt: LiteRtLlmEngine(models: modelManager),
+                llama: LlamaCppEngine(models: modelManager)
+            )
         )
         self.serverConfigStore = ServerConfigStore(api: apiClient, settings: settings)
         // On-device Apple Health ingestion: reads HealthKit and POSTs FHIR

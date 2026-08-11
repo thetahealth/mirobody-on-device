@@ -45,6 +45,7 @@
 "verify_resend_code" = "Resend code";
 
 /* Chat */
+"chat_ai_disclaimer" = "Mirobody is AI and can make mistakes. Please double-check responses.";
 "chat_message_hint" = "Ask anything";
 "chat_history_cd" = "History";
 "chat_select_model" = "Select model";

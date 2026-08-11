@@ -64,6 +64,12 @@ sealed interface ChatStreamEvent {
     /** The durable server-side conversation (thread) id for this turn, as a decimal string. */
     data class Conversation(val id: String) : ChatStreamEvent
     data object Heartbeat : ChatStreamEvent
+    /**
+     * The on-device engine is loading a model (several seconds, a few GB) before it can
+     * answer. Never sent over SSE — the server has no such state — but it travels the
+     * same stream so the chat UI needs no second channel to learn about it.
+     */
+    data object Loading : ChatStreamEvent
     data class Error(val message: String) : ChatStreamEvent
     data object End : ChatStreamEvent
     data class Stats(val stats: CostStatistics) : ChatStreamEvent

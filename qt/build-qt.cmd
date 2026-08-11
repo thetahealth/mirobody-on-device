@@ -106,7 +106,11 @@ set "_ONDEV_ARGS="
 if not defined _BACKEND goto skip_ondev
 call :ensure_llama
 if errorlevel 1 exit /b 1
-set "_ONDEV_ARGS=-DMIROBODY_ONDEVICE_LLM=ON -DLLAMA_CPP_DIR=!LLAMA_CPP_DIR:\=/!"
+:: Quoted, and plain `set` so the quotes survive into the value: the default SDK lives
+:: under %USERPROFILE%, which contains a space on any machine whose account name does,
+:: and cmake would take the tail as a separate argument -- failing much later, at the
+:: find_library, with a path truncated at the space.
+set _ONDEV_ARGS=-DMIROBODY_ONDEVICE_LLM=ON -DLLAMA_CPP_DIR="!LLAMA_CPP_DIR:\=/!"
 echo [build-qt] on-device: backend=%_BACKEND%
 :skip_ondev
 
@@ -150,7 +154,7 @@ goto :eof
 :ensure_llama
 if defined LLAMA_CPP_DIR ( echo [build-qt] using preset LLAMA_CPP_DIR=%LLAMA_CPP_DIR% & exit /b 0 )
 rem Beside the repo, and resolved the same way harmony\build-llama.cmd and
-rem fine-tuning\train_units.py resolve it -- one checkout serves all three.
+rem fine-tuning\tool_train.py resolve it -- one checkout serves all three.
 if not defined LLAMA_SRC for %%I in ("%PROJECT_DIR%\..") do set "LLAMA_SRC=%%~fI\llama.cpp"
 :: Outside the repo -- it is a large build product, not a source artifact. LLAMA_CPP_DIR
 :: (checked just above) points at an existing SDK instead.
@@ -182,6 +186,17 @@ set "_LFLAGS=-DGGML_NATIVE=OFF"
 if /I "%_BACKEND%"=="avx2"   set "_LFLAGS=-DGGML_NATIVE=ON"
 if /I "%_BACKEND%"=="vulkan" set "_LFLAGS=-DGGML_VULKAN=ON"
 if /I "%_BACKEND%"=="cuda"   set "_LFLAGS=-DGGML_CUDA=ON"
+rem ggml-vulkan does find_package(SPIRV-Headers CONFIG REQUIRED) and puts %VULKAN_SDK% on
+rem CMAKE_PREFIX_PATH to satisfy it -- which is not enough. Config mode looks under a
+rem prefix for lib/cmake/<Name>*/, a directory NAMED AFTER THE PACKAGE; the LunarG SDK
+rem drops every config flat into Lib\cmake\, so nothing matches and the configure dies on
+rem a header-only package sitting right there. Name the directory outright when that is
+rem the layout; a newer SDK that nests them properly is found without help.
+rem (Plain `set`, not `set "..."`: the value has to carry its own quotes for a spaced SDK
+rem path, and the quoted form would swallow them.)
+if /I "%_BACKEND%"=="vulkan" if exist "%VULKAN_SDK%\Lib\cmake\SPIRV-HeadersConfig.cmake" (
+    set _LFLAGS=!_LFLAGS! -DSPIRV-Headers_DIR="%VULKAN_SDK%\Lib\cmake"
+)
 set "_LBUILD=%LLAMA_SRC%\build-%_BACKEND%"
 echo [build-qt] building llama.cpp (%_BACKEND%) -- first time takes a few minutes...
 cmake -S "%LLAMA_SRC%" -B "%_LBUILD%" -G Ninja ^

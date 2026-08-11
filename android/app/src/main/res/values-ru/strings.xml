@@ -205,4 +205,40 @@
     <string name="hdp_unsupported">HDP доступен только на Android 9 и ниже. На новых устройствах используйте Bluetooth (BLE).</string>
     <string name="hdp_start">Начать приём</string>
     <string name="hdp_stop">Стоп</string>
+
+    <string name="slash_help_desc">Показать встроенное руководство</string>
+    <string name="slash_new_desc">Начать новый разговор</string>
+    <string name="slash_incognito_desc">Инкогнито — этот чат не сохраняется</string>
+    <string name="chat_ai_disclaimer">Mirobody — это ИИ, он может ошибаться. Проверяйте ответы.</string>
+    <plurals name="history_message_count">
+        <item quantity="one">%d сообщение</item>
+        <item quantity="few">%d сообщения</item>
+        <item quantity="many">%d сообщений</item>
+        <item quantity="other">%d сообщения</item>
+    </plurals>
+    <string name="history_just_now">только что</string>
+    <plurals name="history_mins_ago">
+        <item quantity="one">%d мин назад</item>
+        <item quantity="few">%d мин назад</item>
+        <item quantity="many">%d мин назад</item>
+        <item quantity="other">%d мин назад</item>
+    </plurals>
+    <plurals name="history_hours_ago">
+        <item quantity="one">%d ч назад</item>
+        <item quantity="few">%d ч назад</item>
+        <item quantity="many">%d ч назад</item>
+        <item quantity="other">%d ч назад</item>
+    </plurals>
+    <plurals name="history_days_ago">
+        <item quantity="one">%d день назад</item>
+        <item quantity="few">%d дня назад</item>
+        <item quantity="many">%d дней назад</item>
+        <item quantity="other">%d дня назад</item>
+    </plurals>
+    <string name="history_date_pattern">d MMM</string>
+    <string name="history_date_year_pattern">d MMM yyyy</string>
+    <string name="chat_ondevice_verifying">Проверка уже имеющегося файла…</string>
+    <string name="chat_ondevice_import_hint">Выберите файл .litertlm. Если он совпадает с моделью выше, он распознаётся как эта модель, а не добавляется повторно.</string>
+    <string name="chat_copied">Скопировано</string>
+    <string name="chat_loading_model">Загрузка модели…</string>
 </resources>

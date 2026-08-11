@@ -83,13 +83,27 @@ on-device models** — **Gemma 4 E2B**, **Qwen2.5 1.5B**, … shown as
 server), emitting the same event stream so the chat UI is unchanged (`Data/LLM/`). It
 stays available even when the backend is unreachable.
 
-- **Engine** (`LiteRtLlmEngine`): **LiteRT-LM**'s Swift API, added as the `LiteRTLM`
-  Swift Package in [`project.yml`](project.yml), model-agnostic over the catalog in
-  `OnDeviceModel`. The engine is wrapped in `#if canImport(LiteRTLM)`, so the app still
-  builds if the package is removed (on-device turns then report it isn't built in).
-  Re-run `xcodegen generate` after changing packages.
-- **Models**: LiteRT-LM `.litertlm` files (from the `litert-community` HF org), **not
-  bundled** — `ModelManager` downloads each on demand from Hugging Face (`URLSession`,
+- **Two engines, and a model says which it needs** (`OnDeviceRuntime` on its spec;
+  `OnDeviceEngines` routes, so nothing above that seam knows there are two):
+  - **LiteRT-LM** — its Swift API, added as the `LiteRTLM` Swift Package in
+    [`project.yml`](project.yml). Wrapped in `#if canImport(LiteRTLM)`, so the app still
+    builds if the package is removed. Re-run `xcodegen generate` after changing packages.
+    **CPU only here**: the Swift package declares no GPU backend, so the `-gpu.litertlm`
+    builds — which are OpenCL, for Adreno and Mali — have nothing to run on.
+  - **llama.cpp** — any GGUF, compiled into `mirobody.xcframework` by
+    [`build-llama.sh`](build-llama.sh) and reached from Swift through the C API in
+    [`src/mirobody.h`](../src/mirobody.h). `LlamaCppEngine` is `#if MIROBODY_EMBEDDED`
+    -guarded exactly as `ServerController` is, and is lifecycle only: the turn itself is
+    the same `llm::LocalClient` Android, HarmonyOS and Qt use, so the context ladder,
+    sampling, the `<think>` split and the sliding history window are fixed once for four
+    frontends. Metal is built for the device slice and **not measured by us** — decode is
+    bandwidth-bound and Apple silicon shares one memory pool, so treat it as a lane to
+    measure rather than a win to assume.
+
+  The catalog is split down the middle — **Gemma on LiteRT-LM, Qwen on llama.cpp** — and
+  that is availability, not preference: `litert-community` publishes no Qwen3.5 above
+  0.8B, so GGUF is the only way the current generation reaches a phone.
+- **Models** — **not bundled** — `ModelManager` downloads each on demand from Hugging Face (`URLSession`,
   resumable, with progress) into Application Support. The manager sheet lists the
   catalog with per-model download / delete; a model appears in the picker once
   downloaded, and switching models reloads the engine.
@@ -247,10 +261,26 @@ ios/
 | Coil `AsyncImage` (+ SVG)       | `AsyncImage` + `SVGWebView` (`WKWebView`)      |
 | Firebase Auth (OAuth web flow)  | FirebaseAuth (`OAuthProvider("google.com")`)   |
 | Health Connect / HMS Health Kit | HealthKit (`HealthKitRepository`)              |
-| On-device LLM: LiteRT-LM (`litertlm-android`) | LiteRT-LM Swift (`LiteRTLM` SPM) |
+| On-device LLM: LiteRT-LM + llama.cpp | LiteRT-LM Swift (`LiteRTLM` SPM) + llama.cpp via the C API |
 
 ## Known gaps vs. Android
 
+- **The on-device engine trails Android deliberately, not by accident.**
+  `Data/LLM/LiteRtLlmEngine.swift` says it mirrors `data/llm/LiteRtLlmEngine.kt`, and
+  Whatever lands on the Android LiteRT engine has to be carried across by hand — as of
+  now that includes the `<think>` split (the llama.cpp lane gets it natively; the LiteRT
+  one still does not) and the SHA-256 integrity checks, which Android uses to skip a
+  re-download, verify a finished transfer before renaming it into place, and adopt an
+  import that matches a catalog entry. Treat [the Android file](../android/app/src/main/java/ai/thetahealth/mirobody/data/llm/LiteRtLlmEngine.kt)
+  as the source and this bullet as the reminder.
+- **No `.loading` chat event.** Android emits one before a multi-second model load so the
+  turn does not look like a model already writing. iOS has no such case in
+  `ChatStreamEvent`, so the first turn on a cold model shows nothing until the first
+  token. The load itself is off the main thread, so this is a missing signal, not a
+  frozen UI.
+- **The llama.cpp lane is written but unverified.** It has never been compiled: it needs
+  macOS and Xcode, and `mirobody.xcframework` has to exist first. Nothing under
+  `Data/LLM/LlamaCppEngine.swift`, `build-llama.sh`, or the C API it calls has been run.
 - **LaTeX math** in chat (`$…$` / `$$…$$`) is not rendered — Markwon's JLatexMath
   plugin has no drop-in SwiftUI equivalent. Other markdown (tables, code,
   strikethrough, links) works via MarkdownUI.

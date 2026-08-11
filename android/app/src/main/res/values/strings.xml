@@ -219,4 +219,41 @@
     <string name="chat_image_saved">Saved to gallery</string>
     <string name="chat_image_save_failed">Save failed</string>
     <string name="chat_image_save_permission_denied">Storage permission denied</string>
+
+    <string name="slash_help_desc">Show the built-in guide</string>
+    <string name="slash_new_desc">Start a new conversation</string>
+    <string name="slash_incognito_desc">Incognito — this one is not saved</string>
+    <string name="chat_ai_disclaimer">Mirobody is AI and can make mistakes. Please double-check responses.</string>
+    <plurals name="history_message_count">
+        <item quantity="one">%d message</item>
+        <item quantity="other">%d messages</item>
+    </plurals>
+    <string name="history_just_now">just now</string>
+    <plurals name="history_mins_ago">
+        <item quantity="one">%d min ago</item>
+        <item quantity="other">%d min ago</item>
+    </plurals>
+    <plurals name="history_hours_ago">
+        <item quantity="one">%d hr ago</item>
+        <item quantity="other">%d hr ago</item>
+    </plurals>
+    <plurals name="history_days_ago">
+        <item quantity="one">%d day ago</item>
+        <item quantity="other">%d days ago</item>
+    </plurals>
+    <string name="history_date_pattern">MMM d</string>
+    <string name="history_date_year_pattern">MMM d, yyyy</string>
+    <string name="chat_ondevice_verifying">Checking the file already on this device…</string>
+    <string name="chat_ondevice_import_hint">Pick a .litertlm file. One that matches a model above is recognised as that model instead of being added twice.</string>
+    <string name="chat_copied">Copied</string>
+    <string name="probe_title">Developer probe</string>
+    <string name="probe_device">Device</string>
+    <string name="probe_benchmark">On-device benchmark</string>
+    <string name="probe_benchmark_hint">Uses the benchmark() built into LiteRT-LM: prefill and decode are measured separately, in tokens. Same prompt and token budget every run, so two backends are comparable.</string>
+    <string name="probe_run">Run</string>
+    <string name="probe_on_disk">on disk</string>
+    <string name="probe_not_downloaded">not downloaded</string>
+    <string name="probe_download_first">download it first</string>
+    <string name="chat_loading_model">Loading the model…</string>
+    <string name="probe_download">Download</string>
 </resources>

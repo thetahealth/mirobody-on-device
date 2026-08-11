@@ -85,6 +85,41 @@ std::string ChartEvent::to_json() const {
     return serialize(d);
 }
 
+// {"type":"ask","content":<question>,"tool_id":<id>,"ask":{...}} — the nested object
+// is the choices, mirroring how a chart nests its option.
+std::string AskEvent::to_json() const {
+    rapidjson::Document d = base_obj(type(), content_, tool_id_);
+    rapidjson::Document::AllocatorType& a = d.GetAllocator();
+
+    rapidjson::Document spec;
+    if (!spec_json_.empty() && !spec.Parse(spec_json_.c_str()).HasParseError()) {
+        d.AddMember("ask", rapidjson::Value(spec, a), a);
+    } else {
+        d.AddMember("ask", rapidjson::Value(rapidjson::kObjectType), a);
+    }
+    return serialize(d);
+}
+
+std::string AskEvent::payload() const {
+    // The same object the SSE form nests, plus the id and question hoisted in, so a
+    // flat-transport client parses one thing and has everything it needs to render
+    // the question and answer it.
+    rapidjson::Document d;
+    if (spec_json_.empty() || d.Parse(spec_json_.c_str()).HasParseError() || !d.IsObject()) {
+        d.SetObject();
+    }
+    rapidjson::Document::AllocatorType& a = d.GetAllocator();
+    d.RemoveMember("ask_id");
+    d.RemoveMember("question");
+    d.AddMember("ask_id",
+                rapidjson::Value(tool_id_.c_str(),
+                                 static_cast<rapidjson::SizeType>(tool_id_.size()), a), a);
+    d.AddMember("question",
+                rapidjson::Value(content_.c_str(),
+                                 static_cast<rapidjson::SizeType>(content_.size()), a), a);
+    return serialize(d);
+}
+
 std::string CostEvent::to_json() const {
     rapidjson::Document d = base_obj(type(), std::string(), std::string());
     rapidjson::Document::AllocatorType& a = d.GetAllocator();

@@ -205,4 +205,32 @@
     <string name="hdp_unsupported">HDP ist nur unter Android 9 und älter verfügbar. Nutze auf neueren Geräten Bluetooth (BLE).</string>
     <string name="hdp_start">Empfang starten</string>
     <string name="hdp_stop">Stopp</string>
+
+    <string name="slash_help_desc">Integrierte Anleitung anzeigen</string>
+    <string name="slash_new_desc">Neue Unterhaltung beginnen</string>
+    <string name="slash_incognito_desc">Inkognito – wird nicht gespeichert</string>
+    <string name="chat_ai_disclaimer">Mirobody ist eine KI und kann Fehler machen. Bitte Antworten überprüfen.</string>
+    <plurals name="history_message_count">
+        <item quantity="one">%d Nachricht</item>
+        <item quantity="other">%d Nachrichten</item>
+    </plurals>
+    <string name="history_just_now">gerade eben</string>
+    <plurals name="history_mins_ago">
+        <item quantity="one">vor %d Min.</item>
+        <item quantity="other">vor %d Min.</item>
+    </plurals>
+    <plurals name="history_hours_ago">
+        <item quantity="one">vor %d Std.</item>
+        <item quantity="other">vor %d Std.</item>
+    </plurals>
+    <plurals name="history_days_ago">
+        <item quantity="one">vor %d Tag</item>
+        <item quantity="other">vor %d Tagen</item>
+    </plurals>
+    <string name="history_date_pattern">d. MMM</string>
+    <string name="history_date_year_pattern">d. MMM yyyy</string>
+    <string name="chat_ondevice_verifying">Vorhandene Datei wird geprüft…</string>
+    <string name="chat_ondevice_import_hint">Wähle eine .litertlm-Datei. Eine Datei, die zu einem Modell oben passt, wird als dieses Modell erkannt statt doppelt hinzugefügt.</string>
+    <string name="chat_copied">Kopiert</string>
+    <string name="chat_loading_model">Modell wird geladen…</string>
 </resources>

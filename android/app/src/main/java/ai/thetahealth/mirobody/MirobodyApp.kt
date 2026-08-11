@@ -12,6 +12,10 @@ class MirobodyApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Before anything can touch llama.cpp. The engine dlopens one CPU backend out of
+        // several -- whichever scores highest on this chip -- and it can only find them
+        // if it is told where the app's libraries were unpacked.
+        NativeBridge().localBackendPath(applicationInfo.nativeLibraryDir)
         container = AppContainer(applicationContext)
         Coil.setImageLoader(
             ImageLoader.Builder(this)

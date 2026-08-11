@@ -42,6 +42,17 @@ public:
 
     // The event as a Server-Sent Events message: `data: {json}\n\n`.
     std::string to_sse() const { return "data: " + to_json() + "\n\n"; }
+
+    // The event as ONE string, for a transport that carries a flat
+    // (type, content) pair instead of a JSON object -- the C ABI's
+    // mirobody_chat_handler, which embedded clients drive directly.
+    //
+    // A text event returns its text. A structured event returns the part that
+    // actually matters to a renderer (ChartEvent -> the ECharts option), NOT the
+    // whole frame: an embedded client would otherwise have to unwrap a JSON
+    // object to reach the object it wanted. The default is the full frame, which
+    // is the honest answer for an event nobody has given a flat form yet.
+    virtual std::string payload() const { return to_json(); }
 };
 
 //------------------------------------------------------------------------------
@@ -54,6 +65,7 @@ public:
     explicit ReplyEvent(std::string content) : content_(std::move(content)) {}
     const char* type() const override { return "reply"; }
     std::string to_json() const override;
+    std::string payload() const override { return content_; }
 private:
     std::string content_;
 };
@@ -63,6 +75,7 @@ public:
     explicit ThinkingEvent(std::string content) : content_(std::move(content)) {}
     const char* type() const override { return "thinking"; }
     std::string to_json() const override;
+    std::string payload() const override { return content_; }
 private:
     std::string content_;
 };
@@ -78,6 +91,7 @@ public:
 
     const char* type() const override;
     std::string to_json() const override;
+    std::string payload() const override { return content_; }
 
     // Accessors so event filters can inspect a tool step (e.g. ChartFilter
     // recognizing a render_chart call across the Title/Arguments/Detail triple).
@@ -100,9 +114,36 @@ public:
 
     const char* type() const override { return "chart"; }
     std::string to_json() const override;
+    // The ECharts option alone: what a renderer needs, ready for setOption().
+    // The optional title is deliberately not carried -- no client reads it.
+    std::string payload() const override { return option_json_; }
 private:
     std::string content_;
     std::string option_json_;
+    std::string tool_id_;
+};
+
+// A question the model put to the user through the ask_user tool, waiting for an
+// answer. `content` is the question; `spec_json` carries the choices; `tool_id` is
+// the id the client must echo back with the answer (mcp::AskBroker routes on it).
+//
+// Unlike every other event here this one expects a REPLY: the turn is parked inside
+// the tool call until it arrives (see mcp/ask.hpp). A client that ignores this event
+// leaves the turn waiting until the tool times out, which is why the timeout exists.
+class AskEvent : public Event {
+public:
+    AskEvent(std::string content, std::string spec_json, std::string tool_id)
+        : content_(std::move(content)), spec_json_(std::move(spec_json)),
+          tool_id_(std::move(tool_id)) {}
+
+    const char* type() const override { return "ask"; }
+    std::string to_json() const override;
+    // The whole question INCLUDING its id -- the C ABI's flat (type, content) pair
+    // has nowhere else to put one, and an answer without the id cannot be routed.
+    std::string payload() const override;
+private:
+    std::string content_;
+    std::string spec_json_;
     std::string tool_id_;
 };
 
@@ -112,6 +153,8 @@ public:
     explicit CostEvent(llm::CostStatistics cost) : cost_(std::move(cost)) {}
     const char* type() const override { return "costStatistics"; }
     std::string to_json() const override;
+    // Empty, matching what the C ABI has always sent for this event.
+    std::string payload() const override { return std::string(); }
 private:
     llm::CostStatistics cost_;
 };
@@ -122,6 +165,7 @@ public:
     explicit ErrorEvent(std::string message) : message_(std::move(message)) {}
     const char* type() const override { return "error"; }
     std::string to_json() const override;
+    std::string payload() const override { return message_; }
 private:
     std::string message_;
 };

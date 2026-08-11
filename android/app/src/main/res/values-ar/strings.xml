@@ -213,4 +213,48 @@
     <string name="hdp_unsupported">‏HDP متاح فقط على Android 9 وما قبله. على الأجهزة الأحدث استخدم البلوتوث (BLE).</string>
     <string name="hdp_start">بدء الاستماع</string>
     <string name="hdp_stop">إيقاف</string>
+
+    <string name="slash_help_desc">عرض الدليل المُدمج</string>
+    <string name="slash_new_desc">بدء محادثة جديدة</string>
+    <string name="slash_incognito_desc">الوضع المتخفّي — لا يتم حفظ هذه المحادثة</string>
+    <string name="chat_ai_disclaimer">‏Mirobody ذكاء اصطناعي وقد يخطئ. يُرجى التحقق من الإجابات.</string>
+    <plurals name="history_message_count">
+        <item quantity="zero">%d رسالة</item>
+        <item quantity="one">رسالة واحدة</item>
+        <item quantity="two">رسالتان</item>
+        <item quantity="few">%d رسائل</item>
+        <item quantity="many">%d رسالة</item>
+        <item quantity="other">%d رسالة</item>
+    </plurals>
+    <string name="history_just_now">الآن</string>
+    <plurals name="history_mins_ago">
+        <item quantity="zero">%d دقيقة</item>
+        <item quantity="one">قبل دقيقة</item>
+        <item quantity="two">قبل دقيقتين</item>
+        <item quantity="few">قبل %d دقائق</item>
+        <item quantity="many">قبل %d دقيقة</item>
+        <item quantity="other">قبل %d دقيقة</item>
+    </plurals>
+    <plurals name="history_hours_ago">
+        <item quantity="zero">%d ساعة</item>
+        <item quantity="one">قبل ساعة</item>
+        <item quantity="two">قبل ساعتين</item>
+        <item quantity="few">قبل %d ساعات</item>
+        <item quantity="many">قبل %d ساعة</item>
+        <item quantity="other">قبل %d ساعة</item>
+    </plurals>
+    <plurals name="history_days_ago">
+        <item quantity="zero">%d يوم</item>
+        <item quantity="one">أمس</item>
+        <item quantity="two">قبل يومين</item>
+        <item quantity="few">قبل %d أيام</item>
+        <item quantity="many">قبل %d يومًا</item>
+        <item quantity="other">قبل %d يوم</item>
+    </plurals>
+    <string name="history_date_pattern">d MMM</string>
+    <string name="history_date_year_pattern">d MMM yyyy</string>
+    <string name="chat_ondevice_verifying">جارٍ التحقق من الملف الموجود على الجهاز…</string>
+    <string name="chat_ondevice_import_hint">اختر ملف ‎.litertlm‎. الملف المطابق لنموذج أعلاه يُعرَّف على أنه ذلك النموذج بدل إضافته مرتين.</string>
+    <string name="chat_copied">تم النسخ</string>
+    <string name="chat_loading_model">جارٍ تحميل النموذج…</string>
 </resources>

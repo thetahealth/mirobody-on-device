@@ -24,7 +24,10 @@ import ai.thetahealth.mirobody.data.health.HealthSourceFactory
 import ai.thetahealth.mirobody.data.health.ble.BleHealthController
 import ai.thetahealth.mirobody.data.health.hdp.HdpHealthController
 import ai.thetahealth.mirobody.data.llm.LiteRtLlmEngine
+import ai.thetahealth.mirobody.data.llm.LlamaCppEngine
 import ai.thetahealth.mirobody.data.llm.MlKitTextService
+import ai.thetahealth.mirobody.data.llm.OnDeviceEngines
+import ai.thetahealth.mirobody.data.llm.OnDeviceLlmEngine
 import ai.thetahealth.mirobody.data.llm.ModelManager
 import ai.thetahealth.mirobody.data.net.AuthInterceptor
 import ai.thetahealth.mirobody.data.net.BaseUrlInterceptor
@@ -95,11 +98,18 @@ class AppContainer(context: Context) {
     // EHR connect (SMART on FHIR) via /health/ehr/*.
     val ehrRepository: EhrRepository = EhrRepository(ehrApi)
 
-    // On-device private LLM (Gemma 4 via LiteRT-LM). The model file is downloaded on
-    // demand by ModelManager; the engine loads it lazily on first local turn.
+    // On-device private LLM. Model files are downloaded on demand by ModelManager; an
+    // engine loads one lazily, on the first local turn or when the user picks it.
     val modelManager: ModelManager = ModelManager(appContext)
 
-    private val onDeviceEngine: LiteRtLlmEngine = LiteRtLlmEngine(modelManager)
+    // Two runtimes, chosen per model rather than per app: LiteRT-LM runs the `.litertlm`
+    // builds Google publishes for Gemma's E-series, llama.cpp runs any GGUF — which is
+    // the only lane the current Qwen generation exists in. Neither wins outright; see
+    // docs/on-device-llm.md for the measurements that settled it.
+    private val onDeviceEngine: OnDeviceLlmEngine = OnDeviceEngines(
+        litert = LiteRtLlmEngine(modelManager),
+        llama = LlamaCppEngine(modelManager),
+    )
 
     // Layered on-device GenAI (Gemini Nano via ML Kit) for bounded tasks like rewriting
     // a draft. Available only on AICore-capable devices; the UI hides it otherwise.

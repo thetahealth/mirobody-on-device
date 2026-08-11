@@ -246,6 +246,13 @@ struct ChatView: View {
             .background(colors.surfaceContainerLow)
             .overlay(RoundedRectangle(cornerRadius: 24).stroke(colors.outlineVariant, lineWidth: 1))
             .clipShape(RoundedRectangle(cornerRadius: 24))
+
+            // "AI can be wrong", under the composer like every other chat client
+            // (Android and HarmonyOS show the same string). Inside the composer's own
+            // stack so it tracks the pill's width and padding, and so anything that
+            // later hides the composer takes the caption with it — there is nothing to
+            // double-check in a conversation you cannot add to.
+            AiDisclaimer(text: L("chat_ai_disclaimer", lang))
         }
         .padding(.horizontal, 12).padding(.vertical, 10)
         .frame(maxWidth: contentMaxWidth)
@@ -422,5 +429,48 @@ private struct BottomOffsetKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+/**
+ The "AI can be wrong" caption, shrunk to whatever it takes to stay on ONE line.
+
+ One line is the requirement, not legibility: this is a caption nobody reads twice, and a
+ second line steals height from the conversation on every screen for the sake of a
+ sentence the reader already knows. The width available varies with the screen, the
+ language (the German string is half again the English one) and the in-app font-size
+ slider, so no fixed size answers it.
+
+ `minimumScaleFactor` is SwiftUI's own shrink-to-fit and does exactly this — Android needs
+ a hand-rolled measure loop only because Compose 1.7 has no `autoSize`. But it takes a
+ RATIO, and the floor here is an absolute 6 pt, so it is computed against the resolved
+ size: `bodySmall` scaled by the user's own setting. Pass a constant ratio instead and the
+ floor would drift with the slider, which is the one thing it must not do.
+
+ Below that floor the text would be decorative rather than small, so a string that still
+ does not fit is ellipsized instead of shrunk further — still exactly one line, which is
+ what was asked for.
+ */
+private struct AiDisclaimer: View {
+    let text: String
+
+    @Environment(\.mbColors) private var colors
+    @Environment(\.mbFontScale) private var scale
+
+    /// Smaller than this is decoration, not text.
+    private static let floorPt: CGFloat = 6
+
+    var body: some View {
+        Text(text)
+            .mbFont(.bodySmall)
+            .foregroundColor(colors.onSurfaceVariant.opacity(0.7))
+            .multilineTextAlignment(.center)
+            .lineLimit(1)
+            // min(1, ...) because a user who has SHRUNK the app's type may already be at
+            // or below 6 pt, and a factor above 1 would let SwiftUI grow the text.
+            .minimumScaleFactor(min(1, Self.floorPt / (MBTextStyle.bodySmall.size * scale)))
+            .truncationMode(.tail)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 2)
     }
 }

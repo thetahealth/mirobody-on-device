@@ -234,6 +234,28 @@ napi_value NativeChatCancel(napi_env env, napi_callback_info info) {
     return nullptr;
 }
 
+// nativeChatAnswer(askId: string, answerJson: string): boolean
+//
+// Routes by the ask id from the event, NOT by turn id: the turn is parked inside a
+// tool call and the C ABI resolves the waiter itself (mirobody_chat_answer), so
+// nothing here has to know which turn asked. Returns false when nobody was waiting
+// — a stale tap after a stop or a timeout — which the caller can ignore.
+napi_value NativeChatAnswer(napi_env env, napi_callback_info info) {
+    size_t argc = 2;
+    napi_value argv[2] = {nullptr, nullptr};
+    napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
+
+    const std::string ask_id = argc > 0 ? ToUtf8(env, argv[0]) : std::string();
+    const std::string answer = argc > 1 ? ToUtf8(env, argv[1]) : std::string();
+
+    const int taken = mirobody_chat_answer(ask_id.c_str(), answer.c_str());
+    OH_LOG_INFO(LOG_APP, "chat answer '%{public}s' taken=%{public}d", ask_id.c_str(), taken);
+
+    napi_value out = nullptr;
+    napi_get_boolean(env, taken != 0, &out);
+    return out;
+}
+
 //------------------------------------------------------------------------------
 // On-device lane (src/llm/local.hpp)
 //------------------------------------------------------------------------------
@@ -755,6 +777,7 @@ napi_value Init(napi_env env, napi_value exports) {
         {"nativeGetProviders",    nullptr, NativeGetProviders,    nullptr, nullptr, nullptr, napi_default, nullptr},
         {"nativeChat",            nullptr, NativeChat,            nullptr, nullptr, nullptr, napi_default, nullptr},
         {"nativeChatCancel",      nullptr, NativeChatCancel,      nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"nativeChatAnswer",      nullptr, NativeChatAnswer,      nullptr, nullptr, nullptr, napi_default, nullptr},
         {"nativeProbePath",       nullptr, NativeProbePath,       nullptr, nullptr, nullptr, napi_default, nullptr},
         {"nativeNnrtDevices",     nullptr, NativeNnrtDevices,     nullptr, nullptr, nullptr, napi_default, nullptr},
         {"nativeMemBandwidth",    nullptr, NativeMemBandwidth,    nullptr, nullptr, nullptr, napi_default, nullptr},

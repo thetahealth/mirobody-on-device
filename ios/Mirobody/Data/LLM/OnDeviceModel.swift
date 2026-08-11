@@ -1,10 +1,22 @@
 import Foundation
 
-/// One on-device model the app can run. LiteRT-LM `.litertlm` files, edge-tuned and
-/// published under the Apache-2.0 `litert-community` org (ungated, no token needed).
-/// Each is downloaded at runtime (never bundled); several can coexist and the user
-/// picks which to run. `providerCode` is the synthetic chat-provider id it surfaces as
-/// in the picker. Mirrors Android's `data/llm/OnDeviceModel.kt`.
+/// Which engine runs this file. The format follows from it: LiteRT-LM takes
+/// `.litertlm`, llama.cpp takes `.gguf`, and neither reads the other's.
+///
+/// Two runtimes on purpose. LiteRT-LM is a Swift package; llama.cpp is compiled into
+/// `mirobody.xcframework` (see `ios/build-llama.sh`) and reads any GGUF ever published.
+/// They answer different questions — see `docs/on-device-llm.md` — and a model says
+/// which one it needs rather than the app guessing from the extension.
+enum OnDeviceRuntime {
+    case liteRtLm
+    case llamaCpp
+}
+
+/// One on-device model the app can run — a `.litertlm` for LiteRT-LM or a `.gguf` for
+/// llama.cpp, per `runtime`. Each is downloaded at runtime (never bundled); several can
+/// coexist and the user picks which to run. `providerCode` is the synthetic
+/// chat-provider id it surfaces as in the picker. Mirrors Android's
+/// `data/llm/OnDeviceModel.kt`.
 struct OnDeviceModelSpec: Identifiable, Hashable {
     let id: String
     /// Non-localized display name, e.g. "Gemma 4 E2B" (kept stable across UI languages).
@@ -22,6 +34,8 @@ struct OnDeviceModelSpec: Identifiable, Hashable {
     /// When set, the model is loaded from here as-is — never downloaded, and never
     /// deleted from disk on removal (it's the user's own file).
     var localPath: String? = nil
+    /// Which engine loads this file; the default is the one the catalog started with.
+    var runtime: OnDeviceRuntime = .liteRtLm
 
     var providerCode: String { OnDeviceModel.providerPrefix + id }
 
@@ -41,32 +55,22 @@ enum OnDeviceModel {
     // download's Content-Length. Bigger models want more RAM at inference, so a 4B
     // model is best on an 8 GB+ phone.
     static let catalog: [OnDeviceModelSpec] = [
+        // Two lanes on purpose, and the Qwen entries are why. `litert-community`
+        // publishes nothing above Qwen3.5-0.8B, so the current Qwen generation reaches
+        // a phone only as GGUF — which is exactly what the second runtime is for. Gemma
+        // stays on `.litertlm`, where Google's own runtime reads the E-series'
+        // MatFormer layout properly and beats llama.cpp by 1.5x. Availability, not
+        // preference; swap a Qwen entry over the day a `.litertlm` lands and measures
+        // faster.
         OnDeviceModelSpec(
-            id: "qwen3-0.6b",
-            displayName: "Qwen3 0.6B (int4)",
-            fileName: "qwen3-0.6b-int4.litertlm",
+            id: "qwen35-2b",
+            displayName: "Qwen3.5 2B",
+            fileName: "Qwen3.5-2B-Q4_K_M.gguf",
             downloadURL: URL(string:
-                "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/qwen3_0_6b_mixed_int4.litertlm?download=true")!,
-            approxBytes: 497_664_000,
-            recommendedRam: "4 GB+"
-        ),
-        OnDeviceModelSpec(
-            id: "qwen2.5-1.5b",
-            displayName: "Qwen2.5 1.5B",
-            fileName: "qwen2.5-1.5b-instruct-q8.litertlm",
-            downloadURL: URL(string:
-                "https://huggingface.co/litert-community/Qwen2.5-1.5B-Instruct/resolve/main/Qwen2.5-1.5B-Instruct_multi-prefill-seq_q8_ekv4096.litertlm?download=true")!,
-            approxBytes: 1_597_931_520,
-            recommendedRam: "6 GB+"
-        ),
-        OnDeviceModelSpec(
-            id: "qwen3-1.7b",
-            displayName: "Qwen3 1.7B",
-            fileName: "qwen3-1.7b.litertlm",
-            downloadURL: URL(string:
-                "https://huggingface.co/litert-community/Qwen3-1.7B/resolve/main/Qwen3_1.7B.litertlm?download=true")!,
-            approxBytes: 2_056_729_520,
-            recommendedRam: "6 GB+"
+                "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf?download=true")!,
+            approxBytes: 1_280_835_840,
+            recommendedRam: "4 GB+",
+            runtime: .llamaCpp
         ),
         OnDeviceModelSpec(
             id: "gemma-4-e2b",
@@ -78,13 +82,14 @@ enum OnDeviceModel {
             recommendedRam: "6 GB+"
         ),
         OnDeviceModelSpec(
-            id: "qwen3-4b-instruct",
-            displayName: "Qwen3 4B (Instruct)",
-            fileName: "qwen3-4b-instruct.litertlm",
+            id: "qwen35-4b",
+            displayName: "Qwen3.5 4B",
+            fileName: "Qwen3.5-4B-Q4_K_M.gguf",
             downloadURL: URL(string:
-                "https://huggingface.co/litert-community/Qwen3-4B-Instruct-2507/resolve/main/qwen3_4b_instruct_2507_mixed_int4.litertlm?download=true")!,
-            approxBytes: 2_659_057_664,
-            recommendedRam: "8 GB+"
+                "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf?download=true")!,
+            approxBytes: 2_740_937_888,
+            recommendedRam: "8 GB+",
+            runtime: .llamaCpp
         ),
         OnDeviceModelSpec(
             id: "gemma-4-e4b",
@@ -126,7 +131,10 @@ enum OnDeviceModel {
             downloadURL: URL(string: "https://invalid.local/imported")!,
             approxBytes: sizeBytes,
             recommendedRam: "—",
-            localPath: path
+            localPath: path,
+            // The one place the extension IS the answer: an imported file arrives with
+            // no spec to ask, so the format has to speak for itself.
+            runtime: path.lowercased().hasSuffix(".gguf") ? .llamaCpp : .liteRtLm
         )
     }
 

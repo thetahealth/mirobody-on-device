@@ -56,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import androidx.compose.runtime.DisposableEffect
 
@@ -190,7 +191,7 @@ fun VendorsDialog(
     unlinkTarget?.let { target ->
         AlertDialog(
             onDismissRequest = { unlinkTarget = null },
-            title = { Text(stringResource(R.string.chat_vendor_disconnect)) },
+            title = { DialogTitleWithClose(stringResource(R.string.chat_vendor_disconnect), { unlinkTarget = null }) },
             text = { Text(stringResource(R.string.chat_vendor_unlink_confirm, target.name)) },
             confirmButton = {
                 TextButton(onClick = { vm.unlink(target.id); unlinkTarget = null }) {

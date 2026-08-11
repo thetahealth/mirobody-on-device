@@ -52,7 +52,6 @@ export struct HistoryDrawer {
   onFontSize: () => void = () => {};
   onTheme: () => void = () => {};
   onHealthData: () => void = () => {};
-  onNativeProbe: () => void = () => {};
 
   /** Epoch ms of the last health sync, 0 when never — the health row's hint. */
   @Prop healthLastSync: number;
@@ -207,9 +206,14 @@ export struct HistoryDrawer {
 
       // Per-row delete, as on the web. The host asks for confirmation -- a mis-tap
       // here would otherwise destroy a conversation with no undo.
+      //
+      // Red, like the web client's and android's: it is the one control in this
+      // panel that destroys something, and a tertiary grey reads as another piece
+      // of row furniture beside the timestamp it sits next to. `danger` carries
+      // its own dark-mode value (#FFB4AB), so the glyph stays legible in both.
       SymbolGlyph($r('sys.symbol.trash'))
         .fontSize(ICON.md)
-        .fontColor([$r('app.color.text_tertiary')])
+        .fontColor([$r('app.color.danger')])
         .margin({ left: 8 })
         .onClick(() => {
           this.onDelete(s.id);
@@ -362,12 +366,6 @@ export struct HistoryDrawer {
         this.navRow($r('app.string.health_dialog_title'), this.healthHint(), () => {
           this.onClose();
           this.onHealthData();
-        })
-        // Temporary: step-0 native bridge probe. Remove with pages/NativeProbe.ets
-        // once the real native chat lane is wired.
-        this.navRow('Native probe', '', () => {
-          this.onClose();
-          this.onNativeProbe();
         })
 
         Divider().strokeWidth(0.5).color($r('app.color.border'))

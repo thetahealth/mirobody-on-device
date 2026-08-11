@@ -87,10 +87,18 @@ exports.loadMessages = function () {
 // failure is swallowed so it never interrupts the chat flow. The array is
 // snapshotted to plain {role, content} objects up front so the value written is
 // the state at call time, not whenever the async transaction happens to run.
+//
+// A `local` message (the built-in guide a slash command answered with -- see
+// slash.js) is dropped here rather than at each call site: it is drawn in the
+// thread and belongs to nothing else. Several KB of documentation is not part of
+// the conversation the user had, and this is the one place that decides what a
+// stored conversation is.
 exports.saveMessages = function (messages) {
     var key = convKey();
     if (!key) { return Promise.resolve(); }
-    var snapshot = (messages instanceof Array) ? messages.map(function (m) {
+    var snapshot = (messages instanceof Array) ? messages.filter(function (m) {
+        return !m.local;
+    }).map(function (m) {
         return { role: m.role, content: m.content, ts: m.ts, cost: m.cost, provider: m.provider };
     }) : [];
     return withStore("readwrite", function (store) {

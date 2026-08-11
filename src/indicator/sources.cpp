@@ -12,6 +12,7 @@
 #include <fstream>
 #include <map>
 #include <regex>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -30,6 +31,13 @@ namespace indicator {
 namespace {
 
 // ─── file / CSV / RRF / gz readers ───────────────────────────────────
+
+bool file_exists(const std::string& path) {
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return false;
+    std::fclose(f);
+    return true;
+}
 
 bool read_file(const std::string& path, std::string& buf) {
     FILE* f = std::fopen(path.c_str(), "rb");
@@ -209,15 +217,100 @@ std::string obo_quoted(const std::string& s) {
 
 // ─── surface / anchor helpers ────────────────────────────────────────
 
+// The content words of a surface, deduplicated, sorted, joined by one space.
+//
+// `Palpation of liver` and `Liver Palpation` are the same test written twice;
+// `Slit-lamp examination` and `Slit lamp examination` differ by a hyphen;
+// `Waist` and `waist measurement` differ by a word that says nothing. 240 of the
+// 575 Chinese indicators nothing could name differ from a SNOMED or LOINC term
+// only in that way.
+//
+// Deliberately NOT a distance: the signature is computed the same way on both
+// sides and looked up exactly, so a near-miss is still a miss and there is no
+// threshold to tune. The stop list stays short for the same reason -- every word
+// dropped merges two surfaces that were distinct, so it holds only words that
+// carry no analyte: the grammar, and the four nouns LOINC and SNOMED append to
+// say "this is a test".
+//
+// Returns "" when there is nothing to gain: fewer than two content words (a
+// single word is already its own signature, and collapsing one-word surfaces
+// merges `Right` into everything), or a signature identical to the input.
+bool is_stop_word(const std::string& w) {
+    static const char* kStop[] = {
+        "a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to",
+        "with", "measurement", "level", "test", "finding", 0
+    };
+    for (int i = 0; kStop[i]; ++i)
+        if (w == kStop[i]) return true;
+    return false;
+}
+
+std::string token_signature(const std::string& normalized) {
+    std::vector<std::string> words;
+    std::string cur;
+    for (size_t i = 0; i <= normalized.size(); ++i) {
+        unsigned char c = i < normalized.size()
+                              ? static_cast<unsigned char>(normalized[i]) : ' ';
+        bool word_char = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c >= 0x80;
+        if (word_char) {
+            cur.push_back(static_cast<char>(c));
+        } else if (!cur.empty()) {
+            if (!is_stop_word(cur)) words.push_back(cur);
+            cur.clear();
+        }
+    }
+    if (words.size() < 2) return std::string();
+    std::sort(words.begin(), words.end());
+    words.erase(std::unique(words.begin(), words.end()), words.end());
+    std::string out;
+    for (size_t i = 0; i < words.size(); ++i) {
+        if (i) out.push_back(' ');
+        out += words[i];
+    }
+    return out == normalized ? std::string() : out;
+}
+
+// Index an already-normalized surface, plus its token signature. Every source
+// must go through here rather than calling add_surface directly: the signature
+// was first added inside add_surfaces() alone, which only the LOINC readers use,
+// so SNOMED's 1.4M descriptions -- where most of the cross-standard spelling
+// differences live -- silently got none of it.
+void index_surface(LexiconBuilder& b, const std::string& normalized, uint32_t idx) {
+    if (normalized.empty()) return;
+    b.add_surface(normalized, idx);
+    std::string sig = token_signature(normalized);
+    if (!sig.empty()) b.add_surface(sig, idx);
+}
+
 // Whole normalized form + first dot-segment (LOINC COMPONENTs are dotted).
 void add_surfaces(LexiconBuilder& b, uint32_t idx, const std::string& raw) {
     if (raw.empty()) return;
     std::string norm = normalize(raw);
-    if (!norm.empty()) b.add_surface(norm, idx);
+    index_surface(b, norm, idx);
     size_t dot = raw.find('.');
     if (dot != std::string::npos && dot > 0) {
         std::string seg = normalize(raw.substr(0, dot));
         if (!seg.empty() && seg != norm) b.add_surface(seg, idx);
+    }
+}
+
+// A ';'-separated synonym list, as LOINC writes RELATEDNAMES2 in both the core
+// table and every linguistic variant. This is the register a report prints --
+// "platelet count", "HbA1c", "ALT", 谷丙转氨酶 -- and none of it is in the three
+// name columns. Ambiguous by nature: `UA` is listed against 8,688 terms. That is
+// what a recall stage is for; ranking narrows it, dropping it loses the surface
+// entirely.
+void add_synonym_list(LexiconBuilder& b, uint32_t idx, const std::string& raw,
+                      const std::set<std::string>* skip) {
+    size_t start = 0;
+    while (start <= raw.size()) {
+        size_t semi = raw.find(';', start);
+        size_t len = (semi == std::string::npos) ? std::string::npos : semi - start;
+        std::string one = normalize(raw.substr(start, len));
+        if (!one.empty() && one != "-" && !(skip && skip->count(one)))
+            index_surface(b, one, idx);
+        if (semi == std::string::npos) break;
+        start = semi + 1;
     }
 }
 
@@ -233,15 +326,138 @@ void attach_concept(LexiconBuilder& b, uint8_t src_system, const std::string& na
                     bool anchored, uint32_t anchor) {
     if (canonical.empty()) return;
     uint32_t idx = anchored ? anchor : b.add_code(src_system, native_id, canonical);
-    std::string s = normalize(canonical);
-    if (!s.empty()) b.add_surface(s, idx);
-    for (size_t i = 0; i < syns.size(); ++i) {
-        s = normalize(syns[i]);
-        if (!s.empty()) b.add_surface(s, idx);
-    }
+    index_surface(b, normalize(canonical), idx);
+    for (size_t i = 0; i < syns.size(); ++i) index_surface(b, normalize(syns[i]), idx);
 }
 
 // ─── LOINC ───────────────────────────────────────────────────────────
+
+// How specific a term's specimen is, 0 = what a bare analyte name usually means.
+//
+// Ranking on COMMON_TEST_RANK alone answers `血红蛋白` with 786-4 -- MCHC, whose
+// COMPONENT is Hemoglobin and whose rank is 13, better than 718-7's 17 because
+// every CBC reports it. The difference is SYSTEM: 718-7 is Bld, 786-4 is RBC, a
+// fraction of it. A query with no context means the ordinary specimen.
+//
+// Deliberately small. Ser, Ser/Plas, Plas, Bld, Urine, Stool, CSF and the 20,014
+// `^Patient` terms (vitals, history, anything asked of the patient rather than a
+// sample) all stay at 0, so LOINC's own ranking keeps deciding among them; only
+// the derived fractions and the qualified systems are pushed behind. Guessing a
+// preference between serum and urine is the resolver's job to NOT do -- that is
+// what the report's own section header is for, once extract feeds it in.
+// Could this term appear in a report at all?
+//
+// LOINC is not only a lab vocabulary. CLASSTYPE 4 is 12,446 questionnaire items
+// -- PROMIS, PhenX, general-health surveys -- and LOINC itself ranks only 35 of
+// them; CLASSTYPE 3 is claims attachments; the *.ONTOLOGY classes are scaffolding
+// for LOINC's own hierarchy. None of it is ever printed on a health-check report,
+// a discharge note or a prescription, which is all this resolver is asked about,
+// and every one of them is a candidate competing with the answer.
+//
+// A category, not a score: the flag decides order before any number does. Zero
+// of the 174 golden labels fall in these classes, so nothing legitimate is
+// behind the gate.
+uint32_t off_report_class(const std::string& classtype, const std::string& cls) {
+    if (classtype == "3" || classtype == "4") return 1;
+    return cls.find("ONTOLOGY") != std::string::npos ? 1 : 0;
+}
+
+// Is this COMPONENT a qualification of an analyte rather than the analyte?
+//
+// LOINC writes the qualification into the COMPONENT itself: `Triiodontyronine`
+// vs `Triiodothyronine.free`, `Thyroxine` vs `Thyroxine.free`, `Methemoglobin`
+// vs `Methemoglobin/Hemoglobin.total`. The qualified ones are frequently ordered
+// -- FT3 and FT4 outrank total T3 and T4 on COMMON_TEST_RANK, 320 vs 482 and 134
+// vs 394 -- so rank alone answers `三碘甲状腺原氨酸` with the free fraction.
+//
+// A query that does not say `free` does not mean free. Same shape as the RBC
+// rule, one axis over.
+//
+// The dot must fall before any '/', i.e. it qualifies the PRIMARY analyte.
+// Demoting every component that holds a dot anywhere also demotes
+// `Hemoglobin A1c/Hemoglobin.total`, where the dot is in the denominator -- and
+// that ratio IS what HbA1c means, the percentage every report prints. Measured:
+// the wider rule cost that case and nothing else, and 4548-4 fell behind
+// 41995-2, HbA1c by mass per volume, which almost nobody orders.
+// An alias listed against this many distinct COMPONENTs is axis vocabulary, not
+// a name for anything. Same threshold and same reasoning as
+// fine-tuning/tool_gen.py::axis_vocabulary, which found the gap: half of all
+// aliases name a single component and 99% stay under 84, so 30 sits in open
+// space rather than on a slope.
+const size_t kAxisWordSpread = 30;
+
+// RELATEDNAMES2 mixes the six axes' own values in among the synonyms. LOINC
+// lists `Point in time` (the TIME_ASPCT) and `Quantitative` (the SCALE) against
+// every term they apply to, and zhCN lists 随机 and 随意 the same way -- 97,072,
+// 43,659 and 88,823 postings for surfaces that name no analyte at all. The axis
+// COLUMNS cannot be used to recognise them: zhCN's PROPERTY column spells molar
+// concentration 物质的量浓度 while the alias list says 克分子浓度, a string that
+// appears in no column. The spread can.
+//
+// Two passes over the same in-memory CSV: count first, then emit. The set is
+// capped at the threshold, so it costs one small hash set per alias.
+std::set<std::string> axis_vocabulary(const std::string& data, const char* comp_col,
+                                      const char* alias_col) {
+    CsvReader csv(data);
+    std::vector<std::string> header;
+    if (!csv.next(header)) return std::set<std::string>();
+    int c_comp = col(header, comp_col), c_alias = col(header, alias_col);
+    if (c_comp < 0 || c_alias < 0) return std::set<std::string>();
+    std::map<std::string, std::set<std::string> > spread;
+    std::vector<std::string> row;
+    while (csv.next(row)) {
+        const std::string& comp = field(row, c_comp);
+        if (comp.empty()) continue;
+        const std::string& aliases = field(row, c_alias);
+        size_t start = 0;
+        while (start <= aliases.size()) {
+            size_t semi = aliases.find(';', start);
+            size_t len = (semi == std::string::npos) ? std::string::npos : semi - start;
+            std::string one = normalize(aliases.substr(start, len));
+            if (!one.empty()) {
+                std::set<std::string>& seen = spread[one];
+                if (seen.size() < kAxisWordSpread) seen.insert(comp);
+            }
+            if (semi == std::string::npos) break;
+            start = semi + 1;
+        }
+    }
+    std::set<std::string> out;
+    for (std::map<std::string, std::set<std::string> >::const_iterator it = spread.begin();
+         it != spread.end(); ++it)
+        if (it->second.size() >= kAxisWordSpread) out.insert(it->first);
+    return out;
+}
+
+uint32_t qualified_component(const std::string& component) {
+    size_t dot = component.find('.');
+    if (dot == std::string::npos) return 0;
+    size_t slash = component.find('/');
+    return (slash == std::string::npos || dot < slash) ? 1 : 0;
+}
+
+uint32_t specimen_tier(const std::string& system) {
+    // Cellular fractions of blood, and nothing else. Two wider rules were tried
+    // and measured, both net losses:
+    //
+    //   Isolate + every SYSTEM holding '^' or '>':  -11 top-1. Isolate is 2,069
+    //   microbiology terms and the '>' family is imaging (`Abdomen>Spine.lumbar`).
+    //   Those are specific specimens, not wrong ones.
+    //
+    //   + PPP / PRP:  -3 more. Platelet-poor plasma IS the right specimen for the
+    //   whole coagulation panel -- prothrombin time, thrombin time, protein C and
+    //   S, plasminogen all live there and were all demoted below their own answer.
+    //
+    // What is left is the case that started this: a query naming an analyte means
+    // the analyte in the ordinary specimen, not a red- or white-cell fraction of
+    // it. 786-4 (MCHC, SYSTEM RBC) outranks 718-7 (Hemoglobin, Bld) on
+    // COMMON_TEST_RANK because every CBC reports it, and is not what `血红蛋白`
+    // asks for.
+    static const char* kDerived[] = { "RBC", "WBC", 0 };
+    for (int i = 0; kDerived[i]; ++i)
+        if (system == kDerived[i]) return 1;
+    return 0;
+}
 
 int build_loinc_core(LexiconBuilder& b, const std::string& path) {
     std::string data;
@@ -249,11 +465,15 @@ int build_loinc_core(LexiconBuilder& b, const std::string& path) {
         std::fprintf(stderr, "build-lexicon: cannot read %s\n", path.c_str());
         return -1;
     }
+    std::set<std::string> axis_words = axis_vocabulary(data, "COMPONENT", "RELATEDNAMES2");
     CsvReader csv(data);
     std::vector<std::string> header;
     if (!csv.next(header)) return 0;
     int c_num = col(header, "LOINC_NUM"), c_comp = col(header, "COMPONENT"),
-        c_lcn = col(header, "LONG_COMMON_NAME"), c_sn = col(header, "SHORTNAME");
+        c_lcn = col(header, "LONG_COMMON_NAME"), c_sn = col(header, "SHORTNAME"),
+        c_disp = col(header, "DisplayName"), c_rel = col(header, "RELATEDNAMES2"),
+        c_rank = col(header, "COMMON_TEST_RANK"), c_sys = col(header, "SYSTEM"),
+        c_ct = col(header, "CLASSTYPE"), c_cls = col(header, "CLASS");
     if (c_num < 0) { std::fprintf(stderr, "build-lexicon: no LOINC_NUM in %s\n", path.c_str()); return -1; }
     int n = 0;
     std::vector<std::string> row;
@@ -262,10 +482,59 @@ int build_loinc_core(LexiconBuilder& b, const std::string& path) {
         if (code.empty()) continue;
         const std::string& lcn = field(row, c_lcn);
         const std::string& comp = field(row, c_comp);
-        uint32_t idx = b.add_code(SYS_LOINC, code, !lcn.empty() ? lcn : comp);
+        // COMMON_TEST_RANK is LOINC's own published "how commonly is this
+        // ordered", 1..~20k over 19,978 terms, and it is the only statement in
+        // the release about which of several terms sharing a name a report
+        // means. Stored raw rather than bucketed -- the ordering is the whole
+        // signal, and 0 (unranked) sorts last at query time.
+        uint32_t rank = 0;
+        const std::string& raw_rank = field(row, c_rank);
+        for (size_t i = 0; i < raw_rank.size(); ++i) {
+            if (raw_rank[i] < '0' || raw_rank[i] > '9') { rank = 0; break; }
+            rank = rank * 10 + static_cast<uint32_t>(raw_rank[i] - '0');
+        }
+        uint32_t idx = b.add_code(SYS_LOINC, code, !lcn.empty() ? lcn : comp, rank,
+                                  specimen_tier(field(row, c_sys)) |
+                                      (off_report_class(field(row, c_ct),
+                                                        field(row, c_cls)) << 3) |
+                                      (qualified_component(comp) << 4));
         add_surfaces(b, idx, lcn);
         add_surfaces(b, idx, comp);
         add_surfaces(b, idx, field(row, c_sn));
+        // The two registers the three name columns above do not carry: what
+        // LOINC suggests a UI show, and its own synonym list.
+        add_surfaces(b, idx, field(row, c_disp));
+        add_synonym_list(b, idx, field(row, c_rel), &axis_words);
+        ++n;
+    }
+    std::fprintf(stderr, "build-lexicon: axis words not indexed as names=%zu\n",
+                 axis_words.size());
+    return n;
+}
+
+// LOINC's plain-language names, shipped in their own accessory file rather than
+// in the core table -- whose CONSUMER_NAME column is present but empty in every
+// one of the 109,325 rows. Attaches by LOINC_NUM: add_code returns the existing
+// index for a (system, code) already seen, so this only adds surfaces.
+int build_loinc_consumer(LexiconBuilder& b, const std::string& path) {
+    std::string data;
+    if (!read_file(path, data)) {
+        std::fprintf(stderr, "build-lexicon: (optional) consumer names not read: %s\n",
+                     path.c_str());
+        return 0;
+    }
+    CsvReader csv(data);
+    std::vector<std::string> header;
+    if (!csv.next(header)) return 0;
+    int c_num = col(header, "LoincNumber"), c_name = col(header, "ConsumerName");
+    if (c_num < 0 || c_name < 0) return 0;
+    int n = 0;
+    std::vector<std::string> row;
+    while (csv.next(row)) {
+        const std::string& code = field(row, c_num);
+        const std::string& name = field(row, c_name);
+        if (code.empty() || name.empty()) continue;
+        add_surfaces(b, b.add_code(SYS_LOINC, code, name), name);
         ++n;
     }
     return n;
@@ -277,11 +546,12 @@ int build_loinc_zh(LexiconBuilder& b, const std::string& path) {
         std::fprintf(stderr, "build-lexicon: (optional) zhCN variant not read: %s\n", path.c_str());
         return 0;
     }
+    std::set<std::string> axis_words = axis_vocabulary(data, "COMPONENT", "RELATEDNAMES2");
     CsvReader csv(data);
     std::vector<std::string> header;
     if (!csv.next(header)) return 0;
     int c_num = col(header, "LOINC_NUM"), c_comp = col(header, "COMPONENT"),
-        c_lcn = col(header, "LONG_COMMON_NAME");
+        c_lcn = col(header, "LONG_COMMON_NAME"), c_rel = col(header, "RELATEDNAMES2");
     if (c_num < 0) return 0;
     int n = 0;
     std::vector<std::string> row;
@@ -293,6 +563,11 @@ int build_loinc_zh(LexiconBuilder& b, const std::string& path) {
         uint32_t idx = b.add_code(SYS_LOINC, code, !comp.empty() ? comp : lcn);
         add_surfaces(b, idx, comp);
         add_surfaces(b, idx, lcn);
+        // zhCN translates no name at all -- LONG_COMMON_NAME and SHORTNAME are
+        // empty in all 95,399 rows -- so its 151k synonyms are the only Chinese
+        // surface besides the translated COMPONENT. 谷丙转氨酶 and 总胆固醇 are
+        // in here and nowhere else.
+        add_synonym_list(b, idx, field(row, c_rel), &axis_words);
         ++n;
     }
     return n;
@@ -366,7 +641,7 @@ int build_umls(LexiconBuilder& b, const std::string& mrconso) {
         if (it == cui2idx.end()) return;
         std::string s = normalize(f[14]);
         if (s.empty()) return;
-        for (size_t i = 0; i < it->second.size(); ++i) b.add_surface(s, it->second[i]);
+        for (size_t i = 0; i < it->second.size(); ++i) index_surface(b, s, it->second[i]);
         ++n;
     });
     return n;
@@ -466,6 +741,12 @@ int build_aliases(LexiconBuilder& b, const std::string& path) {
         std::string src = normalize(src_raw), dst = normalize(dst_raw);
         if (src.empty() || dst.empty()) continue;
         const std::vector<uint32_t>* codes = b.lookup(dst);
+        if (!codes) {
+            // The English a sheet writes and the English a standard writes
+            // differ by word order and by the noun appended to say "test".
+            std::string sig = token_signature(dst);
+            if (!sig.empty()) codes = b.lookup(sig);
+        }
         if (!codes) continue;
         for (size_t k = 0; k < codes->size(); ++k) b.add_surface(src, (*codes)[k]);
         ++n;
@@ -635,7 +916,7 @@ int build_pubchem(LexiconBuilder& b, const std::string& path) {
             first_in_group = false;
             if (have_anchor) ++n;
         }
-        if (have_anchor) { std::string s = normalize(syn); if (!s.empty()) b.add_surface(s, anchor); }
+        if (have_anchor) index_surface(b, normalize(syn), anchor);
     });
     if (!ok) { std::fprintf(stderr, "build-lexicon: (optional) PubChem not read: %s\n", path.c_str()); return 0; }
     return n;
@@ -697,8 +978,8 @@ void harvest_abbrev(const std::string& name_n, const std::string& disp_n,
 // ─── reference-path resolution (version-agnostic) ────────────────────
 
 struct RefPaths {
-    std::string loinc_core, loinc_zh, part, part_map, mrconso, cvx, cvx_cn,
-                chebi, mondo, taxdump, lpsn, pubchem;
+    std::string loinc_core, loinc_zh, loinc_consumer, part, part_map, mrconso,
+                cvx, cvx_cn, chebi, mondo, taxdump, lpsn, pubchem;
 };
 
 // Resolve all source paths under `root`, globbing the version-variable dirs/files
@@ -708,11 +989,19 @@ RefPaths resolve_ref(const std::string& root) {
     RefPaths p;
     std::string loinc = find_match(root, "^Loinc_", true);
     if (!loinc.empty()) {
-        p.loinc_core = loinc + "/LoincTableCore/LoincTableCore.csv";
+        // The full table, not LoincTableCore: the core subset is 15 columns and
+        // has neither RELATEDNAMES2 nor DisplayName, which is where LOINC keeps
+        // the register a report prints -- "platelet count", "Plt", "HbA1c". The
+        // full table is a superset, so nothing is lost by preferring it; fall
+        // back to the core one for a ref tree that only extracted that.
+        p.loinc_core = loinc + "/LoincTable/Loinc.csv";
+        if (!file_exists(p.loinc_core))
+            p.loinc_core = loinc + "/LoincTableCore/LoincTableCore.csv";
         p.loinc_zh = find_match(loinc + "/AccessoryFiles/LinguisticVariants",
                                 "^zhCN.*LinguisticVariant\\.csv$", false);
         p.part = loinc + "/AccessoryFiles/PartFile/Part.csv";
         p.part_map = loinc + "/AccessoryFiles/PartFile/PartRelatedCodeMapping.csv";
+        p.loinc_consumer = loinc + "/AccessoryFiles/ConsumerName/ConsumerName.csv";
     }
     std::string umls = find_match(root, "^umls-", true);
     if (!umls.empty()) p.mrconso = umls + "/META/MRCONSO.RRF";
@@ -735,7 +1024,9 @@ void build_lexicon(LexiconBuilder& b, const BuildOptions& opt) {
 
     int n_loinc = build_loinc_core(b, p.loinc_core);
     int n_zh = build_loinc_zh(b, p.loinc_zh);
+    int n_consumer = build_loinc_consumer(b, p.loinc_consumer);
     int n_cvx = build_cvx(b, p.cvx, p.cvx_cn);
+    std::fprintf(stderr, "build-lexicon: consumer names=%d\n", n_consumer);
     std::fprintf(stderr, "build-lexicon: LOINC=%d zhCN=%d CVX=%d -> codes=%zu surfaces=%zu\n",
                  n_loinc, n_zh, n_cvx, b.code_count(), b.surface_count());
     int n_umls = build_umls(b, p.mrconso);

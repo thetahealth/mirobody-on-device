@@ -119,7 +119,7 @@ rem Never cloned for you here (qt\build-qt.cmd does clone; this one only prints 
 rem command): the on-device numbers above were measured against a specific checkout,
 rem so it wants one you pinned, not one silently refreshed under it.
 rem One checkout for the whole repo, beside it rather than inside: qt\build-qt.cmd and
-rem fine-tuning\train_units.py resolve LLAMA_SRC the same way, so a clone made for any
+rem fine-tuning\tool_train.py resolve LLAMA_SRC the same way, so a clone made for any
 rem one of them serves the others. They used to default to three different directories
 rem -- a Downloads checkout here, an opt\ one for Qt -- and two of the three did not
 rem exist, so each script sent you off to clone its own copy.

@@ -64,6 +64,15 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
   `Chat` and `Dispatcher`, owns one transport per enabled protocol and starts
   them, and registers the non-streaming REST routes itself: `GET|POST /api/providers`,
   `GET|POST /api/history`, `POST /api/history/delete`, `GET|POST /api/files`.
+  `/api/history` returns `summaries[]`, each entry carrying `session_id`, `timestamp`,
+  `summary`, `query_user_id`, `owned`, and `message_count`; an owned entry adds
+  `shared_with_count`, a shared-to-me one adds `shared_by`. **`message_count` is two
+  subqueries, not one**: a conversation's opening question has `conversation_id NULL`
+  (its own id *is* the conversation id — see
+  [res/sql/pg/1_chat.sql](../../res/sql/pg/1_chat.sql)), so counting only the
+  `conversation_id` matches is short by exactly one on every thread. They are written
+  as two index-friendly probes rather than the `(id=? OR conversation_id=?)` the
+  detail query uses, because this one runs per row of the page.
   `/api/files` lists the caller's uploads from the `files` table (the queryable
   index; see [res/sql/pg/1_chat.sql](../../res/sql/pg/1_chat.sql) and
   `file::db_list_files`): `?page` / `?size` (default 0 / 20, max 100),

@@ -16,6 +16,9 @@ data class SessionSummary(
     @SerialName("query_user_id") val queryUserId: String = "",
     val owned: Boolean = true,
     @SerialName("shared_with_count") val sharedWithCount: Int = 0,
+    // Messages in the thread, for the history row's subtitle. Defaults to 0 so a
+    // backend that predates the field just renders the timestamp alone.
+    @SerialName("message_count") val messageCount: Int = 0,
 )
 
 @Serializable

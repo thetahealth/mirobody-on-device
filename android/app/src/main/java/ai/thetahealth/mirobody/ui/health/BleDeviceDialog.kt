@@ -1,6 +1,7 @@
 package ai.thetahealth.mirobody.ui.health
 
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import android.Manifest
 import android.os.Build
@@ -64,7 +65,7 @@ fun BleDeviceDialog(
 
     AlertDialog(
         onDismissRequest = { vm.disconnect(); onDismiss() },
-        title = { Text(stringResource(R.string.ble_title)) },
+        title = { DialogTitleWithClose(stringResource(R.string.ble_title), { vm.disconnect(); onDismiss() }) },
         text = {
             Column {
                 Text(

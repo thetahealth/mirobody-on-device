@@ -7,6 +7,7 @@
 const ui  = require("./ui");
 const md  = require("./markdown");
 const i18n = require("./i18n");
+const charts = require("./charts");
 
 const config = require("./config");
 const color  = config.color;
@@ -18,18 +19,31 @@ const CLOSE_SVG = icons.CLOSE_SVG;
 
 // Render Markdown + math into an assistant bubble (sanitized HTML). Empty text
 // clears it.
-function renderInto(bubble, text) {
+//
+// A ```echarts fence leaves a placeholder that only a live ECharts instance can
+// fill, so the bubble is hydrated the moment its HTML lands -- and the charts
+// already in it are disposed first, since innerHTML drops their nodes while
+// echarts keeps every instance in a registry keyed by exactly those nodes.
+// `defer` leaves the placeholders empty (see streamRender).
+function renderInto(bubble, text, defer) {
+    charts.disposeIn(bubble);
     ui.setHTML(bubble, text ? md.render(text) : "");
+    if (!defer) { charts.hydrate(bubble); }
 };
 
 // Throttled variant for streaming: re-parsing Markdown + KaTeX on every token
 // is wasteful, so re-render at most ~10x/sec. finish() does a final full render
 // so the last tokens always land.
+//
+// Charts are left for that final render. A canvas cannot survive its container
+// being replaced, so hydrating here would tear one down and build it again ten
+// times a second for the rest of the reply -- a visible flicker, for a figure
+// that is already complete the moment its fence closed.
 function streamRender(bubble, text) {
     var now = Date.now();
     if (!bubble._mdAt || now - bubble._mdAt > 100) {
         bubble._mdAt = now;
-        renderInto(bubble, text);
+        renderInto(bubble, text, true);
         return true;
     }
     return false;

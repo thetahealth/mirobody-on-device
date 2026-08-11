@@ -40,6 +40,7 @@
 "verify_resending" = "正在重发…";
 "verify_resend_code" = "重新发送";
 
+"chat_ai_disclaimer" = "Mirobody 是 AI,可能会出错,请自行核实回答内容。";
 "chat_message_hint" = "有什么想问的？";
 "chat_history_cd" = "历史";
 "chat_select_model" = "选择模型";

@@ -45,6 +45,21 @@
           ],
           "when": "always"
         }
+      },
+      {
+        // One short tick when a long press copies a message. system_grant +
+        // availableLevel normal, like FILE_ACCESS_PERSIST above: declaring it is
+        // the whole story, no ACL and no runtime prompt. Without it startVibration
+        // fails with a permission BusinessError -- which the caller swallows, so the
+        // symptom would be a silent long press rather than anything in the log.
+        "name": "ohos.permission.VIBRATE",
+        "reason": "$string:perm_vibrate_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
       }
     ],
     "abilities": [

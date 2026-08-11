@@ -1,8 +1,9 @@
 // Entry point for the Mirobody Qt Quick desktop client.
 //
-// Sets up the QML engine, exposes the AppController as the context property
-// `app` (the QML tree reads `app.loggedIn`, drives `app.sendMessage(...)`, binds
-// to `app.chat`, ...), and loads the Main window from the Mirobody QML module.
+// Sets up the QML engine, exposes the AppController as the context property `app`
+// (the QML tree reads `app.loggedIn`, drives `app.sendMessage(...)`, binds to
+// `app.chat`, ...) and the RenderHost as `render` (formulas, charts and SVG figures),
+// then loads the Main window from the Mirobody QML module.
 
 #include <QGuiApplication>
 #include <QIcon>
@@ -10,11 +11,24 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 
+#ifdef MIROBODY_WEBENGINE
+#include <QtWebEngineQuick>
+#endif
+
 #include "appcontroller.hpp"
 #include "chatmodel.hpp"
 #include "blehealth.hpp"
+#include "renderhost.hpp"
 
 int main(int argc, char* argv[]) {
+#ifdef MIROBODY_WEBENGINE
+    // BEFORE the QGuiApplication, which is the documented requirement: the call
+    // installs the shared OpenGL context Chromium needs, and doing it afterwards
+    // either asserts or leaves the render page unable to composite. Nothing is shown
+    // -- the one page this initializes for is offscreen (see renderhost.cpp).
+    QtWebEngineQuick::initialize();
+#endif
+
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("Mirobody"));
     QGuiApplication::setOrganizationName(QStringLiteral("thetahealth"));
@@ -46,6 +60,12 @@ int main(int argc, char* argv[]) {
 
     AppController controller;
     engine.rootContext()->setContextProperty(QStringLiteral("app"), &controller);
+
+    // The reply renderer: LaTeX, ECharts and ```svg figures, plus the markdown ->
+    // rich text conversion the reply body is drawn from. Constructed after the
+    // application object because it loads its host page immediately.
+    RenderHost renderHost;
+    engine.rootContext()->setContextProperty(QStringLiteral("render"), &renderHost);
 
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app, []() { QCoreApplication::exit(-1); },

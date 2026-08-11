@@ -96,7 +96,7 @@ esac
 # Not cloned for you, as in build-llama.cmd: this build wants a checkout you can
 # pin and re-measure against, not one silently refreshed under it.
 # Beside the repo, matching build-llama.cmd, qt/build-qt.cmd and
-# fine-tuning/train_units.py -- one checkout serves all of them.
+# fine-tuning/tool_train.py -- one checkout serves all of them.
 LLAMA_SRC="${LLAMA_SRC:-$(cd "$SCRIPT_DIR/../.." && pwd)/llama.cpp}"
 if [ ! -f "$LLAMA_SRC/include/llama.h" ]; then
     echo "[build-llama] no llama.cpp at \"$LLAMA_SRC\"." >&2

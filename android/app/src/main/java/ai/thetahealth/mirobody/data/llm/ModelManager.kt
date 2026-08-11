@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.OpenableColumns
 import java.io.File
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
@@ -38,6 +40,12 @@ import kotlin.coroutines.coroutineContext
  *  - **import** any existing model file from the device (referenced in place when a real
  *    path is available, else copied into the shared dir — either way outside app-private
  *    storage). See [import].
+ *
+ * Both are checked against the catalog's published SHA-256 rather than trusted by name or
+ * length, which is what makes "this model is already here" a statement about the bytes:
+ * a download skips the network only on a digest match, a finished transfer is verified
+ * before it is renamed into place, and an import that turns out to BE a catalog model is
+ * adopted as that model instead of becoming a second copy of it.
  *
  * NOTE: a multi-GB download should ultimately run under a foreground service /
  * WorkManager to survive process death. This runs from the caller's coroutine scope
@@ -68,6 +76,31 @@ class ModelManager(context: Context) {
     private fun partFor(spec: OnDeviceModelSpec): File = File(modelsDir, spec.fileName + ".part")
 
     /**
+     * Where LiteRT-LM may write its compiled-model cache for [spec] — app-private, and a
+     * directory of its own per model.
+     *
+     * NOT beside the model, which is where it landed before. That cache is roughly the
+     * SIZE OF THE MODEL (it is the weights re-laid-out for the chosen backend), so
+     * putting it in the shared models dir doubled what the user sees, in a folder whose
+     * whole promise is "your multi-GB download survives an uninstall". A derived file
+     * that can be rebuilt from the model in one load has not earned that.
+     *
+     * `cacheDir` specifically: the OS may reclaim it under storage pressure, which for a
+     * few GB of regenerable data is the correct outcome, and "clear cache" in system
+     * settings then does what a user expects.
+     *
+     * A directory PER MODEL so removal needs no knowledge of what LiteRT names the files
+     * inside — [delete] drops the whole tree. That is also what keeps two backends of the
+     * same weights (the CPU and GPU twins) from sharing one cache.
+     */
+    fun cacheDirFor(spec: OnDeviceModelSpec): File =
+        File(File(appContext.cacheDir, "litertlm"), spec.id).also { it.mkdirs() }
+
+    /** Bytes currently held by every model cache, for the probe to report. */
+    fun cacheBytes(): Long =
+        File(appContext.cacheDir, "litertlm").walkBottomUp().filter { it.isFile }.sumOf { it.length() }
+
+    /**
      * Whether the app can read/write the shared models dir. Downloads and (path-referenced)
      * imports need this; without it the manage UI prompts the user to grant it. On API < 30
      * the legacy storage permissions are requested instead, so this reports true there.
@@ -87,7 +120,25 @@ class ModelManager(context: Context) {
             .readTimeout(0, TimeUnit.SECONDS)
             .writeTimeout(0, TimeUnit.SECONDS)
             .callTimeout(0, TimeUnit.SECONDS)
+            // HTTP/1.1 on purpose. These are single 2-4 GB responses held open for
+            // minutes, and that is the shape HTTP/2 handles worst: a multiplexed stream
+            // carrying one enormous body gets reset by intermediaries and CDN edges long
+            // before a plain connection would be dropped, surfacing as "connection
+            // closed" partway through. There is nothing to multiplex here — one request,
+            // one body — so the feature costs us and buys nothing.
+            .protocols(listOf(Protocol.HTTP_1_1))
             .build()
+    }
+
+    /**
+     * Hugging Face redirects an LFS/Xet file to a CDN, and a request with no User-Agent
+     * is exactly the shape a CDN throttles or refuses. Naming ourselves is both polite
+     * and the difference between a download that works and one that does not.
+     */
+    private fun requestFor(url: String, rangeFrom: Long): Request {
+        val b = Request.Builder().url(url).header("User-Agent", USER_AGENT)
+        if (rangeFrom > 0) b.header("Range", "bytes=$rangeFrom-")
+        return b.build()
     }
 
     /** Per-model status, keyed by [OnDeviceModelSpec.id]. Seeded from what's on disk. */
@@ -108,6 +159,9 @@ class ModelManager(context: Context) {
     init {
         migrateLegacyModels()
         loadImports()
+        // After loadImports(), so an imported model's own name is known and its cache is
+        // recognised too.
+        sweepStrayCaches()
     }
 
     fun status(spec: OnDeviceModelSpec): OnDeviceModelStatus =
@@ -119,7 +173,8 @@ class ModelManager(context: Context) {
 
     private fun refreshCatalogStatuses() {
         _statuses.update { current ->
-            val seeded = OnDeviceModel.CATALOG.associate { spec ->
+            // ALL, not CATALOG: the debug probe's GPU twin needs a status too.
+            val seeded = OnDeviceModel.ALL.associate { spec ->
                 // Keep an in-flight download's live status; otherwise re-derive from disk.
                 val existing = current[spec.id]
                 if (existing is OnDeviceModelStatus.Downloading) spec.id to existing
@@ -132,9 +187,67 @@ class ModelManager(context: Context) {
     /** Ids currently in flight, so a repeated download() of the same model is a no-op. */
     private val downloading = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * Is the model's file on disk and the right LENGTH?
+     *
+     * Length, not digest: this runs on every status refresh (each time the manage dialog
+     * or the picker opens), and hashing a few GB there would stall the UI for seconds
+     * each time. For a catalog entry `approxBytes` is Hugging Face's exact `lfs.size`, so
+     * an exact match is free and already rejects the common leftover — a truncated
+     * download. The digest is what [download] runs before it decides to skip the network;
+     * see [matchesDigest].
+     */
     fun isReady(spec: OnDeviceModelSpec): Boolean {
         val f = fileFor(spec)
-        return f.exists() && f.length() > 0
+        if (!f.exists()) return false
+        // An import has no published size to compare against; presence is all we have.
+        return if (spec.sha256.isEmpty()) f.length() > 0 else f.length() == spec.approxBytes
+    }
+
+    /**
+     * Does the file at [file] hash to [OnDeviceModelSpec.sha256]?
+     *
+     * SHA-256 rather than MD5 because it is the digest Hugging Face actually publishes
+     * (the LFS `oid`); an MD5 would have to be produced by downloading every model and
+     * hashing it by hand, and would then be a number nobody could re-derive from the
+     * source of truth. Specs with no digest (imports) are taken on trust.
+     */
+    private suspend fun matchesDigest(spec: OnDeviceModelSpec, file: File): Boolean {
+        if (spec.sha256.isEmpty()) return true
+        return withContext(Dispatchers.IO) {
+            val md = MessageDigest.getInstance("SHA-256")
+            val total = file.length().coerceAtLeast(1L)
+            var read = 0L
+            var lastPublished = 0L
+            runCatching {
+                file.inputStream().use { input ->
+                    val buf = ByteArray(1 shl 16)
+                    while (true) {
+                        coroutineContext.ensureActive()
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        md.update(buf, 0, n)
+                        read += n
+                        // Every ~8 MB, not every 64 KB: this is a progress bar, not a
+                        // byte counter, and 3.7 GB would otherwise be ~56k emissions.
+                        if (read - lastPublished >= 8L shl 20) {
+                            lastPublished = read
+                            setStatus(spec, OnDeviceModelStatus.Verifying(read.toFloat() / total))
+                        }
+                    }
+                }
+                md.digest().toHex() == spec.sha256.lowercase()
+            }.getOrDefault(false)
+        }
+    }
+
+    private fun ByteArray.toHex(): String {
+        val out = StringBuilder(size * 2)
+        for (b in this) {
+            val v = b.toInt() and 0xff
+            out.append(HEX[v ushr 4]).append(HEX[v and 0x0f])
+        }
+        return out.toString()
     }
 
     /**
@@ -143,24 +256,55 @@ class ModelManager(context: Context) {
      * download (the `.part` file is kept for resume). Returns true on success.
      */
     suspend fun download(spec: OnDeviceModelSpec): Boolean {
-        if (isReady(spec)) {
-            setStatus(spec, OnDeviceModelStatus.Ready)
-            return true
-        }
         if (!downloading.add(spec.id)) return false
         try {
+            // Before spending a multi-GB transfer: is the real file already sitting
+            // there? Checked by digest rather than by name, because this directory
+            // survives an uninstall — a leftover can be a truncated download, a
+            // half-copied file, or a different build renamed to look right. A match
+            // means we are done; a mismatch means the file is not what it claims, so it
+            // is removed rather than resumed onto (a Range request appended to the wrong
+            // bytes would produce a file that is the right LENGTH and still garbage).
+            val target = fileFor(spec)
+            if (target.exists() && spec.sha256.isNotEmpty()) {
+                if (matchesDigest(spec, target)) {
+                    setStatus(spec, OnDeviceModelStatus.Ready)
+                    return true
+                }
+                target.delete()
+                partFor(spec).delete()
+            } else if (target.exists() && isReady(spec)) {
+                // No digest to check (an import): presence is the whole test, as before.
+                setStatus(spec, OnDeviceModelStatus.Ready)
+                return true
+            }
+
             return withContext(Dispatchers.IO) {
-                runCatching { performDownload(spec) }
-                    .onFailure {
+                // Retry, because a multi-GB transfer over a phone's network WILL be
+                // interrupted — a dropped connection is normal, not exceptional. Each
+                // attempt resumes from the .part file, so a retry costs only what was
+                // actually lost. Bounded: something permanently wrong (a 404, no disk)
+                // must surface rather than loop.
+                var last: Throwable? = null
+                for (attempt in 1..DOWNLOAD_ATTEMPTS) {
+                    val before = partFor(spec).length()
+                    val r = runCatching { performDownload(spec) }
+                    r.onSuccess { ok -> if (ok) return@withContext true }
+                    val e = r.exceptionOrNull()
+                    if (e is kotlinx.coroutines.CancellationException) {
                         // A cancellation is a pause, not a failure: keep the .part file
                         // and report the partial-progress state, not an error.
-                        if (it is kotlinx.coroutines.CancellationException) {
-                            setStatus(spec, OnDeviceModelStatus.Downloading(partFor(spec).length(), -1))
-                            throw it
-                        }
-                        setStatus(spec, OnDeviceModelStatus.Failed(it.message ?: "Download failed"))
+                        setStatus(spec, OnDeviceModelStatus.Downloading(before, -1))
+                        throw e
                     }
-                    .getOrDefault(false)
+                    if (e == null) return@withContext false   // performDownload already reported why
+                    last = e
+                    // Only worth another go if the last one moved: a retry that gains
+                    // nothing is a loop with extra steps.
+                    if (partFor(spec).length() <= before && attempt > 1) break
+                }
+                setStatus(spec, OnDeviceModelStatus.Failed(describe(last)))
+                false
             }
         } finally {
             downloading.remove(spec.id)
@@ -171,12 +315,10 @@ class ModelManager(context: Context) {
         modelsDir.mkdirs()
         val partFile = partFor(spec)
         val existing = if (partFile.exists()) partFile.length() else 0L
-        val builder = Request.Builder().url(spec.downloadUrl)
-        if (existing > 0) builder.header("Range", "bytes=$existing-")
 
         setStatus(spec, OnDeviceModelStatus.Downloading(existing, spec.approxBytes))
 
-        http.newCall(builder.build()).execute().use { resp ->
+        http.newCall(requestFor(spec.downloadUrl, existing)).execute().use { resp ->
             if (!resp.isSuccessful) {
                 setStatus(spec, OnDeviceModelStatus.Failed("HTTP ${resp.code}"))
                 return false
@@ -210,6 +352,17 @@ class ModelManager(context: Context) {
             }
         }
 
+        // Verify BEFORE the rename, so a truncated or corrupted transfer never becomes
+        // the blessed file. Without this the next launch sees a full-length file, calls
+        // it Ready, and the failure surfaces as the engine refusing to load mid-chat —
+        // far from the cause. The .part is dropped on a mismatch: resuming onto bytes
+        // that are already wrong cannot converge.
+        if (!matchesDigest(spec, partFile)) {
+            partFile.delete()
+            setStatus(spec, OnDeviceModelStatus.Failed("Downloaded file failed its checksum"))
+            return false
+        }
+
         if (!partFile.renameTo(fileFor(spec))) {
             setStatus(spec, OnDeviceModelStatus.Failed("Could not finalize model file"))
             return false
@@ -218,20 +371,27 @@ class ModelManager(context: Context) {
         return true
     }
 
-    /** Remove a catalog model (and any partial) to reclaim its storage. */
+    /** Remove a catalog model (its partial, and its compiled cache) to reclaim storage. */
     fun delete(spec: OnDeviceModelSpec) {
         fileFor(spec).delete()
         partFor(spec).delete()
+        // The cache is model-sized; leaving it would mean "delete" reclaimed half of what
+        // the row said it would, with no way left in the UI to get the rest.
+        cacheDirFor(spec).deleteRecursively()
         setStatus(spec, OnDeviceModelStatus.Absent)
     }
 
     // ---- Import (a model file the user already has on the device) -----------------------
 
     /**
-     * Import the model at [uri] (from the system file picker) as a new on-device model.
+     * Import the model at [uri] (from the system file picker) as an on-device model.
      * The file ends up OUTSIDE app-private storage: referenced in place when [uri] resolves
-     * to a readable real path, otherwise copied into the shared models dir. Registers it so
-     * it appears in the picker immediately. Returns the new spec, or null on failure.
+     * to a readable real path, otherwise copied into the shared models dir.
+     *
+     * A file that turns out to BE a catalog model is adopted as that model rather than
+     * registered as a second, differently-named copy of it — see [adoptIfCatalog]. So the
+     * returned spec is either the matched catalog entry or a fresh import; the caller only
+     * needs to know it is non-null on success.
      */
     suspend fun import(uri: Uri): OnDeviceModelSpec? = withContext(Dispatchers.IO) {
         val displayName = queryDisplayName(uri)
@@ -239,6 +399,7 @@ class ModelManager(context: Context) {
 
         // Prefer referencing the original file in place (no multi-GB copy).
         val realPath = resolveRealPath(uri)?.takeIf { File(it).canRead() }
+        var weCopied = false
         val (path, size) = if (realPath != null) {
             realPath to File(realPath).length()
         } else {
@@ -251,8 +412,11 @@ class ModelManager(context: Context) {
                 } ?: return@withContext null
             }.isSuccess
             if (!copied || dest.length() <= 0) return@withContext null
+            weCopied = true
             dest.absolutePath to dest.length()
         }
+
+        adoptIfCatalog(File(path), size, weCopied)?.let { return@withContext it }
 
         val label = displayName.substringBeforeLast('.').ifBlank { "Imported model" }
         val spec = OnDeviceModel.importedSpec(id, label, path, size)
@@ -264,6 +428,55 @@ class ModelManager(context: Context) {
     }
 
     /**
+     * Is this imported file actually one of the catalog models? If so, take it AS that
+     * model and return it; otherwise null and the caller registers an ordinary import.
+     *
+     * Why bother: without this, importing a file you already downloaded elsewhere leaves
+     * two entries for one model — the catalog's "Gemma 4 E2B", still offering to download
+     * 2.6 GB, and an import called "gemma-4-E2B-it" — and the catalog's metadata (proper
+     * name, RAM guidance) is lost on the copy that actually works. It is also the way an
+     * ORPHANED file comes back: a model dropped from the catalog leaves its file in the
+     * shared dir with no row to manage it, and re-importing that file is what makes it
+     * manageable again.
+     *
+     * SIZE FIRST, then digest. Hashing every import would mean minutes of SHA-256 on a
+     * file that was never a candidate; an exact length match against a published
+     * `lfs.size` narrows it to one entry for free, and only then is a few GB worth
+     * reading. It also means the progress can be reported against the entry we are
+     * testing, which is what the Verifying status needs.
+     */
+    private suspend fun adoptIfCatalog(file: File, size: Long, weCopied: Boolean): OnDeviceModelSpec? {
+        val candidate = OnDeviceModel.CATALOG.firstOrNull {
+            it.sha256.isNotEmpty() && it.approxBytes == size
+        } ?: return null
+        if (!matchesDigest(candidate, file)) {
+            // Same length, different bytes. Refresh the row we just painted Verifying on,
+            // or it stays stuck at whatever fraction the hash reached.
+            setStatus(candidate, if (isReady(candidate)) OnDeviceModelStatus.Ready else OnDeviceModelStatus.Absent)
+            return null
+        }
+
+        val target = fileFor(candidate)
+        if (file.absolutePath != target.absolutePath) {
+            modelsDir.mkdirs()
+            // Whatever is at the catalog path lost: we have just PROVEN these bytes are
+            // the published ones, which is more than the incumbent can say.
+            target.delete()
+            if (!file.renameTo(target)) {
+                // Cross-volume; a rename cannot span mounts, so pay for the copy. The
+                // source is removed only if it was our own staging copy — a file the
+                // user picked from their own storage is theirs, and import has never
+                // been a move.
+                val ok = runCatching { file.copyTo(target, overwrite = true) }.isSuccess
+                if (!ok) return null
+                if (weCopied) file.delete()
+            }
+        }
+        setStatus(candidate, OnDeviceModelStatus.Ready)
+        return candidate
+    }
+
+    /**
      * Forget an imported model. Its file is deleted only if it was COPIED into our shared
      * dir; a file referenced in place (the user's own path) is left untouched.
      */
@@ -271,6 +484,8 @@ class ModelManager(context: Context) {
         val path = spec.localPath ?: return
         val f = File(path)
         if (f.parentFile?.absolutePath == modelsDir.absolutePath) f.delete()
+        // Ours either way: the cache is something we caused, not the user's file.
+        cacheDirFor(spec).deleteRecursively()
         OnDeviceModel.unregisterImported(spec.id)
         _statuses.update { it - spec.id }
         _imported.update { list -> list.filterNot { it.id == spec.id } }
@@ -358,7 +573,52 @@ class ModelManager(context: Context) {
         }
     }
 
+    /**
+     * Delete XNNPACK caches an older build left in the shared models dir.
+     *
+     * Until [cacheDirFor] existed we passed the model's own directory as `cacheDir`, so
+     * LiteRT wrote `<model>.xnnpack_cache` (roughly the size of the model) right next to
+     * the weights — in the folder the user browses, which is why a 2.6 GB model looked
+     * like 5 GB. The new location is app-private, so those files are now unreachable
+     * garbage: nothing will ever read them and no screen offers to remove them.
+     *
+     * Targeted, not a sweep. Only files whose name is a KNOWN model file name plus an
+     * `.xnnp…` suffix are removed, so an imported model — which may be named anything —
+     * cannot be caught by it. Silent: a leftover cache is not the user's problem to hear
+     * about, and a failure just means it is still there next launch.
+     */
+    private fun sweepStrayCaches() {
+        if (!hasStorageAccess()) return          // retry on a later launch once granted
+        runCatching {
+            val known = (OnDeviceModel.ALL.map { it.fileName } +
+                _imported.value.mapNotNull { it.localPath?.substringAfterLast('/') }).toSet()
+            modelsDir.listFiles()?.forEach { f ->
+                if (!f.isFile) return@forEach
+                val dot = f.name.indexOf(".xnnp")
+                if (dot <= 0) return@forEach
+                if (f.name.substring(0, dot) in known) f.delete()
+            }
+        }
+    }
+
+    /**
+     * A message worth showing. OkHttp's transport failures often carry a terse message
+     * ("stream was reset") or none at all, and a blank row tells the user nothing and us
+     * less; the exception's type is the part that identifies the failure.
+     */
+    private fun describe(t: Throwable?): String {
+        if (t == null) return "Download failed"
+        val m = t.message.orEmpty()
+        val kind = t::class.java.simpleName
+        return if (m.isBlank()) kind else "$kind: $m"
+    }
+
     private companion object {
         const val KEY_IMPORTS = "imports"
+        /** Enough to ride out a handful of dropped connections, few enough to end. */
+        const val DOWNLOAD_ATTEMPTS = 4
+        const val USER_AGENT = "Mirobody-Android/1.0 (+https://thetahealth.ai)"
     }
 }
+
+private val HEX = "0123456789abcdef".toCharArray()

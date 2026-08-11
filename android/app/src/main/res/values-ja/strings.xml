@@ -205,4 +205,28 @@
     <string name="hdp_unsupported">HDP は Android 9 以下でのみ利用できます。新しい端末では Bluetooth（BLE）をご利用ください。</string>
     <string name="hdp_start">受信を開始</string>
     <string name="hdp_stop">停止</string>
+
+    <string name="slash_help_desc">内蔵ガイドを表示</string>
+    <string name="slash_new_desc">新しい会話を始める</string>
+    <string name="slash_incognito_desc">シークレット — この会話は保存されません</string>
+    <string name="chat_ai_disclaimer">Mirobody は AI であり、誤ることがあります。回答は確認してください。</string>
+    <plurals name="history_message_count">
+        <item quantity="other">%d 件</item>
+    </plurals>
+    <string name="history_just_now">たった今</string>
+    <plurals name="history_mins_ago">
+        <item quantity="other">%d 分前</item>
+    </plurals>
+    <plurals name="history_hours_ago">
+        <item quantity="other">%d 時間前</item>
+    </plurals>
+    <plurals name="history_days_ago">
+        <item quantity="other">%d 日前</item>
+    </plurals>
+    <string name="history_date_pattern">M月d日</string>
+    <string name="history_date_year_pattern">yyyy年M月d日</string>
+    <string name="chat_ondevice_verifying">端末にあるファイルを検証中…</string>
+    <string name="chat_ondevice_import_hint">.litertlm ファイルを選んでください。上のモデルと一致するファイルは、重複追加せずそのモデルとして認識されます。</string>
+    <string name="chat_copied">コピーしました</string>
+    <string name="chat_loading_model">モデルを読み込み中…</string>
 </resources>

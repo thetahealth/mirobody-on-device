@@ -2,8 +2,11 @@ package ai.thetahealth.mirobody
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.ContextCompat
@@ -52,7 +55,36 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         startMirobodyService()
-        enableEdgeToEdge()
+        // Edge-to-edge, with BOTH ways the system tints the bottom strip turned off.
+        // They are separate mechanisms and it takes both to remove the white band:
+        //
+        //   API 26-28: enableEdgeToEdge()'s default navigationBarStyle is
+        //     SystemBarStyle.auto(DefaultLightScrim, DefaultDarkScrim), and that light
+        //     scrim is 90%-opaque WHITE (argb(0xe6, 0xFF, 0xFF, 0xFF)). It is written
+        //     straight into window.navigationBarColor, so over this app's warm #F2EFE9
+        //     page it reads as a white band. Passing TRANSPARENT is what drops it.
+        //
+        //   API 29+: that scrim is ALREADY transparent — auto() carries
+        //     nightMode = MODE_NIGHT_AUTO, and getScrimWithEnforcedContrast() returns
+        //     TRANSPARENT for it. But the same flag makes enableEdgeToEdge set
+        //     isNavigationBarContrastEnforced = TRUE, handing the job to the platform,
+        //     which draws its own translucent scrim whenever it judges the content
+        //     behind the bar too low-contrast. Only clearing the flag stops that, and
+        //     no SystemBarStyle argument can: auto() always sets it.
+        //
+        // Nothing needs to replace either one. android:windowBackground is already the
+        // exact page colour in both values/ and values-night/themes.xml, so the strip
+        // shows the right colour the moment we stop tinting it. (HarmonyOS had the same
+        // band for the neighbouring reason — there the system strips were simply not
+        // the page's to paint, so it paints them itself; see Index.ets's paint-only
+        // layer.)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         val container = (application as MirobodyApp).container
         setContent {
             MirobodyTheme {

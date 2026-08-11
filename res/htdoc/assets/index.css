@@ -80,6 +80,10 @@ svg {
    bubble; keep KaTeX's own SVG (rule lines, etc.) untouched. */
 .md > svg, .md p > svg, .md svg.mb-svg { max-width: 100%; height: auto; }
 .md hr             { border: none; border-top: 1px solid #ddd6c9; margin: 0.8em 0; }
+/* The holder a ```echarts fence leaves behind, filled by charts.hydrate(). Its
+   size is set there (a canvas needs one before echarts measures it); only the
+   spacing from the paragraphs around it belongs here. */
+.md .mb-chart      { margin: 0.6em 0; }
 .md blockquote {
     margin: 0.5em 0;
     padding-inline-start: 12px;

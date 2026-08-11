@@ -1,6 +1,7 @@
 package ai.thetahealth.mirobody.ui.health
 
 import ai.thetahealth.mirobody.R
+import ai.thetahealth.mirobody.ui.DialogTitleWithClose
 import ai.thetahealth.mirobody.ui.LocalAppContainer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -36,7 +37,7 @@ fun HdpDeviceDialog(
 
     AlertDialog(
         onDismissRequest = { vm.stop(); onDismiss() },
-        title = { Text(stringResource(R.string.hdp_title)) },
+        title = { DialogTitleWithClose(stringResource(R.string.hdp_title), { vm.stop(); onDismiss() }) },
         text = {
             Column {
                 Text(

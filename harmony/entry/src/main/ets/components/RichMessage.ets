@@ -20,6 +20,7 @@
  * ones show their raw source; a half-streamed formula/option shows a busy hint
  * instead (the `closed` contract from core/Markdown.ets).
  */
+import { common } from '@kit.AbilityKit';
 import { parseBlocks, RichBlock, InlineSpan, ListEntry, TableRow } from '../core/Markdown';
 import { RenderHost, RenderedImage } from '../core/RenderHost';
 
@@ -57,6 +58,27 @@ export struct RichMessage {
     return epoch >= 0 ? RenderHost.lookupChart(optionJson, this.darkMode) : undefined;
   }
 
+  private svgOf(source: string): RenderedImage | undefined {
+    const epoch = this.renderEpoch;   // dependency anchor; value unused
+    return epoch >= 0 ? RenderHost.lookupSvg(source) : undefined;
+  }
+
+  private svgReady(source: string): boolean {
+    const s = this.svgOf(source);
+    return s !== undefined && s.ok;
+  }
+
+  private svgUrl(source: string): string {
+    const s = this.svgOf(source);
+    return s !== undefined ? s.url : '';
+  }
+
+  /** 4:3 when the source declares no size — the shape a diagram usually is. */
+  private svgAspect(source: string): number {
+    const s = this.svgOf(source);
+    return s !== undefined && s.w > 0 && s.h > 0 ? s.w / s.h : 4 / 3;
+  }
+
   private chartReady(optionJson: string): boolean {
     const c = this.chartOf(optionJson);
     return c !== undefined && c.ok;
@@ -92,12 +114,57 @@ export struct RichMessage {
     return m !== undefined ? m.h * this.fontScale : 0;
   }
 
+  /** Any span the render host has to produce an image for. */
+  private static hasMath(spans: InlineSpan[]): boolean {
+    for (const s of spans) {
+      if (s.kind === 'math') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Does anything in this block wait on RenderHost? Formula/chart BLOCKS obviously
+   * do; a paragraph, list item or table cell does too once it holds inline math.
+   */
+  private static needsRender(b: RichBlock): boolean {
+    if (b.kind === 'math' || b.kind === 'chart' || b.kind === 'svg') {
+      return true;
+    }
+    if (RichMessage.hasMath(b.spans)) {
+      return true;
+    }
+    for (const e of b.entries) {
+      if (RichMessage.hasMath(e.spans)) {
+        return true;
+      }
+    }
+    for (const r of b.rows) {
+      for (const cell of r.cells) {
+        if (RichMessage.hasMath(cell)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /**
    * Identity + how much content the block currently holds. The extent is what makes
    * the key change as text streams in; without it ArkUI treats the item as unchanged
    * and never rebuilds it (same reason the model picker keys on its group's ids).
+   *
+   * A block waiting on RenderHost also carries the epoch, and MUST: a finished render
+   * changes no text at all, so identity + extent are byte-identical before and after.
+   * ArkUI skips an item whose key is unchanged, which skipped the very `if
+   * (this.mathReady(...))` the epoch bump exists to re-run — @StorageProp marked this
+   * component dirty and the ForEach then threw the rebuild away, so a formula sat on
+   * its fallback source forever and the SVG was rendered, cached and never drawn.
+   * Only formula/chart-bearing blocks pay the churn, and it stops once their renders
+   * land, so plain prose still diffs on content alone.
    */
-  private static blockKey(b: RichBlock): string {
+  private blockKey(b: RichBlock): string {
     let n = b.body.length;
     for (const s of b.spans) {
       n += s.text.length;
@@ -115,7 +182,7 @@ export struct RichMessage {
         }
       }
     }
-    return b.id + '#' + n;
+    return b.id + '#' + n + (RichMessage.needsRender(b) ? '@' + this.renderEpoch : '');
   }
 
   private thinkingExpanded(): boolean {
@@ -135,7 +202,7 @@ export struct RichMessage {
       }
       ForEach(parseBlocks(this.text), (b: RichBlock) => {
         this.block(b)
-      }, (b: RichBlock) => RichMessage.blockKey(b))
+      }, (b: RichBlock) => this.blockKey(b))
       // Nothing has arrived yet: hold the answer's place with the waiting dots.
       // The send button turns into a stop control at the same moment, but it sits
       // at the bottom of the screen while the answer will appear here, and the
@@ -225,7 +292,12 @@ export struct RichMessage {
           // Reuse the real table: a grid is the only readable form, and reasoning
           // does produce comparison tables.
           this.table(b)
-        } else if (b.kind === 'code' || b.kind === 'math' || b.kind === 'chart') {
+        } else if (b.kind === 'rule') {
+          // Reasoning does section its scratch work; a rule carries no text, so
+          // without this branch it would fall through to an empty Text and vanish.
+          this.rule()
+        } else if (b.kind === 'code' || b.kind === 'math' || b.kind === 'chart'
+                   || b.kind === 'svg') {
           Text(b.body)
             .fontFamily('monospace')
             .fontSize(12 * this.fontScale)
@@ -244,7 +316,7 @@ export struct RichMessage {
                       $r('app.color.text_tertiary'),
                       b.kind === 'heading' ? FontWeight.Bold : FontWeight.Normal)
         }
-      }, (b: RichBlock) => RichMessage.blockKey(b))
+      }, (b: RichBlock) => this.blockKey(b))
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
@@ -262,6 +334,8 @@ export struct RichMessage {
       this.codeBlock(b)
     } else if (b.kind === 'quote') {
       this.quote(b)
+    } else if (b.kind === 'rule') {
+      this.rule()
     } else if (b.kind === 'list') {
       this.list(b)
     } else if (b.kind === 'math') {
@@ -270,8 +344,36 @@ export struct RichMessage {
       this.table(b)
     } else if (b.kind === 'chart') {
       this.chartBlock(b)
+    } else if (b.kind === 'svg') {
+      this.svgBlock(b)
     } else {
       this.paragraph(b)
+    }
+  }
+
+  /** Struck / not, since every branch below has to answer the same question. */
+  private static line(s: InlineSpan): TextDecorationType {
+    return s.strike === true ? TextDecorationType.LineThrough : TextDecorationType.None;
+  }
+
+  /**
+   * Open a link. Untrusted text, so only http(s) and mailto are ever handed to the
+   * system — a model that writes a `file://` or a custom scheme gets a shrug, not a
+   * launched intent.
+   */
+  private openLink(href: string): void {
+    if (!href.startsWith('http://') && !href.startsWith('https://')
+        && !href.startsWith('mailto:')) {
+      return;
+    }
+    try {
+      (getContext(this) as common.UIAbilityContext).startAbility({
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: href
+      });
+    } catch (e) {
+      // No handler installed for the scheme. Nothing useful to say about it.
     }
   }
 
@@ -284,6 +386,7 @@ export struct RichMessage {
             .fontFamily('monospace')
             .fontSize(size * 0.92)
             .fontColor($r('app.color.inline_code_fg'))
+            .decoration({ type: RichMessage.line(s) })
             .textBackgroundStyle({ color: $r('app.color.bg_inline_code'), radius: 3 })
         } else if (s.kind === 'math') {
           if (this.mathReady(s.text, false)) {
@@ -297,10 +400,31 @@ export struct RichMessage {
               .fontStyle(FontStyle.Italic)
               .fontColor($r('app.color.text_secondary'))
           }
+        } else if (s.kind === 'image') {
+          // The alt text, marked, NOT the picture. Fetching a URL a model wrote
+          // would hand a third party a beacon that says when this user read this
+          // reply — in a health app, from a message about their own results. Charts
+          // have their own lane (```echarts), which renders locally.
+          Span('🖼 ' + (s.text.length > 0 ? s.text : s.href ?? ''))
+            .fontSize(size * 0.92)
+            .fontColor($r('app.color.text_tertiary'))
+        } else if (s.href !== undefined) {
+          Span(s.text)
+            .fontColor($r('app.color.brand_text'))
+            .fontWeight(s.bold === true ? FontWeight.Bold : weight)
+            .fontStyle(s.italic === true ? FontStyle.Italic : FontStyle.Normal)
+            .decoration({
+              type: s.strike === true ? TextDecorationType.LineThrough : TextDecorationType.Underline,
+              color: $r('app.color.brand_text')
+            })
+            .onClick(() => {
+              this.openLink(s.href ?? '');
+            })
         } else {
           Span(s.text)
-            .fontWeight(s.kind === 'bold' || s.kind === 'bolditalic' ? FontWeight.Bold : weight)
-            .fontStyle(s.kind === 'italic' || s.kind === 'bolditalic' ? FontStyle.Italic : FontStyle.Normal)
+            .fontWeight(s.bold === true ? FontWeight.Bold : weight)
+            .fontStyle(s.italic === true ? FontStyle.Italic : FontStyle.Normal)
+            .decoration({ type: RichMessage.line(s) })
         }
       }, (s: InlineSpan, i: number) => i + ':' + s.kind + ':' + s.text.length)
     }
@@ -354,6 +478,19 @@ export struct RichMessage {
     .borderRadius(8)
   }
 
+  /**
+   * Thematic break. Its own margin on top of the column's spacing, because a rule
+   * is there to SEPARATE — sitting at the same distance as the gap between two
+   * paragraphs it would read as one more line of content.
+   */
+  @Builder
+  private rule() {
+    Divider()
+      .strokeWidth(1)
+      .color($r('app.color.divider'))
+      .margin({ top: 6, bottom: 6 })
+  }
+
   @Builder
   private quote(b: RichBlock) {
     Row({ space: 8 }) {
@@ -378,7 +515,8 @@ export struct RichMessage {
         Row({ space: 6 }) {
           Text(e.marker)
             .fontSize(15 * this.fontScale)
-            .fontColor($r('app.color.text_secondary'))
+            // A ticked box earns the accent; everything else is furniture.
+            .fontColor(e.checked === true ? $r('app.color.brand_text') : $r('app.color.text_secondary'))
             .constraintSize({ minWidth: 18 })
           Column() {
             this.inline(e.spans, 16 * this.fontScale, $r('app.color.text_primary'), FontWeight.Normal)
@@ -503,6 +641,46 @@ export struct RichMessage {
         .margin({ top: 2, bottom: 2 })
     } else {
       this.placeholder(b)
+    }
+  }
+
+  /**
+   * ```svg figure. Unlike math and charts there is nothing to RENDER — the source
+   * is the image — so RenderHost only validates it and writes the file.
+   *
+   * Sized by the bubble's width and the source's own aspect ratio, not by the
+   * figure's declared pixels: a model picks a canvas without knowing the screen, and
+   * a diagram authored at 900px would otherwise overflow or be scaled by luck. When
+   * the source declares no size at all, 4:3 is the shape a diagram usually is.
+   *
+   * onError is the second half of the guarantee: validation proves only that we are
+   * willing to draw the source, never that the rasterizer can. A file that draws
+   * blank demotes itself and the block falls back to its XML, which is what the
+   * reader had before this feature existed.
+   */
+  @Builder
+  private svgBlock(b: RichBlock) {
+    if (b.closed && this.svgReady(b.body)) {
+      Image(this.svgUrl(b.body))
+        .width('100%')
+        .aspectRatio(this.svgAspect(b.body))
+        .objectFit(ImageFit.Contain)
+        .margin({ top: 2, bottom: 2 })
+        .onError(() => {
+          RenderHost.markSvgFailed(b.body);
+        })
+    } else if (!b.closed) {
+      Text('🖼 ' + getContext(this).resourceManager.getStringSync($r('app.string.chat_block_generating').id))
+        .fontSize(12 * this.fontScale)
+        .fontColor($r('app.color.text_tertiary'))
+        .width('100%')
+        .padding(8)
+        .backgroundColor($r('app.color.bg_overlay'))
+        .borderRadius(8)
+    } else {
+      // Refused, unwritable, or undrawable: the source, exactly as a code block —
+      // the reader keeps everything the model produced.
+      this.codeBlock(b)
     }
   }
 

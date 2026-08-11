@@ -45,6 +45,7 @@
 "verify_resend_code" = "إعادة إرسال الرمز";
 
 /* Chat */
+"chat_ai_disclaimer" = "Mirobody ذكاء اصطناعي وقد يخطئ. يُرجى التحقق من الإجابات.";
 "chat_message_hint" = "اسأل عن أي شيء";
 "chat_history_cd" = "السجل";
 "chat_select_model" = "اختر النموذج";

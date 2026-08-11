@@ -33,9 +33,14 @@ export const nativeGetProviders: () => string;
 
 /**
  * Run one chat turn on a worker thread, streaming events back on the ArkTS
- * thread in order. Event types: 'reply' | 'thinking' | 'queryTitle' |
- * 'queryArguments' | 'queryDetail' | 'costStatistics' | 'error', then exactly
- * one terminal 'end' (success) or 'aborted' (after nativeChatCancel).
+ * thread in order. Event types: 'reply' | 'thinking' | 'chart' | 'ask' |
+ * 'queryTitle' | 'queryArguments' | 'queryDetail' | 'costStatistics' | 'error',
+ * then exactly one terminal 'end' (success) or 'aborted' (after
+ * nativeChatCancel).
+ *
+ * 'ask' is the only event that expects a REPLY: the turn is parked inside the
+ * ask_user tool until nativeChatAnswer delivers one (or the tool times out), so
+ * an 'end' will not arrive before then.
  *
  * @param provider     a token from nativeGetProviders, passed straight through.
  * @param messagesJson conversation as JSON: [{role, content}, ...] in order,
@@ -54,6 +59,22 @@ export const nativeChat: (
  * no-op. Cancels either lane — local turns share the same turn-id table.
  */
 export const nativeChatCancel: (turnId: number) => void;
+
+/**
+ * Answer an 'ask' event so its parked turn can continue.
+ *
+ * Routed by the ask id from the event's payload, NOT by turn id: the core
+ * resolves the waiting tool itself, so the caller never has to know which turn
+ * asked. Must be called from the ArkTS thread while the turn's worker thread is
+ * blocked -- which is the normal case, since the event arrived here first.
+ *
+ * @param answerJson the user's choice as JSON; it becomes the tool's result and
+ *                   so reaches the model verbatim. The app sends
+ *                   {"selected": string[], "other"?: string}.
+ * @returns false when nobody was waiting -- a stale tap after a stop or a
+ *          timeout. Safe to ignore.
+ */
+export const nativeChatAnswer: (askId: string, answerJson: string) => boolean;
 
 /**
  * Can NATIVE code open and mmap this path from inside the app sandbox?

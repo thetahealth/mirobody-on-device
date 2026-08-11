@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,8 +97,11 @@ internal fun DrawerHeader(onClose: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onClose) {
+            // A chevron, not an arrow — Harmony's sys.symbol.chevron_left. This
+            // dismisses a panel; it does not navigate back through a history, and the
+            // heavier arrow claims it does. Auto-mirrored so RTL flips it.
             Icon(
-                Icons.AutoMirrored.Outlined.ArrowBack,
+                Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
                 contentDescription = stringResource(R.string.common_back),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )

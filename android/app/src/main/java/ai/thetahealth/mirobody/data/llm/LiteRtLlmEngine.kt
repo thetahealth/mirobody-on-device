@@ -8,7 +8,10 @@ import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.SamplerConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -38,6 +41,10 @@ class LiteRtLlmEngine(
     // Which model the live engine was loaded from; a different one forces a reload.
     @Volatile private var loadedModelId: String? = null
 
+    /** Is the live engine already holding this model? Then the turn starts immediately. */
+    private fun isLoaded(model: OnDeviceModelSpec): Boolean =
+        engine != null && loadedModelId == model.id
+
     private suspend fun engine(model: OnDeviceModelSpec): Engine = initLock.withLock {
         val current = engine
         if (current != null && loadedModelId == model.id) return@withLock current
@@ -48,20 +55,41 @@ class LiteRtLlmEngine(
         Engine(
             EngineConfig(
                 modelPath = file.absolutePath,
-                // CPU is the safe default across devices; GPU/NPU can be opted into later
-                // once we gate on device capability (Backend.GPU()/Backend.NPU(...)).
-                backend = Backend.CPU(),
+                // The backend comes from the SPEC, because it is a property of the file:
+                // a *-gpu.litertlm is compiled for the GPU and the plain one is not.
+                // Nothing here picks an accelerator on the user's behalf — the catalog
+                // ships CPU builds, and the GPU twin is downloaded deliberately from the
+                // debug probe (OnDeviceModel.DEBUG_MODELS).
+                backend = when (model.backend) {
+                    OnDeviceBackend.CPU -> Backend.CPU()
+                    OnDeviceBackend.GPU -> Backend.GPU()
+                },
                 // Cap total context so the native layer allocates a bounded KV cache and
                 // stops cleanly instead of over-running (a likely cause of mid-generation
                 // native crashes). Kept small for on-device RAM; fits every catalog model.
                 maxNumTokens = 1280,
-                cacheDir = file.parentFile?.absolutePath,
+                // App-private and per-model, NOT beside the weights: this cache is
+                // model-sized and regenerable. See ModelManager.cacheDirFor.
+                cacheDir = models.cacheDirFor(model).absolutePath,
             ),
         ).also {
             it.initialize()
             engine = it
             loadedModelId = model.id
         }
+    }
+
+    /**
+     * Warm the engine ahead of the first question.
+     *
+     * Nothing here is free — engine() does the same seconds of work it always does — but
+     * it happens while the user is still deciding what to ask. Silent on failure: this is
+     * an optimisation, and a model that cannot load will say so properly when a turn
+     * actually asks for it.
+     */
+    override suspend fun preload(model: OnDeviceModelSpec) {
+        if (isLoaded(model) || !models.isReady(model)) return
+        withContext(Dispatchers.Default) { runCatching { engine(model) } }
     }
 
     override fun generate(history: List<ChatTurn>, model: OnDeviceModelSpec): Flow<ChatStreamEvent> = flow {
@@ -71,6 +99,9 @@ class LiteRtLlmEngine(
             return@flow
         }
 
+        // Announce the load BEFORE starting it: creating the engine reads a few GB and
+        // takes seconds, and without this the turn looks like a model already writing.
+        if (!isLoaded(model)) emit(ChatStreamEvent.Loading)
         val engine = engine(model)
         val question = history.lastOrNull { it.fromUser }?.text.orEmpty()
         if (question.isBlank()) {
@@ -83,10 +114,11 @@ class LiteRtLlmEngine(
             conversation?.close()
             conversation = null
         }
-        // NB: don't seed the prior transcript into the system prompt — on small on-device
-        // models the context window is tiny (e.g. Qwen3 0.6B is 2048 tokens), and a
-        // restored/long history overflows it. Multi-turn within a session is carried by
-        // the reused Conversation itself; the system prompt stays a short, fixed instruction.
+        // NB: don't seed the prior transcript into the system prompt — an on-device
+        // build's KV budget is small (litert-community publishes these at around 4096
+        // tokens), and a restored/long history overflows it. Multi-turn within a session
+        // is carried by the reused Conversation itself; the system prompt stays a short,
+        // fixed instruction.
         val convo = conversation ?: engine.createConversation(
             ConversationConfig(
                 systemInstruction = Contents.of(SYSTEM_PROMPT),
@@ -97,21 +129,47 @@ class LiteRtLlmEngine(
         // Stream tokens. The SDK emits cumulative-or-delta Message objects depending on
         // version; we diff against what we've already emitted so the UI always receives
         // pure deltas (matching the SSE `reply` contract).
+        //
+        // Those deltas then go through ThinkSplitter, because a reasoning model (Qwen3 is
+        // one) writes its reasoning inline as <think>…</think> and the reply proper only
+        // begins after the close tag. Routing it to Thinking rather than Reply is what
+        // puts it in the collapsible block the UI already has for the server's `thinking`
+        // event — and what keeps the tags from showing up as prose.
         var emitted = ""
+        val split = ThinkSplitter()
         runCatching {
             convo.sendMessageAsync(question).collect { message ->
                 val full = message.toString()
                 val delta = if (full.startsWith(emitted)) full.substring(emitted.length) else full
                 if (delta.isNotEmpty()) {
                     emitted = if (full.startsWith(emitted)) full else emitted + full
-                    emit(ChatStreamEvent.Reply(delta))
+                    for (p in split.feed(delta)) {
+                        emit(if (p.thinking) ChatStreamEvent.Thinking(p.text) else ChatStreamEvent.Reply(p.text))
+                    }
                 }
             }
         }.onFailure { t ->
             emit(ChatStreamEvent.Error(t.message ?: "On-device generation failed"))
         }
+        // Whatever the splitter is still holding was a tag prefix that never completed;
+        // it is text, and dropping it would eat the end of the reply.
+        for (p in split.flush()) {
+            emit(if (p.thinking) ChatStreamEvent.Thinking(p.text) else ChatStreamEvent.Reply(p.text))
+        }
         emit(ChatStreamEvent.End)
     }
+        // THE WHOLE FLOW RUNS OFF THE MAIN THREAD. Without this it does not: a bare
+        // flow { } builder runs in the COLLECTOR's context, and the collector is
+        // viewModelScope — Dispatchers.Main. Engine.initialize() blocks for seconds
+        // over a few GB and sendMessageAsync's collection blocks per token, so the
+        // first on-device turn froze the UI outright: not a missing spinner, a blocked
+        // main thread, which is also why the typing dots could not animate through it.
+        //
+        // Default rather than IO: past the initial read this is compute, and the native
+        // layer runs its own threads either way. flowOn moves the upstream only —
+        // emissions still arrive on the collector's context, so the ViewModel is
+        // unchanged.
+        .flowOn(Dispatchers.Default)
 
     private companion object {
         const val SYSTEM_PROMPT = "You are Mirobody's private on-device health assistant. " +

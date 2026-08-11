@@ -72,6 +72,19 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Mirobody"
         tools:targetApi="31">
+        <!-- OpenCL is a VENDOR library, not part of the NDK. Since Android 12 an app
+             targeting API 31+ may not dlopen one without saying so here, which is why
+             LiteRT-LM's GPU backend reported "Can not find OpenCL library on this device"
+             on a phone that plainly has one. required="false" because most devices are
+             served fine without it: the GPU path is optional (see the probe), and a device
+             with no OpenCL must still install and run on the CPU. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <!-- Vendor spellings of the same thing: Tensor ships libOpenCL-pixel.so and
+             Mali exposes it through libGLES_mali.so. All optional, so a device with
+             none of them is unaffected. -->
+        <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
+        <uses-native-library android:name="libGLES_mali.so" android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

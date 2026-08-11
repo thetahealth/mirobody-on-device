@@ -7,8 +7,13 @@
 
 #ifdef MIROBODY_ONDEVICE_LLM
 #include "llama.h"
-#include "ggml-cpu.h"
 #include "ggml-backend.h"
+#ifndef MIROBODY_ONDEVICE_LLM_DL
+// The ggml_cpu_has_*() family lives in the CPU backend. With GGML_BACKEND_DL that is a
+// module we dlopen rather than link, so these symbols are not merely absent from the
+// header's guarantee -- referencing them fails the link. See CMakeLists.txt.
+#include "ggml-cpu.h"
+#endif
 
 #if defined(__aarch64__) && defined(__has_include)
 #if __has_include(<sys/auxv.h>)
@@ -26,6 +31,73 @@
 namespace mirobody { namespace llm {
 
 namespace {
+
+#ifdef MIROBODY_ONDEVICE_LLM
+/// Where to look for dlopen-able ggml backends; empty means ggml's own search.
+std::string& backend_dir() {
+    static std::string dir;
+    return dir;
+}
+
+/**
+ * Which CPU module won, scraped from ggml's own load log.
+ *
+ * There is no API for this — ggml_backend_load_best() dlopens every
+ * libggml-cpu-*.so, keeps the one scoring highest on this chip, and tells nobody
+ * which. It does log the path at INFO, and that line is the only ground truth
+ * available; anything else would be us re-implementing the scoring and reporting our
+ * guess as ggml's answer, which is worse than not reporting it.
+ *
+ * Worth the scrape because the failure it catches is invisible otherwise: dispatch
+ * silently falling back to the baseline variant costs 2.3x on decode and looks
+ * exactly like a working build.
+ */
+std::string& loaded_cpu_variant() {
+    static std::string name;
+    return name;
+}
+
+void note_backend_log(const char* text) {
+    // "load_backend: loaded CPU backend from /path/libggml-cpu-android_armv8.6_1.so"
+    if (!text || !std::strstr(text, "loaded CPU backend from")) { return; }
+    std::string line(text);
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) { line.pop_back(); }
+    const size_t slash = line.find_last_of("/\\");
+    std::string file = (slash == std::string::npos) ? line : line.substr(slash + 1);
+    // libggml-cpu-android_armv8.6_1.so -> android_armv8.6_1
+    const std::string prefix = "libggml-cpu-";
+    const size_t at = file.find(prefix);
+    if (at != std::string::npos) { file = file.substr(at + prefix.size()); }
+    const size_t dot = file.rfind(".so");
+    if (dot != std::string::npos) { file = file.substr(0, dot); }
+    loaded_cpu_variant() = file;
+}
+
+/**
+ * One-time llama.cpp startup, safe to call from anywhere.
+ *
+ * Not just the Impl constructor's business any more: with dynamic backends nothing is
+ * registered until ggml_backend_load_all_from_path() runs, so devices() and
+ * cpuFeatures() — both of which /probe calls before any model exists — would report an
+ * empty machine.
+ */
+void ensure_backends() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        // ggml logs every tensor at INFO; keep errors only so hilog stays useful.
+        // The one exception is the backend-load line, which is the only place ggml
+        // says which CPU variant it picked.
+        llama_log_set([](ggml_log_level lvl, const char* text, void*) {
+            if (lvl == GGML_LOG_LEVEL_INFO) { note_backend_log(text); }
+            if (lvl >= GGML_LOG_LEVEL_ERROR) { std::fputs(text, stderr); }
+        }, nullptr);
+        // Harmless in a statically linked build: it scans, finds nothing, moves on.
+        ggml_backend_load_all_from_path(backend_dir().empty() ? nullptr
+                                                             : backend_dir().c_str());
+        llama_backend_init();
+    });
+}
+#endif
 
 bool emit(const EventHandler& on_event, EventType type, const std::string& content) {
     Event e;
@@ -193,16 +265,7 @@ struct LocalClient::Impl {
     // serialize turns so a second caller can't decode against a half-built context.
     std::mutex turn;
 
-    explicit Impl(LocalOptions o) : opt(std::move(o)) {
-        static std::once_flag once;
-        std::call_once(once, [] {
-            // ggml logs every tensor at INFO; keep errors only so hilog stays useful.
-            llama_log_set([](ggml_log_level lvl, const char* text, void*) {
-                if (lvl >= GGML_LOG_LEVEL_ERROR) { std::fputs(text, stderr); }
-            }, nullptr);
-            llama_backend_init();
-        });
-    }
+    explicit Impl(LocalOptions o) : opt(std::move(o)) { ensure_backends(); }
 
     ~Impl() {
         if (model) { llama_model_free(model); }
@@ -226,6 +289,13 @@ struct LocalClient::Impl {
 
 bool LocalClient::available() { return true; }
 
+void LocalClient::backendPath(const std::string& dir) {
+    // Before ensure_backends(), or it has nothing to say. Silent if late rather than
+    // failing: a wrong path costs speed, not correctness, and the caller has no
+    // recourse mid-process anyway.
+    backend_dir() = dir;
+}
+
 const char* LocalClient::backend() {
 #ifdef MIROBODY_ONDEVICE_LLM_VULKAN
     return "vulkan";
@@ -235,9 +305,7 @@ const char* LocalClient::backend() {
 }
 
 std::string LocalClient::devices() {
-    // Registration is lazy in some builds; the backend init in Impl's ctor has
-    // already run by the time anything calls this on a live client, and calling it
-    // early simply reports fewer devices rather than lying.
+    ensure_backends();
     std::string out;
     const size_t n = ggml_backend_dev_count();
     for (size_t i = 0; i < n; i++) {
@@ -263,7 +331,12 @@ std::string LocalClient::devices() {
 
 LocalCpuFeatures LocalClient::cpuFeatures() {
     LocalCpuFeatures f;
+    ensure_backends();
 
+#ifdef MIROBODY_ONDEVICE_LLM_DL
+    // Which module ggml chose, which is the whole question in a dispatched build.
+    f.variant = loaded_cpu_variant();
+#else
     // What this binary emits. ggml_cpu_has_*() are __ARM_FEATURE_* macro checks,
     // so they describe the build, not the device.
     f.built_neon    = ggml_cpu_has_neon()        != 0;
@@ -273,6 +346,7 @@ LocalCpuFeatures LocalClient::cpuFeatures() {
     f.built_i8mm    = ggml_cpu_has_matmul_int8() != 0;
     f.built_sve     = ggml_cpu_has_sve()         != 0;
     f.built_sme     = ggml_cpu_has_sme()         != 0;
+#endif
 
 #ifdef MIROBODY_HAS_GETAUXVAL
     // What the silicon supports. Bits are spelled out rather than taken from
@@ -302,6 +376,13 @@ void LocalClient::setThreads(int n) {
 }
 
 bool LocalClient::loaded() const { return impl_->model != nullptr; }
+
+bool LocalClient::load(std::string& err) {
+    // Under the turn lock: ensure_model() is exactly what a turn does first, and two
+    // threads racing to read the same multi-GB file would load it twice.
+    std::lock_guard<std::mutex> lock(impl_->turn);
+    return impl_->ensure_model(err);
+}
 LocalStats LocalClient::stats() const { return impl_->stats; }
 const LocalOptions& LocalClient::options() const { return impl_->opt; }
 
@@ -341,7 +422,7 @@ bool LocalClient::ainvoke(const std::vector<ChatMessage>& messages,
      * is not available).
      */
     llama_context_params cp = llama_context_default_params();
-    cp.n_batch         = 512;
+    cp.n_ubatch        = 512;   // physical batch: what sizes the compute buffer (see n_batch below)
     cp.n_threads       = n_threads;
     cp.n_threads_batch = n_threads;
     impl_->stats.n_threads = n_threads;
@@ -356,8 +437,18 @@ bool LocalClient::ainvoke(const std::vector<ChatMessage>& messages,
     llama_context* ctx = nullptr;
     // Fresh context per turn: history is replayed from `messages`, so there is no KV
     // state worth carrying, and a stale one would silently grow unbounded.
+    //
+    // n_batch tracks n_ctx because the prefill below hands the WHOLE prompt to one
+    // llama_decode, and the prompt is fitted to `n_ctx - n_reply_reserve`. n_batch is
+    // the logical batch — the most tokens a single decode may take — and llama.cpp
+    // enforces it with GGML_ASSERT(n_tokens_all <= cparams.n_batch), which aborts the
+    // PROCESS rather than returning an error the caller could report. A fixed 512 there
+    // meant any conversation whose prompt passed 512 tokens SIGABRT'd on a real device.
+    // The physical batch (n_ubatch, above) is what actually costs memory; llama.cpp
+    // splits the logical batch into n_ubatch chunks itself, so this stays free.
     for (int c = want; c >= 1024; c /= 2) {
-        cp.n_ctx = static_cast<uint32_t>(c);
+        cp.n_ctx   = static_cast<uint32_t>(c);
+        cp.n_batch = static_cast<uint32_t>(c);
         ctx = llama_init_from_model(model, cp);
         if (ctx) {
             break;
@@ -581,6 +672,7 @@ struct LocalClient::Impl {
 };
 
 bool LocalClient::available() { return false; }
+void LocalClient::backendPath(const std::string&) {}
 const char* LocalClient::backend() { return "none"; }
 std::string LocalClient::devices() { return std::string(); }
 
@@ -592,6 +684,11 @@ LocalClient::~LocalClient() = default;
 void LocalClient::cancel() {}
 void LocalClient::setThreads(int) {}
 bool LocalClient::loaded() const { return false; }
+
+bool LocalClient::load(std::string& err) {
+    err = "on-device LLM not compiled in";
+    return false;
+}
 LocalStats LocalClient::stats() const { return impl_->stats; }
 const LocalOptions& LocalClient::options() const { return impl_->opt; }
 

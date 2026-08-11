@@ -21,8 +21,12 @@ query → normalize → match (recall) → rank → ResolveResult[]
 | normalize (NFKC-lite + casefold + ws) | `normalize.*` | ✅ |
 | lexicon artifact format + loader | `lexicon.*` | ✅ |
 | match: **exact** normalized-surface | `resolve.*` | ✅ M1 |
-| match: alias / substring / Aho-Corasick span / fuzzy | `resolve.*` | ⏳ M2 |
-| rank: specificity 17-mask, common_test_rank, specimen tier, gates | `rank.*` | ⏳ M3 |
+| match: **field span**, analyte by position + build-time aliases | `resolve.*` | ✅ M2a |
+| match: Aho-Corasick span (no separator), substring, fuzzy | `resolve.*` | ⏳ M2b |
+| rank: **common_test_rank** (LOINC's own ordering) | `resolve.*` | ✅ M3a |
+| rank: **specimen tier** (blood fractions demoted) | `resolve.*` | ✅ M3b |
+| rank: **qualified-component gate** (`.free` behind the plain analyte) | `resolve.*` | ✅ M3c |
+| rank: the rest of the 17-mask, cross-system gates | `rank.*` | ⏳ M3d |
 | coverage: UMLS all-SAB + ChEBI / MONDO / NCBI taxdump / LPSN / PubChem | emitter | ✅ M4 |
 
 ## Module layout
@@ -51,13 +55,18 @@ six FHIR-canonical systems — never round-trips to Python data.
 
 One little-endian binary, built by `cli/indicator build-lexicon`, consumed by
 the runtime `Lexicon` loader. Format owned by `lexicon.hpp` so writer/reader
-never drift: `LXC1` payload = header → code metadata → surfaces (sorted) →
-postings → string blob. Per-code metadata reserves `rank_tier` + a 17-bit
-`spec_mask` so the runtime runs zero regex (precomputed at build time in M3).
+never drift — though it had, and now says what the writer does: `LXC1` payload =
+header → code metadata → surfaces (sorted) → postings → string blob, with a
+17-byte unpadded code record. Per-code `rank_tier` carries LOINC's
+COMMON_TEST_RANK and `spec_mask` the categorical gates (specimen fraction,
+off-report class, qualified component), all precomputed so the runtime runs zero
+regex.
 **Full byte-level spec:** [res/indicator/README.md](../../res/indicator/README.md).
 
 **Compression.** The payload is zlib-wrapped (`LXCZ | u64 raw_len | deflate`),
-decompressed on load. ~4.7× (528 MB → ~112 MB). The artifact is **not**
+decompressed on load. 4.0× on the current tree (769 MB → 190 MB), of which the
+string blob is 540 MB — 70% of the artifact is text, and 76% of the 3.59M codes
+are UMLS CUI fallbacks with no native code. The artifact is **not**
 committed (gitignored under `res/indicator/`) — rebuilt from the reference tree. Deeper
 size wins (FST + input trimming, mmap-able, on-device) are future work.
 
@@ -175,9 +184,40 @@ INDICATOR_LEXICON=res/indicator/fhir_lexicon.bin INDICATOR_GOLDEN=tests/indicato
   build/tests/mirobody_tests.exe "[golden]"
 ```
 
-### Baseline (M1, 21 cases)
+### Where it stands (176 cases, three groups)
 
-`recall 67% · top-1 10%`. Recall misses are colloquial/abbreviation/reordered
-forms (→ M2 alias/curated); top-1 misses are correct-analyte-wrong-variant
-(→ M3 rerank: e.g. `葡萄糖` matches Glucose but ranks "Mixed venous blood" over
-the canonical Blood/Ser-Plas). Each number is a ratchet raised per milestone.
+The set is grouped by `#@ group=` lines and scored per group, because the three
+blocks are limited by different stages and one average hides all of it. Built by
+[`fine-tuning/tool_golden.py`](../../fine-tuning/tool_golden.py) except for the
+hand-written block.
+
+| group | n | recall | top-1 | what it measures |
+|---|---:|---:|---:|---|
+| `hand` | 21 | 76% | 76% | the original mixed set: colloquial, organisms, abbreviations |
+| `ranking` | 120 | 100% | 94% | **top-1 only.** Its recall is true by construction — the label is derived from the sheet's English and `aliases_zh.tsv` maps the query onto that same English, so the expected code is attached by definition |
+| `report-spelling` | 33 | 100% | **100%** | the honest recall number: the whole `_`-separated path a report prints |
+
+Two milestones, one number each, and the split shows which did what:
+
+| | recall | top-1 |
+|---|---|---|
+| before M2a | 78% | 5% |
+| M2a — field span, panel prefix stripped | **97%** | 5% |
+| M3a — order by COMMON_TEST_RANK | 97% | **77%** |
+| M3b — demote RBC/WBC fractions, 3 label fixes | 97% | **81%** |
+| tightened the label oracle (not a resolver change) | 97% | **85%** |
+| the analyte is the rightmost field, not the longest | 97% | **88%** |
+| M3c — a name without `free` does not mean the free fraction | 97% | **93%** |
+
+`report-spelling` recall went 3% → 100% on M2a: every leaf in it was already in
+the lexicon and every case failed only because a panel prefix sat in front of it.
+M3a then moved top-1 in all three groups at once without touching recall, which
+is what a ranking change should look like.
+
+The five remaining `hand` recall misses (`丙肝抗体`, `新型冠状病毒`,
+`乙型肝炎病毒表面抗原`, `白色念珠菌`, `blood glucose`) are the curated-data gap,
+not a matching one: four are Chinese colloquial/organism names no release ships
+and the benchmark sheets do not have either.
+
+Floors are per-group ratchets in `resolve_test.cpp` — raise one when a milestone
+lands, never lower one to make a run pass.

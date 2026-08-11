@@ -21,11 +21,13 @@ import fs from '@ohos.file.fs';
 import { common } from '@kit.AbilityKit';
 import { ChatMessage, StreamCallbacks, Canceler } from '../model/Chat';
 import { SecureKeyStore } from './SecureKeyStore';
+import { findProvider } from '../model/Providers';
 
 /**
  * BYOK provider id -> the config name the core reads that provider's key from.
- * '' = the core has no client for this provider (openrouter / groq / cerebras
- * stay on the BYOK direct transport until res/agents/baseline.cpp learns them).
+ * '' = the core has no client for this provider, so its turns stay on the BYOK
+ * direct SSE transport — same upstream call, but outside the agent pipeline and
+ * therefore without tools.
  */
 function envNameFor(providerId: string): string {
   if (providerId === 'zhipu') {
@@ -37,8 +39,22 @@ function envNameFor(providerId: string): string {
   if (providerId === 'gemini') {
     return 'GOOGLE_API_KEY';
   }
+  if (COMPAT_PROVIDERS.has(providerId)) {
+    return providerId.toUpperCase() + '_API_KEY';
+  }
   return '';
 }
+
+/**
+ * Providers the core serves through its generic OpenAI-compatible block rather
+ * than a curated model list (see res/agents/baseline.cpp).
+ *
+ * The difference that matters: a curated provider's models are named at BUILD time,
+ * so injecting its key is enough. These are BYOK catalogs — the user picks models
+ * the core has never heard of — so the model ids have to be injected too, or the
+ * core offers the key and nothing to run with it.
+ */
+const COMPAT_PROVIDERS: Set<string> = new Set<string>(['openrouter', 'groq', 'cerebras']);
 
 /**
  * The core keys providers by slash-free model short name ("glm-5.2"), while the
@@ -55,30 +71,22 @@ interface WireMessage {
   content: string;
 }
 
-/** render_chart's arguments shape (see res/mcp_tools/render_chart.cpp). */
-interface RenderChartArgs {
-  option?: object;
-}
-
-/**
- * A render_chart call's arguments -> a fenced ```echarts block, the markdown
- * parser's chart IR. Injecting it into the TEXT stream keeps the chart at its
- * true position in the reply with zero extra plumbing — the same block a model
- * could have written by hand. Returns '' when the arguments hold no option.
- */
-function chartFence(argsJson: string): string {
-  try {
-    const args = JSON.parse(argsJson) as RenderChartArgs;
-    if (args.option !== undefined && typeof args.option === 'object') {
-      return '\n```echarts\n' + JSON.stringify(args.option) + '\n```\n';
-    }
-  } catch (e) {
-    // Malformed arguments: skip the chart, keep the turn alive.
-  }
-  return '';
-}
-
 export class NativeCore {
+  /**
+   * Answer a question from an `ask` event, unblocking the turn parked in the tool.
+   *
+   * An EMPTY answer is the documented way to say "nobody replied": the broker
+   * settles the wait with no payload and the tool reports that to the model, which
+   * is exactly what a stopped turn wants. So releasing a question needs no separate
+   * cancel call — answering it with nothing is the release.
+   */
+  static answerAsk(askId: string, answerJson: string): boolean {
+    if (askId.length === 0) {
+      return false;
+    }
+    return mirobody.nativeChatAnswer(askId, answerJson);
+  }
+
   /** Slash-free tokens the core can run right now. */
   private static providers: Set<string> = new Set<string>();
   private static ready: boolean = false;
@@ -148,13 +156,40 @@ export class NativeCore {
     NativeCore.providers = next;
   }
 
+  /**
+   * Every model this app has asked the core to serve for a compat provider,
+   * per provider id.
+   *
+   * Accumulated rather than replaced: the config value is the WHOLE list, so
+   * injecting only the model being asked for would silently unregister the ones
+   * offered a moment ago and make every switch back a reload.
+   */
+  private static compatModels: Map<string, Set<string>> = new Map<string, Set<string>>();
+
   private static async injectAll(): Promise<boolean> {
     let injected = false;
-    for (const id of ['zhipu', 'nvidia', 'gemini']) {
+    for (const id of ['zhipu', 'nvidia', 'gemini', 'openrouter', 'groq', 'cerebras']) {
       const env = envNameFor(id);
       const key = await SecureKeyStore.getKey(id);
-      if (env.length > 0 && key.length > 0) {
-        injected = mirobody.nativeSetConfig(env, key) === 0 || injected;
+      if (env.length === 0 || key.length === 0) {
+        continue;
+      }
+      injected = mirobody.nativeSetConfig(env, key) === 0 || injected;
+
+      // A compat provider also needs its endpoint and its model ids: the core
+      // registers a client per model, and it has never heard of these.
+      if (COMPAT_PROVIDERS.has(id)) {
+        const prefix = id.toUpperCase();
+        const rec = findProvider(id);
+        if (rec !== undefined) {
+          mirobody.nativeSetConfig(prefix + '_BASE_URL', rec.baseUrl);
+        }
+        const models = NativeCore.compatModels.get(id);
+        if (models !== undefined && models.size > 0) {
+          const list: string[] = [];
+          models.forEach((m: string) => { list.push(m); });
+          mirobody.nativeSetConfig(prefix + '_MODELS', list.join(','));
+        }
       }
     }
     if (injected) {
@@ -165,8 +200,8 @@ export class NativeCore {
 
   /**
    * Can the native transport run `model` for `providerId`? Self-heals for a key
-   * saved after startup: when the model is not served but its provider has a
-   * stored key, re-inject + reload once and re-check.
+   * saved after startup, and for a compat model the core has not been told about:
+   * record it, re-inject + reload once, and re-check.
    */
   static async offerFor(ctx: common.UIAbilityContext, providerId: string, model: string): Promise<boolean> {
     await NativeCore.ensureReady(ctx);
@@ -176,6 +211,17 @@ export class NativeCore {
     }
     if (envNameFor(providerId).length === 0) {
       return false;   // provider unknown to the core; don't churn clients
+    }
+    // Remember it BEFORE injecting, so this pass registers it. A model picked from
+    // a live catalog is unknown at build time — this is the moment the core learns
+    // it exists.
+    if (COMPAT_PROVIDERS.has(providerId)) {
+      let seen = NativeCore.compatModels.get(providerId);
+      if (seen === undefined) {
+        seen = new Set<string>();
+        NativeCore.compatModels.set(providerId, seen);
+      }
+      seen.add(model);
     }
     if (await NativeCore.injectAll()) {
       NativeCore.refresh();
@@ -197,6 +243,10 @@ export class NativeCore {
   ): Promise<void> {
     const wire: WireMessage[] = [];
     for (const m of messages) {
+      // A slash command's answer is the app talking, not a turn: display only.
+      if (m.local === true) {
+        continue;
+      }
       wire.push({ role: m.role, content: m.content });
     }
 
@@ -210,10 +260,6 @@ export class NativeCore {
       }
 
       let errored = false;
-      // The C ABI drops tool_id, but events are strictly ordered on one stream:
-      // a call's queryArguments immediately follows its queryTitle, so tracking
-      // the last title is enough to recognize a render_chart call.
-      let lastTool = '';
       const turnId: number = mirobody.nativeChat(shortName(model), JSON.stringify(wire),
         (type: string, content: string) => {
           if (type === 'reply') {
@@ -222,14 +268,21 @@ export class NativeCore {
             if (cb.onThinking !== undefined) {
               cb.onThinking(content);
             }
-          } else if (type === 'queryTitle') {
-            lastTool = content;
-          } else if (type === 'queryArguments') {
-            if (lastTool === 'render_chart') {
-              const fence = chartFence(content);
-              if (fence.length > 0) {
-                cb.onDelta(fence);   // charts ride the text stream as ```echarts blocks
-              }
+          } else if (type === 'chart') {
+            // The core's ChartFilter already collapsed the render_chart tool
+            // triple into this one event and suppressed the raw steps, so
+            // `content` is the ECharts option and nothing here has to know a
+            // tool name. This used to sniff queryTitle/queryArguments and
+            // synthesize a ```echarts fence into the TEXT stream — which put the
+            // option in the answer, and therefore in every later prompt.
+            if (cb.onChart !== undefined) {
+              cb.onChart(content);
+            }
+          } else if (type === 'ask') {
+            // The turn is BLOCKED inside the tool right now: nothing else arrives
+            // on this stream until Index answers or ask_user gives up waiting.
+            if (cb.onAsk !== undefined) {
+              cb.onAsk(content);
             }
           } else if (type === 'error') {
             errored = true;
@@ -270,6 +323,10 @@ export class NativeCore {
   ): Promise<void> {
     const wire: WireMessage[] = [];
     for (const m of messages) {
+      // A slash command's answer is the app talking, not a turn: display only.
+      if (m.local === true) {
+        continue;
+      }
       wire.push({ role: m.role, content: m.content });
     }
 
