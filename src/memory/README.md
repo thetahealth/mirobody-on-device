@@ -9,7 +9,7 @@ recall, surfaced to agents as the `remember` / `recall_memory` MCP tools
 
 ```cpp
 auto cfg    = mirobody::load_config();
-auto db     = cfg.sqlite.open();                 // or postgresql(), ...
+auto db     = cfg.sqlite.open();
 auto memory = mirobody::memory::make_memory(cfg, db);   // backend per MEMORY_PROVIDER
 
 std::string err;
@@ -21,22 +21,18 @@ auto hits = memory->recall(42, "what units does the user like?", 5, &err);
 The interface is three methods — `remember`, `recall`, `forget` — all taking the
 caller's `user_id`, so one store serves every user. Failures are reported by
 return value + `*err` rather than thrown, so a tool handler surfaces a clean
-message. `make_memory()` returns null when memory is disabled or a remote
-provider is misconfigured; the tools treat null as "memory unavailable".
+message. `make_memory()` returns null when memory is disabled; the tools treat null as "memory unavailable".
 
 ## Backends
 
-The backend is chosen at runtime from `MEMORY_PROVIDER`, the same way
-`EMBEDDING_PROVIDER` picks an embedder — every backend compiles into every build
-and only the selected one is constructed.
-
 | `MEMORY_PROVIDER`   | Backend       | Notes |
 |---------------------|---------------|-------|
-| `local` *(default)* | `LocalMemory` | Facts + 1024-dim embeddings in the app `Database`; recall ranks the caller's own rows by in-process cosine. No extra services; works on every SQL backend incl. on-device SQLite. |
-| `everos` / `remote` | `RemoteMemory`| An external EverOS-compatible HTTP memory service. |
-| `mem0`              | `Mem0Memory`  | [Mem0](https://mem0.ai) — server-side LLM fact extraction + multi-signal retrieval. |
-| `zep`               | `ZepMemory`   | [Zep](https://getzep.com) — temporal knowledge graph (Graphiti); semantic + temporal search. |
+| `local` *(default)* | `LocalMemory` | Facts + 1024-dim embeddings in the SQLite file; recall ranks the caller's own rows by in-process cosine. No extra services. |
 | `none`              | *(disabled)*  | The tools report memory is unavailable. |
+
+The hosted memory services (EverOS, Mem0, Zep) send the facts to a third party,
+which the phone's record must not do by default, so their adapters were removed;
+they are preserved at the `v2-full-2026-08` tag.
 
 ### LocalMemory
 
@@ -58,29 +54,12 @@ ranking is unit-tested with a deterministic stub instead of the network
 > search into SQL slots in behind this same interface once one user accumulates
 > tens of thousands of memories or you need cross-user search.
 
-### Remote backends (RemoteMemory / Mem0 / Zep)
-
-These delegate to an external service over HTTP ([client/](../client/)), so a
-deployment can run a SOTA memory system without changing the agent/tool layer.
-Each adapter maps the `Memory` interface onto that vendor's REST contract; the
-contract assumed is documented at the top of its `.cpp`. Two caveats inherent to
-these services:
-
-- They mint **opaque string ids** and (Mem0/Zep) do their own fact extraction, so
-  `remember()` returns a positive sentinel to signal success rather than a numeric
-  id, `recall()` leaves `Record.id` 0, and `forget()` is unsupported (deletion is
-  done via the vendor console / SDK).
-- Vendor REST shapes evolve; the endpoint/field names track each vendor's docs as
-  of early 2026 — verify against current docs if a call 4xxs.
-
 ## Configuration
 
 | Key | Meaning |
 |-----|---------|
-| `MEMORY_PROVIDER`  | `local` (default) / `everos` / `mem0` / `zep` / `none`. |
+| `MEMORY_PROVIDER`  | `local` (default) / `none`. |
 | `MEMORY_TOP_K`     | Default recall count when the caller omits one (default 5). |
-| `MEMORY_BASE_URL`  | Remote endpoint. Falls back to `EVEROS_BASE_URL` / `MEM0_BASE_URL` / `ZEP_BASE_URL`; each adapter defaults to its hosted endpoint when unset. |
-| `MEMORY_API_KEY`   | Remote credential. Falls back to `EVEROS_API_KEY` / `MEM0_API_KEY` / `ZEP_API_KEY`. |
 
 ## Wiring
 
@@ -94,7 +73,7 @@ on the agent path, and `McpService` builds the `ToolContext` directly on the
 ## Adding a backend
 
 1. Add `make_<name>_memory(const Config&)` (and a file-local `Memory` subclass)
-   in `src/memory/<name>_memory.{hpp,cpp}`, modeled on `mem0_memory.cpp`.
+   in `src/memory/<name>_memory.{hpp,cpp}`, modeled on `local_memory.cpp`.
 2. Dispatch it from `make_memory()` in `memory.cpp` on a new `MEMORY_PROVIDER`
    value.
 3. Register the `.cpp` in the root `CMakeLists.txt` (`MIROBODY_CORE_SOURCES`).
@@ -104,6 +83,5 @@ No change to the tool layer or the `Memory` interface is needed.
 ## Not yet built
 
 Automatic LLM-driven fact extraction from chat turns (today `LocalMemory`
-captures only via the explicit `remember` tool; the remote services extract
-server-side), agent cases/skills, and multimodal ingestion — the parts of full
+captures only via the explicit `remember` tool), agent cases/skills, and multimodal ingestion — the parts of full
 EverOS parity beyond per-user long-term recall.

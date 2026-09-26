@@ -6,6 +6,16 @@ and clinical records from it. Access is **ownership-gated**: a user must prove
 they own the external account before any data can be read, so a self-asserted id
 can never reach another person's records.
 
+> **Status in this repo (2026-09).** This README was written for the full C++
+> server. Two parts of it now describe code that left: the server-side vendor
+> connectors (B2B aggregators, device-brand clouds, Huawei's cloud) and the WeChat
+> WeRun ingest. They need OAuth client secrets or a Mini Program, neither of which
+> a phone app holds, and the [main mirobody server](https://github.com/thetahealth/mirobody)
+> owns cloud pulls. Their links below point at the `v2-full-2026-08` archive tag.
+> On the phone, device data arrives through the platform health store (HealthKit,
+> Health Connect, HMS) and standard BLE sensors instead. EHR connect (SMART on
+> FHIR) is kept but on hold, and the vendor comparison is kept as research.
+
 ```
 POST /vendors/{id}/bind ──▶ PENDING link ──verify(consent)──▶ VERIFIED link
                                                                     │
@@ -26,7 +36,6 @@ Everything is `namespace mirobody::health` and mirrors the shape of
 | [`vendor_link.{hpp,cpp}`](vendor_link.hpp) | machinery | storage, config, the verified-gated fetch path (no HTTP) |
 | [`vendor_fhir.{hpp,cpp}`](vendor_fhir.hpp) | mapping | vendor-native fetch JSON → FHIR R4 `Observation` bodies |
 | [`ehr_connect.{hpp,cpp}`](ehr_connect.hpp) | HTTP front end | the browser-driven SMART-on-FHIR EHR connect flow |
-| [`werun.{hpp,cpp}`](werun.hpp) | HTTP front end | WeChat WeRun step ingestion (decrypt → FHIR) |
 | [`vendor/`](vendor/) | clients | one `vendor::Vendor` per source, resolved by id |
 
 ## `vendor_service` — `VendorService`
@@ -168,11 +177,10 @@ clients follow). Currently mapped:
 | `whoop` | HeartRate | recovery `resting_heart_rate` | `40443-4` Heart rate --resting | `/min` | vital-signs |
 | `whoop` | HeartRate | recovery `spo2_percentage` | `59408-5` Oxygen saturation | `%` | vital-signs |
 | `dexcom` | Glucose | `records[].value` @ `systemTime` | `2339-0` Glucose in Blood | `mg/dL` / `mmol/L` (from the response `unit`) | laboratory |
-| `werun` | (steps) | `stepInfoList[].step` @ `timestamp` | `55423-8` Steps (24h) | `{steps}` | activity |
 
 Deferred (no confident code yet): Oura/WHOOP **sleep** durations, WHOOP **strain**
 (cycle), HRV. Adding a metric is one row in `vendor_fhir.cpp` — the pipeline (map →
-`upsert`) is already wired for every source, including WeChat WeRun (see below).
+`upsert`) is already wired for every source.
 
 ## `ehr_connect` — `EhrConnectService` (SMART on FHIR)
 
@@ -190,26 +198,8 @@ need the native apps. Routes are under `HTTP_URI_PREFIX`.
 | `POST /health/ehr/sync` | use the cached token to fetch Observations via the [`ehr`](vendor/ehr/ehr.cpp) client and persist each through the FHIR store |
 
 Configured by the `SMART_FHIR_*` keys (client_id / redirect_uri / scope; see
-`config.example.yml`). The web client drives it from Settings → **Connect EHR**
-([htdoc/src/ehr.js](../../htdoc/src/ehr.js)).
-
-## `werun` — `WeRunService` (WeChat steps)
-
-WeChat's only health surface is **WeRun daily steps** — and it is not Bluetooth. A
-Mini Program calls `wx.getWeRunData()`, which returns the last ~31 days of daily
-steps as an AES-128-CBC-encrypted blob; this service decrypts it and persists the
-steps as FHIR `Observation`s. It reuses the existing Mini Program credentials
-(`WECHAT_APPID` / `WECHAT_SECRET`), so no new config.
-
-| Route | What it does |
-| --- | --- |
-| `POST /wechat/werun` `{code, encryptedData, iv}` | exchange `code` via jscode2session → decrypt the blob with the session_key → map `stepInfoList` to FHIR steps (`vendor_json_to_observations("werun", …)`) → persist via `FhirStore`; returns `{posted, failed}` |
-
-The **session_key is never stored**: the Mini Program sends a fresh `wx.login()`
-`code` with the blob, exchanged use-once at decrypt time. The user is taken from the
-bearer JWT; the decrypted payload's `watermark.appid` is checked against our app so a
-blob captured from another app is rejected. Steps map to LOINC `55423-8` (see the
-`vendor_fhir` table above).
+`config.example.yml`). The web client drove it from Settings → **Connect EHR**;
+EHR connect is on hold in this repo (see the note at the top).
 
 ## [`vendor/`](vendor/) — the vendor clients
 
@@ -220,10 +210,10 @@ sorted by source type:
 
 | Dir | Holds | Examples |
 | --- | --- | --- |
-| [`device/`](vendor/device/) | consumer device brands with their own API | Dexcom, Fitbit, Garmin, Oura, Polar, WHOOP, Withings |
+| [`device/`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/src/health/vendor/device) | consumer device brands with their own API | Dexcom, Fitbit, Garmin, Oura, Polar, WHOOP, Withings |
 | [`ehr/`](vendor/ehr/) | direct EHR systems via SMART on FHIR | one generic client + [`EhrDirectory`](vendor/ehr/directory.hpp) loader |
-| [`phone/`](vendor/phone/) | smartphone-vendor stores that expose a cloud API | Huawei Health Kit |
-| [`platform/`](vendor/platform/) | B2B data aggregators | Terra, Validic, Thryve, Rook, Spike, Metriport, … |
+| [`phone/`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/src/health/vendor/phone) | smartphone-vendor stores that expose a cloud API | Huawei Health Kit |
+| [`platform/`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/src/health/vendor/platform) | B2B data aggregators | Terra, Validic, Thryve, Rook, Spike, Metriport, … |
 
 Each vendor's transport is implemented against the platform's public API;
 undocumented operations stay explicit stubs. See [`vendor/README.md`](vendor/README.md)
@@ -246,12 +236,12 @@ apps: Health Connect + HMS Health Kit on Android, Apple HealthKit on iOS (see
 | Google Health Connect | ❌ on-device only | Android app reads → FHIR R4 |
 | Samsung Health | ❌ (partner cloud deprecated) | writes into Health Connect → Android app → FHIR R4 |
 | Xiaomi / Mi Fitness, Honor, OPPO/HeyTap, vivo | ❌ on-device only | via Health Connect / OEM SDK on Android → FHIR R4 |
-| **Huawei Health Kit** | ✅ **cloud REST** | server `fetch` via [`vendor/phone/huawei.cpp`](vendor/phone/huawei.cpp) (`sampleSet:polymerize`, Account Kit OAuth) |
+| **Huawei Health Kit** | ✅ **cloud REST** | server `fetch` via [`vendor/phone/huawei.cpp`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/phone/huawei.cpp) (`sampleSet:polymerize`, Account Kit OAuth) |
 
 On Android these OEMs increasingly converge on **Health Connect** as the single read
 surface, so the app often integrates Health Connect once rather than each OEM SDK.
 
-## Direct device-brand clients ([`vendor/device/`](vendor/device/))
+## Direct device-brand clients ([`vendor/device/`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/src/health/vendor/device))
 
 Device *brands* with their own OAuth REST APIs are normally reached through the
 aggregators above, so most need no dedicated client. Those below have a direct one —
@@ -262,13 +252,13 @@ access-model and endpoint-status tables.
 
 | id | Brand | `fetch` domains | Individual-dev access | Notes |
 | --- | --- | --- | --- | --- |
-| [`dexcom`](vendor/device/dexcom.cpp) | Dexcom CGM | glucose | ✅ free to start | **cloud + retrospective** (~1h US / ~3h OUS delay, no real-time); sandbox free + ≤5-user prod, more needs a partnership; `DEXCOM_*` config |
-| [`fitbit`](vendor/device/fitbit.cpp) | Fitbit | activity, heart rate, sleep, body | ✅ free self-serve | per-domain time-series GETs over a day range |
-| [`garmin`](vendor/device/garmin.cpp) | Garmin | — (push) | ❌ partner-gated | OAuth1.0a, push-based; `fetch` explains the model, real path is `handle_webhook` |
-| [`oura`](vendor/device/oura.cpp) | Oura Ring | sleep, activity, heart rate | ✅ free self-serve | v2 usercollection (daily by date, heart rate by datetime) |
-| [`polar`](vendor/device/polar.cpp) | Polar | sleep (+ training/activity) | ✅ free self-serve | **sleep** is a direct GET; training/activity use AccessLink's transaction pull model (no `[start,end]`) so they throw with an explanation, like Garmin; `revoke` deletes the user |
-| [`whoop`](vendor/device/whoop.cpp) | WHOOP | sleep, heart rate (recovery), activity (cycle) | ✅ free self-serve | needs a WHOOP device + membership; cursor-paginated |
-| [`withings`](vendor/device/withings.cpp) | Withings | measures, heart, activity, sleep | ✅ free self-serve | form-encoded `action` services |
+| [`dexcom`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/device/dexcom.cpp) | Dexcom CGM | glucose | ✅ free to start | **cloud + retrospective** (~1h US / ~3h OUS delay, no real-time); sandbox free + ≤5-user prod, more needs a partnership; `DEXCOM_*` config |
+| [`fitbit`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/device/fitbit.cpp) | Fitbit | activity, heart rate, sleep, body | ✅ free self-serve | per-domain time-series GETs over a day range |
+| [`garmin`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/device/garmin.cpp) | Garmin | — (push) | ❌ partner-gated | OAuth1.0a, push-based; `fetch` explains the model, real path is `handle_webhook` |
+| [`oura`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/device/oura.cpp) | Oura Ring | sleep, activity, heart rate | ✅ free self-serve | v2 usercollection (daily by date, heart rate by datetime) |
+| [`polar`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/device/polar.cpp) | Polar | sleep (+ training/activity) | ✅ free self-serve | **sleep** is a direct GET; training/activity use AccessLink's transaction pull model (no `[start,end]`) so they throw with an explanation, like Garmin; `revoke` deletes the user |
+| [`whoop`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/device/whoop.cpp) | WHOOP | sleep, heart rate (recovery), activity (cycle) | ✅ free self-serve | needs a WHOOP device + membership; cursor-paginated |
+| [`withings`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/vendor/device/withings.cpp) | Withings | measures, heart, activity, sleep | ✅ free self-serve | form-encoded `action` services |
 
 Other brands (Suunto, Ultrahuman, …) stay aggregator-only — they are partner-gated,
 so add a direct client only once you hold their partner credentials.
@@ -305,7 +295,7 @@ table below); **HDP** is deliberately not built (legacy — see its subsection).
 **Where it runs:**
 
 - The server has no radio near the user's devices, so it **cannot** read Bluetooth — and doesn't: there is **no server route or Bluetooth code here**.
-- The read happens on a client next to the sensor — the [`qt`](../../qt/) desktop app or the native mobile layer (Android/iOS).
+- The read happens on a client next to the sensor — the [`qt`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/qt) desktop app or the native mobile layer (Android/iOS).
 - That client decodes each reading and maps it to a FHIR `Observation`, then **POSTs it to the FHIR R4 endpoint** — the same on-device path Apple/Health-Connect use, so the server just gains one more write source.
 - On phones most devices need no direct connection: the OEM companion app pairs the sensor and its samples land in Health Connect / HealthKit. Direct BLE is the fallback for **standard-profile medical devices with no companion app**, or desktop / kiosk / gateway scenarios.
 
@@ -405,7 +395,7 @@ Two caveats:
   medical-device support.
 - **Consumer watches/rings (Oura, WHOOP, Fitbit, Garmin, Apple Watch, Mi/Huawei bands)
   use proprietary/encrypted GATT** and can't be read directly — they stay on the cloud
-  clients in [`vendor/device/`](vendor/device/) or the platform stores. Direct BLE is
+  clients in [`vendor/device/`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/src/health/vendor/device) or the platform stores. Direct BLE is
   only genuinely useful for **standard-profile medical devices**: BP cuffs, glucose
   meters, thermometers, SpO₂ meters, scales, HR straps.
 
@@ -422,7 +412,7 @@ Yes — but there is **no cross-platform standard API**; each OS differs:
 
 Cross-platform C++ libraries:
 - **Qt Bluetooth (QtConnectivity)** — `QLowEnergyController` for BLE GATT, `QBluetooth*`
-  for classic. The [`qt`](../../qt/) desktop app already exists, so this is the natural
+  for classic. The [`qt`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/qt) desktop app already exists, so this is the natural
   fit for a desktop BLE path.
 - **SimpleBLE** — lightweight, commercially-friendly cross-platform C++ BLE (Win/macOS/Linux).
 
@@ -442,7 +432,7 @@ sharing the same decoders (HR / BP / thermometer, IEEE-11073 SFLOAT/FLOAT) and F
 | --- | --- | --- | --- | --- |
 | Android app | Android | `android.bluetooth.le` | Kotlin | [`data/health/ble/`](../../android/app/src/main/java/ai/thetahealth/mirobody/data/health/ble/) |
 | iOS app | iOS | Core Bluetooth | Swift | [`Data/Health/BleHealthController.swift`](../../ios/Mirobody/Data/Health/BleHealthController.swift) |
-| [`qt`](../../qt/) desktop app | Windows / macOS / Linux | `QLowEnergyController` | C++ | [`qt/blehealth.cpp`](../../qt/blehealth.cpp) |
+| [`qt`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/qt) desktop app | Windows / macOS / Linux | `QLowEnergyController` | C++ | [`qt/blehealth.cpp`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/qt/blehealth.cpp) |
 
 iOS and macOS both sit on Core Bluetooth but **don't share code** — iOS is the Swift
 app, macOS is the Qt desktop app. The one Qt C++ implementation covers all three desktop

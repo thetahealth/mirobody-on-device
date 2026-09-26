@@ -44,28 +44,11 @@ bool Server::start() {
         // database::Database, so only this block is backend-specific.
         platform::log_info("[1/7] database backend (compile-time): %s",
                            MIROBODY_DATABASE_BACKEND_DIR);
-#if defined(MIROBODY_DATABASE_PG) || defined(MIROBODY_DATABASE_PG_LEGACY)
-        const database::PostgreSQLConfig pg = cfg_.postgresql();
-        platform::log_info("[1/7] connecting to PostgreSQL at %s:%d (db=%s)...",
-                           pg.host.c_str(), pg.port, pg.database.c_str());
-        db_ = std::unique_ptr<database::Database>(new database::Database(pg.open()));
-        platform::log_info("[1/7] PostgreSQL connected");
-#elif defined(MIROBODY_DATABASE_SQLITE)
         const database::SQLiteConfig sqlite = cfg_.sqlite;
         platform::log_info("[1/7] opening SQLite database at %s...",
                            sqlite.path.empty() ? ":memory:" : sqlite.path.c_str());
         db_ = std::unique_ptr<database::Database>(new database::Database(sqlite.open()));
         platform::log_info("[1/7] SQLite database ready");
-#elif defined(MIROBODY_DATABASE_MYSQL)
-        const database::MySQLConfig mysql = cfg_.mysql;
-        platform::log_info("[1/7] connecting to MySQL at %s:%d (db=%s)...",
-                           mysql.host.c_str(), mysql.port, mysql.database.c_str());
-        db_ = std::unique_ptr<database::Database>(new database::Database(mysql.open()));
-        platform::log_info("[1/7] MySQL connected");
-#else
-#  error "Server::start(): no connection wiring for the selected database backend \
-(MIROBODY_DATABASE_PG, MIROBODY_DATABASE_SQLITE, and MIROBODY_DATABASE_MYSQL are implemented; add a branch here and an open() for the backend's config struct)"
-#endif
 
         // Apply the DDL before the server opens its serving connections. The files
         // live under <sql_dir>/MIROBODY_DATABASE_BACKEND_DIR, a per-backend subdir
@@ -96,38 +79,18 @@ bool Server::start() {
             }
         }
 
-        // Redis when configured, otherwise the in-process memory backend.
-        const bool use_redis = !cfg_.redis.host.empty();
-        platform::log_info("[2/7] initializing cache backend (%s)...",
-                           use_redis ? "redis" : "in-memory");
-        cache_ = std::unique_ptr<cache::Cache>(new cache::Cache(
-            use_redis ? cfg_.redis.open() : cfg_.memory_kv.open()));
-        platform::log_info("[2/7] cache backend ready (%s)",
-                           use_redis ? "redis" : "in-memory");
+        cache_ = std::unique_ptr<cache::Cache>(new cache::Cache(cfg_.memory_kv.open()));
+        platform::log_info("[2/7] cache backend ready (in-memory)");
 
-        // Object storage for uploads. A cloud backend takes precedence over the
-        // local-filesystem fallback (same order as the HTTP mount below): S3,
-        // then Aliyun OSS, then local. Left null when nothing is configured;
-        // handlers that need uploads must check for it.
-        if (cfg_.s3().configured()) {
-            platform::log_info("[3/7] initializing object storage (S3)...");
-            storage_ = cfg_.s3().open();
-            platform::log_info("[3/7] object storage ready (S3)");
-        } else if (cfg_.oss().configured()) {
-            platform::log_info("[3/7] initializing object storage (OSS)...");
-            storage_ = cfg_.oss().open();
-            platform::log_info("[3/7] object storage ready (OSS)");
-        } else if (cfg_.azure_blob().configured()) {
-            platform::log_info("[3/7] initializing object storage (Azure Blob)...");
-            storage_ = cfg_.azure_blob().open();
-            platform::log_info("[3/7] object storage ready (Azure Blob)");
-        } else if (cfg_.local_storage().configured()) {
+        // Object storage for uploads: the local filesystem. Left null when it is
+        // not configured; handlers that need uploads must check for it.
+        if (cfg_.local_storage().configured()) {
             platform::log_info("[3/7] initializing object storage (local filesystem)...");
             storage_ = cfg_.local_storage().open();
             platform::log_info("[3/7] object storage ready (local filesystem)");
         } else {
             storage_ = nullptr;
-            platform::log_info("[3/7] object storage disabled (no S3/OSS/local config)");
+            platform::log_info("[3/7] object storage disabled (LOCAL_STORAGE_DIR not set)");
         }
 
         // Signer: RS256 (asymmetric) when a private key is configured, so the
@@ -284,22 +247,15 @@ bool Server::start() {
         }
     }
     {
-        const bool cloud_storage = cfg_.s3().configured() || cfg_.oss().configured() ||
-                                   cfg_.azure_blob().configured();
         const storage::LocalConfig ls = cfg_.local_storage();
         if (file_encryption) {
             platform::log_info("[6/7] LocalStorage HTTP mount disabled: file encryption is on, "
                                "so objects are served through the decrypting file mount");
         } else if (ls.configured() && !ls.url_prefix.empty()) {
-            if (cloud_storage) {
-                platform::log_info("[6/7] LocalStorage HTTP mount disabled: a cloud object "
-                                   "store (S3/OSS) is configured and takes precedence");
-            } else {
-                // Refuse to stand up the mount with a weak signing secret: it would
-                // verify against a forgeable key (throws on a blank / too-short one).
-                ls.validate_signing_secret();
-                router_->set_storage_mount(ls.url_prefix, ls.root, ls.secret);
-            }
+            // Refuse to stand up the mount with a weak signing secret: it would
+            // verify against a forgeable key (throws on a blank / too-short one).
+            ls.validate_signing_secret();
+            router_->set_storage_mount(ls.url_prefix, ls.root, ls.secret);
         }
     }
     register_http_routes();
@@ -314,12 +270,9 @@ bool Server::start() {
         new user::UserService(*router_, cfg_, *db_, *cache_, *jwt_, firebase_.get(), apple_.get()));
     chat_service_ = std::unique_ptr<chat::ChatService>(
         new chat::ChatService(*router_, cfg_, *db_, *cache_, storage_.get(), memory_.get(), *jwt_));
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
-    // Care circles (invite/share). Modern backends only -- the schema
-    // (res/sql/*/2_care_circle.sql) exists only there; left unbuilt on legacy.
+    // Care circles (invite/share).
     circle_service_ = std::unique_ptr<circle::CircleService>(
         new circle::CircleService(*router_, cfg_, *db_, *cache_, *jwt_));
-#endif
     mcp_service_ = std::unique_ptr<mcp::McpService>(
         new mcp::McpService(*router_, cfg_, *jwt_, *cache_, storage_.get(), memory_.get(), db_.get()));
     // OAuth 2.0 authorization server: issues access tokens for the MCP endpoint
@@ -332,8 +285,6 @@ bool Server::start() {
         new health::VendorService(*router_, cfg_, *db_, *cache_, *jwt_));
     ehr_connect_service_ = std::unique_ptr<health::EhrConnectService>(
         new health::EhrConnectService(*router_, cfg_, *db_, *cache_, *jwt_));
-    werun_service_ = std::unique_ptr<health::WeRunService>(
-        new health::WeRunService(*router_, cfg_, *db_, *jwt_));
 
     // Build each registered agent's provider LLM clients from config. Agents
     // self-register at load time (res/agents/*.cpp); this populates their
@@ -373,10 +324,7 @@ bool Server::start() {
     // argument, but the global sec_headers_ array is referenced by lws by pointer).
     const bool apple = !cfg_.apple_client_id.empty();
     csp_header_value_  = "default-src 'self'; ";
-    // 'wasm-unsafe-eval' lets the Tanka login panel compile + instantiate Tanka's
-    // signing WASM (same-origin /tanka-sign.wasm). It permits WebAssembly only,
-    // not arbitrary eval(), so the rest of script-src stays locked to 'self'.
-    csp_header_value_ += "script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com https://apis.google.com";
+    csp_header_value_ += "script-src 'self' https://www.gstatic.com https://apis.google.com";
     if (apple) csp_header_value_ += " https://appleid.cdn-apple.com";
     csp_header_value_ += "; ";
     csp_header_value_ += "connect-src 'self' https://www.gstatic.com https://*.googleapis.com "
@@ -472,7 +420,6 @@ void Server::teardown() {
     // Reverse of construction order: the router owns handlers capturing the
     // user service, which borrows db_/cache_/jwt_. Release outermost first.
     router_.reset();
-    werun_service_.reset();
     ehr_connect_service_.reset();
     vendor_service_.reset();
     fhir_service_.reset();

@@ -1,186 +1,52 @@
-# Database backends
+# Database
 
-`mirobody_core` keeps its in-process SQL persistence behind a single
-`Database` class and links exactly one concrete backend at build time,
-selected via the `MIROBODY_DATABASE_BACKEND` CMake option.
+`mirobody_core` keeps its persistence behind one `Database` class
+([database.hpp](database.hpp)) over **SQLite** ([sqlite.cpp](sqlite.cpp)), the
+only backend this repo links: a phone holds one person's record, the host app is
+the only writer, and one file is what the platform's backup, export and delete
+all work on. The development build uses the same backend and schema, so what the
+tests cover is what ships. The server-side databases (Postgres and friends) belong
+to the [main mirobody repo](https://github.com/thetahealth/mirobody).
 
-`MIROBODY_DATABASE_BACKEND` takes one of these values:
+The build defines `MIROBODY_DATABASE_SQLITE` and `MIROBODY_DATABASE_BACKEND_DIR`
+(`"sqlite"`, the `res/sql/` subdirectory the schema loader reads).
 
-| Value               | Client (links)       | DDL loaded from     |
-| ------------------- | -------------------- | ------------------- |
-| `SQLITE`            | SQLite3              | `res/sql/sqlite`    |
-| `DUCKDB`            | DuckDB               | `res/sql/duckdb`    |
-| `POSTGRESQL`        | libpq                | `res/sql/pg`        |
-| `POSTGRESQL_LEGACY` | libpq (same as `POSTGRESQL`) | `res/sql/pg_legacy` |
-| `MYSQL`             | libmysql             | `res/sql/mysql`     |
-| `CLICKHOUSE`        | (stub, none yet)     | `res/sql/clickhouse`|
-
-| Build target                             | Default             | Allowed                                           |
-| ---------------------------------------- | ------------------- | ------------------------------------------------- |
-| Mobile (Android, iOS)                    | `SQLITE`            | `SQLITE`, `DUCKDB`                                 |
-| Desktop / server (Windows, Linux, macOS) | `POSTGRESQL`        | any of the above                                  |
-
-On mobile the backend is restricted to `SQLITE` or `DUCKDB` because each device
-holds a single user's data and the host app is the only writer. Desktop and
-server deployments default to `POSTGRESQL` (the libpq client loading the modern
-`res/sql/pg` DDL); `POSTGRESQL_LEGACY` is the same client but loads
-`res/sql/pg_legacy` instead. Any backend is permitted, so `SQLITE` remains
-available there for single-writer or local/test setups.
-
-Each value defines a preprocessor macro named after its DDL subdirectory,
-uppercased — `MIROBODY_DATABASE_PG`, `MIROBODY_DATABASE_PG_LEGACY`,
-`MIROBODY_DATABASE_SQLITE`, `_DUCKDB`, `_MYSQL`, `_CLICKHOUSE` — plus the string
-`MIROBODY_DATABASE_BACKEND_DIR` (that same subdirectory). Code that is common to
-the two PostgreSQL variants guards on
-`MIROBODY_DATABASE_PG || MIROBODY_DATABASE_PG_LEGACY` (see `main.cpp` /
-`server/server.cpp`).
-
-## Selecting and configuring a backend
-
-It's **two steps**: choose the backend at **build** time, then set its connection
-keys at **run** time (`config.yml`). Each backend builds into its own directory
-(`build`, `build-legacy`, …), so switching backends is just a different build token —
-the previously built directory stays configured and reusable.
-
-### Step 1 — build (pick the backend)
-
-Use the **`build.cmd` / `build.sh` wrappers** — they set up the compiler
-environment (and, on Windows, the vcpkg toolchain) and Ninja for you (a bare
-`cmake -B build` skips all that and won't find the dependencies). The backend is
-a **command-line token** (no env var); pass it in any order alongside the arch
-and `clean`:
-
-```sh
-# Linux / macOS
-./build.sh             # POSTGRESQL (default) -> build
-./build.sh legacy      # POSTGRESQL_LEGACY    -> build-legacy
-./build.sh sqlite      # SQLITE              -> build-sqlite
-```
-```cmd
-:: Windows
-build.cmd pg
-build.cmd sqlite
-build.cmd
-```
-
-Tokens: `pg` / `postgresql`, `legacy` / `pg_legacy`, `mysql`, `sqlite`, `duckdb`,
-`ck` / `clickhouse`. Each backend (and arch) builds into its own directory —
-`build[-<arch>][-<backend>]`: the plain host + `POSTGRESQL` build is just
-`build`, `legacy` → `build-legacy`, and so on. Because they don't share a directory you
-can keep several configured at once and switch by re-running with a different
-token — no reconfigure. Pass `clean` (e.g. `build.cmd pg clean`) only to force
-that one directory to reconfigure from scratch.
-
-### Step 2 — configure the connection (`config.yml`)
-
-Set the keys for the backend you built (the rest are ignored):
+## Configuring
 
 ```yaml
-# PostgreSQL
-PG_HOST: 127.0.0.1
-PG_PORT: 5432
-PG_USER: postgres
-PG_PASSWORD: secret
-PG_DBNAME: mirobody
-
-# …or SQLite — use a real file, not :memory: (migration and the server use
-# separate connections, so an in-memory DB would not share its schema).
-SQLITE_PATH: mirobody.sqlite
+# config.yml -- a real file, not :memory:: migration and the core open
+# separate connections, so an in-memory DB would not share its schema.
+SQLITE_PATH: '_local/mirobody.db'
+DB_INIT_SCHEMA: true
 ```
 
-DuckDB / MySQL / ClickHouse follow the same shape — swap the backend value and
-set that backend's keys (`DUCKDB_PATH`, `MYSQL_*`, `CLICKHOUSE_*`); see the
-inline docs in [config.yml](../../config.yml).
-
-Confirm what a binary was built with (use the directory for the backend you
-built, e.g. `build`, `build-legacy`):
-
-```sh
-grep MIROBODY_DATABASE_BACKEND build*/CMakeCache.txt      # findstr on Windows
-```
-
-> **First boot creates the tables** via an idempotent schema migration — but it
-> is **skipped unless `ENV` is set to a non-managed value** (anything other than
-> `test` / `gray` / `prod`; an *unset* `ENV` also skips). For a fresh local DB,
-> run with e.g. `ENV=local`. In managed deployments (`ENV=test`/`gray`/`prod`)
-> the schema is applied out-of-band from `res/sql/<backend>/`.
+The phone apps pass the path through the C ABI instead
+(`mirobody_start(config, data_dir)` puts the file at `<data_dir>/mirobody.db`).
 
 ## Schema file layout
 
-The DDL for each backend lives under `res/sql/<backend>/` and is applied in
+The DDL lives under [`res/sql/sqlite/`](../../res/sql/sqlite) and is applied in
 filename order at first boot (`apply_schema` reads every `*.sql` in the
 directory, lexicographically). Files carry a single-digit prefix that groups
 them by the kind of object they define, so load order is right by construction:
 
 | Prefix    | Holds                                                  | Current files |
 | --------- | ------------------------------------------------------ | ------------- |
-| `0_*.sql` | DB setup — extensions, functions, triggers             | `0_setup.sql` (pg) |
-| `1_*.sql` | Entities — tables, with their indexes / inline FKs     | `1_user.sql`, `1_chat.sql`, `1_health.sql`, `1_memory.sql` |
-| `2_*.sql` | Relations — cross-entity foreign keys / junction tables | *(none yet)* |
-| `3_*.sql` | Views                                                  | *(none yet)* |
+| `1_*.sql` | Entities — tables, with their indexes / inline FKs     | `1_user.sql`, `1_chat.sql`, `1_data.sql`, `1_health.sql`, `1_memory.sql` |
+| `2_*.sql` | Relations — cross-entity foreign keys / junction tables | `2_care_circle.sql` |
 
 Within a prefix, files load alphabetically. The entity files are self-contained
 — each file's foreign keys point only at tables defined earlier in the *same*
 file (e.g. `user_identities` → `users` in `1_user.sql`) — so the order among the
-`1_*` files does not matter, and the `2_*` tier exists for any future
-cross-entity relation that would need to load after all entities.
+`1_*` files does not matter.
 
-`res/sql/pg_legacy/` follows the same prefix convention; it differs from
-`res/sql/pg/` only in schema *shape* — the table/column names the legacy Python
-stack uses (`health_app_user`, `th_sessions`, …) — not in file naming.
-
-## Client libraries
-
-Exactly one of these is linked into `mirobody_core`, picked by
-`MIROBODY_DATABASE_BACKEND`. SQLite is the mobile default; `POSTGRESQL`
-(the libpq client with the modern `res/sql/pg` schema) is the desktop
-default — install only the one(s) you actually plan to build against.
-
-| Package                       | Direct download                                                          |
-| ----------------------------- | ------------------------------------------------------------------------ |
-| SQLite amalgamation           | https://sqlite.org/download.html                                         |
-| PostgreSQL (ships `libpq`)    | https://www.postgresql.org/download/                                     |
-| Oracle MySQL Connector/C      | https://dev.mysql.com/downloads/connector/c/                             |
-| MariaDB Connector/C (LGPL)    | https://mariadb.com/downloads/connectors/connectors-data-access/c-connector |
-| DuckDB C/C++ library          | https://duckdb.org/docs/installation/                                    |
-
-SQLite is system-provided on iOS and Android, so the entry above only matters
-on desktop builds. Linux / macOS users just `apt install libpq-dev` /
-`brew install libpq` (or the equivalent for the backend they picked) — see
-"Building — Linux / WSL / macOS" in the [top-level README](../../README.md) for
-the full apt / dnf / brew command lines.
-
-## SQL portability
-
-The schema and queries used by the `Database` wrapper stay inside the common
-subset of these five dialects. The table below lists the places where they
-diverge.
-
-| Feature | SQLite | DuckDB | PostgreSQL | MySQL | ClickHouse |
-|---|---|---|---|---|---|
-| Type system | dynamic (type affinity) | strict | strict | strict | strict (`Nullable()` opt-in) |
-| Auto-increment | `INTEGER PRIMARY KEY [AUTOINCREMENT]` | `BIGINT GENERATED ALWAYS AS IDENTITY` | `BIGINT GENERATED ALWAYS AS IDENTITY` | `BIGINT AUTO_INCREMENT` | no native sequence; `UUID DEFAULT generateUUIDv4()` is idiomatic |
-| Timestamps (tz-aware) | `INTEGER` Unix epoch (no native tz type); `datetime(ts, 'unixepoch')`, `strftime()` | `TIMESTAMPTZ`; `EXTRACT`, `DATE_TRUNC`, `+ INTERVAL` | `TIMESTAMPTZ`; same as DuckDB | `TIMESTAMP` (UTC-backed, range 1970-2038); `DATE_ADD(ts, INTERVAL ...)` | `DateTime('UTC')`, `DateTime64(3, 'UTC')`; `toStartOf*`, `dateAdd`, `+ INTERVAL` |
-| Boolean | `INTEGER` 0 / 1 | `BOOLEAN` | `BOOLEAN` | `TINYINT(1)` (alias `BOOLEAN`) | `Bool` (alias `UInt8`) |
-| String concat | `\|\|` | `\|\|` | `\|\|` | `CONCAT(a, b)` (no `\|\|` without ANSI mode) | `\|\|` or `concat(a, b)` |
-| String aggregation | `GROUP_CONCAT(x, ',')` | `STRING_AGG(x, ',')` or `LIST(x)` | `STRING_AGG(x, ',')` | `GROUP_CONCAT(x SEPARATOR ',')` | `arrayStringConcat(groupArray(x), ',')` |
-| Upsert | `ON CONFLICT (col) DO UPDATE` (3.24+) | `ON CONFLICT (col) DO UPDATE` | `ON CONFLICT (col) DO UPDATE` | `ON DUPLICATE KEY UPDATE` (different shape) | no synchronous upsert; `ReplacingMergeTree` dedupes asynchronously at merge time |
-| `INSERT ... RETURNING` | yes (3.35+) | yes | yes | no (MySQL 8.x; MariaDB has it) | no |
-| Regex | `REGEXP` (needs extension) | `REGEXP_REPLACE` built-in | `REGEXP_REPLACE`, `~` operator | `REGEXP_REPLACE` (8.0+) | `match()`, `replaceRegexpAll()`, `extract()` built-in |
-| Partitioning | none (manual sharding) | none (manual) | declarative range / list / hash | declarative range / list / hash | declarative `PARTITION BY` (OLAP-tuned, per-engine) |
-| Concurrency model | file lock, single writer (WAL eases reads) | single writer | MVCC, multi writer | MVCC, multi writer (InnoDB) | append-optimized OLAP; immutable parts + async merges, no row-level locks |
-
-Backend-only features that fall outside the portable subset: `WITHOUT ROWID`
-(SQLite); `PIVOT`, `QUALIFY`, `ASOF JOIN`, `LIST` / `STRUCT` types, direct
-Parquet / CSV reads (DuckDB); `JSONB`, `tsvector` full-text, declarative
-partitioning (PostgreSQL); `FULLTEXT INDEX` and JSON path operators (MySQL);
-the `MergeTree` engine family, incremental materialized views, `Array` /
-`Tuple` / `Map` types, `ARRAY JOIN`, `SAMPLE`, `FINAL`, and approximate
-aggregates (`uniq`, `quantile*`) (ClickHouse).
+This schema mirrors the tables of the old server it was ported from. It is not
+the long-term contract: the record's portable form is the FHIR Bundle export the
+main repo defines, and this schema will move toward what that export needs.
 
 ## User accounts and login
 
-The user-domain schema lives in `res/sql/<backend>/1_user.sql`:
+The user-domain schema lives in `res/sql/sqlite/1_user.sql`:
 
 - `users` — one row per account. `email` is nullable, because a provider-only
   signup (Apple Private Relay, or X with no email) may not have one. Among
@@ -281,7 +147,7 @@ Things to get right:
 
 ## Chat history
 
-The chat-domain schema lives in `res/sql/<backend>/1_chat.sql`:
+The chat-domain schema lives in `res/sql/sqlite/1_chat.sql`:
 
 > **Timestamp convention.** Across the modern schema (`conversations`, `messages`,
 > `files`, `users` + its log tables, `memories`) every `created_at` / `updated_at`
@@ -289,18 +155,13 @@ The chat-domain schema lives in `res/sql/<backend>/1_chat.sql`:
 > by the app (`platform::now_unix_ms`) — no DB `DEFAULT CURRENT_TIMESTAMP` or
 > `updated_at` triggers. `created_at` is `NOT NULL`; `updated_at` and `deleted_at`
 > are NULL until the first update / soft-delete. Milliseconds because wearable
-> health data is ms-native, so one scale avoids unit conversions. The legacy
-> `th_*` tables keep their own DB-side `TIMESTAMPTZ`/`now()` columns.
+> health data is ms-native, so one scale avoids unit conversions.
 
 - `conversations` — a **thin** per-conversation header: just `id`, `user_id`,
   `summary`, `created_at`, and a `deleted_at` soft-delete column, read back by
   `GET /api/history` / `POST /api/history/delete`. The modern `id` is **not
   auto-assigned** — it equals the conversation's opening question's `messages.id`,
-  so a single id names the thread across both tables. The **legacy** backend keeps
-  `th_sessions` with a *string* `session_id` key instead (and carries the question
-  detail inline, no `messages` table), so the shared queries splice the table and
-  key-column names per backend from `MIROBODY_CONVERSATIONS_TABLE` /
-  `MIROBODY_CONVERSATION_ID_COL` ([`../chat/chat.hpp`](../chat/chat.hpp)).
+  so a single id names the thread across both tables.
 - `messages` — a per-message log, **one row per message, not per turn**: a single
   user question fans out to one response row per answering agent (agents may
   respond simultaneously), so a turn is a question row plus N response rows that
@@ -311,16 +172,13 @@ The chat-domain schema lives in `res/sql/<backend>/1_chat.sql`:
   agent and LLM provider produced a response; NULL for questions), `content`,
   the per-question `language` / `timezone`
   / `files` (NULL on response rows), `created_at`, `deleted_at`. Indexed by
-  `(conversation_id, created_at)`, `(question_id)`, and `(user_id)`. On the modern
-  backends `Chat::persist_history` writes the **opening question** row (and seeds
+  `(conversation_id, created_at)`, `(question_id)`, and `(user_id)`.
+  `Chat::persist_history` writes the **opening question** row (and seeds
   the matching `conversations` row with its id) in one transaction; agent
   **responses** are not persisted yet, and the live multi-turn window is still
-  cache-backed ([`../chat/history.hpp`](../chat/history.hpp); Redis / in-process).
+  cache-backed ([`../chat/history.hpp`](../chat/history.hpp); in-process).
 - `files` — the per-user uploads index behind `GET /api/files`, documented in
-  [`../chat/README.md`](../chat/README.md). **Not ported to MySQL:** its upsert
-  relies on `ON CONFLICT (file_key) WHERE deleted_at IS NULL` plus a partial unique
-  index, neither of which MySQL supports, so `/api/files` is unsupported on MySQL
-  until a MySQL-specific upsert path lands.
+  [`../chat/README.md`](../chat/README.md).
 
 `messages.role` is the `MessageRole` enum from [`enums.hpp`](enums.hpp), stored as
 a `SMALLINT` — the same single-source-of-truth convention as `LoginMethod` /

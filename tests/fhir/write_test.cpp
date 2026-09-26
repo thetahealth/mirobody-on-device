@@ -19,7 +19,6 @@
 // phone able to re-sync an overlapping window.
 //
 // Against a real in-memory SQLite DB, like tests/circle/access_test.cpp.
-#if defined(MIROBODY_DATABASE_SQLITE)
 
 namespace {
 
@@ -180,4 +179,3 @@ TEST_CASE("new_resource_id is a distinct uuid v4 each time", "[fhir][write]") {
     REQUIRE(a != b);
 }
 
-#endif  // MIROBODY_DATABASE_SQLITE

@@ -13,7 +13,7 @@
 // preprocess) are read here into the request's file list.
 
 #include "chat/agent.hpp"   // AgentRequest, AgentFile
-#include "chat/chat.hpp"    // LiveRequest
+#include "chat/chat.hpp"
 
 #include <cstdint>
 #include <string>
@@ -33,13 +33,6 @@ struct ChatParams {
     // Synthesizes a single user message from "question" when no "messages" array
     // is given.
     static ChatParams parse(const Packet& pkt, std::int64_t user_id);
-};
-
-// kOpLive: bridge a realtime provider for a turn.
-struct LiveParams {
-    LiveRequest request;      // the turn handed to Chat::live_response
-
-    static LiveParams parse(const Packet& pkt);
 };
 
 }}

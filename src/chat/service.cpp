@@ -2,8 +2,6 @@
 
 #include "chat/agent.hpp"   // agent_registry (provider discovery)
 #include "chat/transport/sse.hpp"
-#include "chat/transport/ws.hpp"
-// #include "chat/transport/mqtt.hpp"   // enable once a broker client is built
 #include "database/enums.hpp"   // MessageRole, ShareAccess
 #include "platform/clock.hpp"   // now_unix_ms
 #include "platform/log.hpp"
@@ -39,7 +37,6 @@ std::string body_str(const std::string& body, const char* key) {
 
 std::string body_session_id(const std::string& body) { return body_str(body, "session_id"); }
 
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
 // database::MessageRole int -> the role string the client renders.
 const char* role_str(int role) {
     switch (static_cast<database::MessageRole>(role)) {
@@ -50,7 +47,6 @@ const char* role_str(int role) {
         default:                               return "";
     }
 }
-#endif
 
 }   // namespace
 
@@ -71,14 +67,11 @@ ChatService::ChatService(server::Router& router,
     , storage_(storage)
     , jwt_(jwt) {
 
-    // One transport per enabled streaming protocol, each parsing its wire into a
-    // Packet and handing it to dispatcher_. They register their own routes (SSE:
-    // POST /api/chat, WS: GET /api/chat) when started. Uploads are handled by the
+    // The streaming transport parses its wire into a Packet and hands it to
+    // dispatcher_. It registers its own route (POST /api/chat) when started. Uploads are handled by the
     // dispatcher (which owns `storage`), so the transports just carry bytes.
     transports_.push_back(std::unique_ptr<Transport>(
         new SseTransport(router, dispatcher_, jwt_, cfg.chat.sse_heartbeat_seconds)));
-    transports_.push_back(std::unique_ptr<Transport>(new WsTransport(router, dispatcher_, jwt_)));
-    // transports_.push_back(std::unique_ptr<Transport>(new MqttTransport(dispatcher_, cfg)));
 
     for (std::size_t i = 0; i < transports_.size(); ++i) {
         transports_[i]->start();
@@ -198,45 +191,6 @@ void ChatService::handle_history(const server::Request& req, server::Response& r
         };
 
         try {
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-            // Legacy: owner-only, no care-circle sharing.
-            // th_messages keys on the string session_id and soft-deletes with is_del,
-            // so the count here needs neither the root-row special case nor the
-            // deleted_at predicate the modern branch does.
-            database::Result r = db_.execute(
-                "SELECT s.session_id, s.summary, s.created_at, "
-                "(SELECT count(*) FROM th_messages m "
-                "   WHERE m.session_id=s.session_id AND m.is_del=FALSE) "
-                "FROM th_sessions s "
-                "WHERE s.user_id=? ORDER BY s.created_at DESC LIMIT ? OFFSET ?;",
-                {uid_text, page_size, offset});
-            for (std::size_t i = 0; i < r.rows.size(); ++i) {
-                const std::vector<database::Value>& row = r.rows[i];
-                const database::Value& sid_v = row[0];
-                const std::string sid =
-                    sid_v.is_null() ? std::string()
-                    : (sid_v.type() == database::Value::Type::Int) ? std::to_string(sid_v.as_int())
-                    : sid_v.as_text();
-                const std::string summary = row[1].is_null() ? std::string() : row[1].as_text();
-
-                rapidjson::Value item(rapidjson::kObjectType);
-                addstr(item, "session_id", sid);
-                // created_at is a TIMESTAMPTZ string on this legacy backend.
-                const database::Value& ts_v = row[2];
-                rapidjson::Value ts_json;
-                if (ts_v.is_null())                            ts_json.SetNull();
-                else if (ts_v.type() == database::Value::Type::Int) ts_json.SetInt64(ts_v.as_int());
-                else { const std::string ts = ts_v.as_text();
-                       ts_json.SetString(ts.c_str(), static_cast<rapidjson::SizeType>(ts.size()), a); }
-                item.AddMember("timestamp", ts_json, a);
-                addstr(item, "summary", summary);
-                addstr(item, "query_user_id", uid_text);
-                item.AddMember("owned", true, a);
-                item.AddMember("message_count",
-                               row[3].is_null() ? 0 : static_cast<int>(row[3].as_int()), a);
-                summaries.PushBack(item, a);
-            }
-#else
             // Owned conversations plus those shared *to* the caller by a
             // care-circle member, newest activity first. Each row is tagged so
             // the client can badge "shared by <owner>" / "shared with N". The
@@ -292,7 +246,6 @@ void ChatService::handle_history(const server::Request& req, server::Response& r
                 }
                 summaries.PushBack(item, a);
             }
-#endif
         } catch (const std::exception& e) {
             platform::log_warn("history: query failed: %s", e.what());
             res.error(-1, "history query failed");
@@ -327,11 +280,6 @@ void ChatService::handle_history_delete(const server::Request& req, server::Resp
 
 void ChatService::handle_conversation(const server::Request& req, server::Response& res) {
     const std::int64_t uid = req.user_id;
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    (void)uid;
-    res.error(-1, "conversation fetch is not supported on this backend");
-    return;
-#else
     // id from ?id= (GET) or the JSON body (POST), bound as a decimal string (the
     // same id convention as the rest of the history endpoints).
     std::string id = req.query_str("id", "");
@@ -425,7 +373,6 @@ void ChatService::handle_conversation(const server::Request& req, server::Respon
         platform::log_warn("conversation: query failed: %s", e.what());
         res.error(-1, "conversation query failed");
     }
-#endif
 }
 
 void ChatService::handle_files(const server::Request& req, server::Response& res) {
@@ -504,10 +451,6 @@ bool ChatService::delete_history(std::int64_t user_id, const std::string& sessio
     // sqlite/pg_legacy, and pg casts them to its BIGINT conversation id / user_id.
     const std::string u = std::to_string(user_id);
 
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    db_.execute("DELETE FROM th_sessions WHERE session_id=? AND user_id=?;",
-                {session_id, u});
-#else
     // The owner removes the conversation; a member it was shared with only drops
     // their own share (it stays for the owner). Decide by ownership first so a
     // member can never delete someone else's conversation.
@@ -522,7 +465,6 @@ bool ChatService::delete_history(std::int64_t user_id, const std::string& sessio
             "WHERE conversation_id=? AND shared_with_user_id=? AND deleted_at IS NULL;",
             {platform::now_unix_ms(), session_id, u});
     }
-#endif
     return true;
 }
 

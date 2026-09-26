@@ -19,8 +19,8 @@
 //   --max N        cap the object scan (default 1000000); a warning prints if hit.
 //   --dry-run      report what would be re-encrypted without writing.
 //
-// Configuration honored: the object-store keys (S3_* / ALI_OSS_* /
-// LOCAL_STORAGE_*) plus FILE_ENCRYPTION_KEY and FILE_KEY_SEED.
+// Configuration honored: LOCAL_STORAGE_* plus FILE_ENCRYPTION_KEY and
+// FILE_KEY_SEED.
 
 #include "client/http_client.hpp"
 #include "config/config.hpp"
@@ -45,13 +45,11 @@ void print_usage(const char* prog) {
         prog);
 }
 
-// Build the configured object-store backend (S3 > OSS > local, the server's
-// precedence). Returns null after printing why when none is configured.
+// Build the local-filesystem object store. Returns null after printing why when
+// it is not configured.
 std::unique_ptr<mirobody::storage::Storage> open_storage(const mirobody::Config& cfg) {
-    if (cfg.s3().configured())            return cfg.s3().open();
-    if (cfg.oss().configured())           return cfg.oss().open();
     if (cfg.local_storage().configured()) return cfg.local_storage().open();
-    std::fprintf(stderr, "file_rekey: no object storage configured (set S3_* / ALI_OSS_* / LOCAL_STORAGE_*)\n");
+    std::fprintf(stderr, "file_rekey: no object storage configured (set LOCAL_STORAGE_DIR)\n");
     return nullptr;
 }
 

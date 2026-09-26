@@ -1,5 +1,10 @@
 # `src/user` — the user / authentication service
 
+> **On a phone this layer is transitional.** The native apps sign in to the
+> in-process core over loopback today, so it stays until they authenticate with a
+> per-launch token instead; then accounts belong to the mirobody server the app
+> connects to, and this module leaves with the care-circle and OAuth layers.
+
 The user service owns sign-in. Every flow ends the same way — resolve the caller
 to a row in `health_app_user` (creating it on first sight) and return a standard
 auth envelope (`access_token` / `refresh_token` / `expires_in`) minted by
@@ -10,9 +15,9 @@ proof ──verify──▶ email ──add_or_get_user──▶ user_id ──g
 (code / ID token / OAuth code)         (health_app_user row)
 ```
 
-The module is three units — the HTTP front end (`service.*`), email-code delivery
-(`email.*`), and Tanka QR-code sign-in (`tanka.*`, a self-contained `TankaService`
-that calls back into the front end to mint the login). Everything else a flow
+The module is two units — the HTTP front end (`service.*`) and email-code
+delivery (`email.*`). (Tanka QR-code sign-in was web-only and left with the web
+client; it is preserved at the `v2-full-2026-08` tag.) Everything else a flow
 needs (token verification, OAuth code exchange) is borrowed from `src/jwt` and
 `src/client`, so adding a provider is a self-contained route.
 
@@ -25,8 +30,7 @@ and wires every route onto the `Router` — so a caller just instantiates it onc
 at startup. Three private helpers are the shared spine all routes converge on:
 
 - **`add_or_get_user(email)`** — look up the active user by (lowercased) email,
-  inserting the row if absent. The email/Google/Apple/GitHub flows all land here,
-  as does Tanka (via the `tanka_login` callback handed to `TankaService`).
+  inserting the row if absent. The email/Google/Apple/GitHub flows all land here.
 - **`add_or_get_wechat_user(openid, unionid)`** — the WeChat sibling, keyed on the
   stable `wechat_openid` column; a created row gets a synthetic `<id>@wechat`
   address so the NOT NULL + unique email column is satisfied for accounts with no
@@ -72,48 +76,6 @@ Each provider is configured independently: the credentials are copied from
 error), so the build degrades cleanly to whatever's wired up. Failures within a
 POST use sequential negative codes; the `msg` carries the human-readable reason.
 
-## `tanka.{hpp,cpp}` — `TankaService`
-
-Tanka QR-code sign-in, split out because it carries machinery the other providers
-don't: a server-side proxy, a WASM bridge, and a self-healing background thread.
-`UserService` owns one and hands it a `tanka_login(req, res, email)` callback —
-that callback (create-or-get user + `generate_auth_response`) is the **only**
-coupling back, so `TankaService` holds no DB/JWT state itself. **On by default**
-(`TANKA_LOGIN_ENABLED`; the `TANKA_*` keys are documented in
-[`config.example.yml`](../../config.example.yml)).
-
-Unlike the credential-broker providers, Tanka needs **none of our own
-credentials**: the browser runs Tanka's own WASM request-signer (shipped to it as
-`htdoc/static/tanka-signer.js` + the WASM bridged below), signs the calls, and we
-just relay them. Routes (registered by `TankaService`, reachable pre-auth):
-
-- **`GET /tanka/verify`** → `{}` (code 0) when enabled, so the web client shows the
-  "Continue with Tanka" button; non-zero (hidden) otherwise.
-- **`POST /tanka/qrcode`** / **`POST /tanka/poll`** → take the browser's
-  already-signed `{headers, body}` envelope and **proxy** it to Tanka's gateway
-  server-side (the browser can't — CORS; the gateway only accepts `Origin:
-  <TANKA_WEB_ORIGIN>`). `qrcode` returns `{qrCodeData, expireTime}` to render; while
-  the scan is pending `poll` returns `{status:"pending"|"expired"}`, and on a
-  confirmed scan it resolves the email from Tanka's response (a nested email field,
-  else a JWT `email` claim — trusted by provenance) and hands it to `tanka_login`.
-- **`GET /tanka-sign.wasm`** → bridges Tanka's signing WASM (fetched from their CDN
-  server-side, cached on disk keyed by URL, `no-cache` on the wire).
-- **`GET /tanka-signer.js`** → the matching wasm-bindgen glue, overriding the
-  vendored static file so it can be swapped in lockstep with the WASM.
-
-**Self-healing signer (auto-discovery).** The WASM + glue + the frontend's
-`get_http_header` arg count are a *matched set* (Tanka's ABI shifts across builds),
-so they can't be swapped piecemeal. When enabled (`TANKA_WASM_AUTODISCOVER`, on by
-default) a background thread runs the Node engine `res/tanka/discover.cjs` at boot
-and every `TANKA_WASM_REFRESH_INTERVAL` (7 days): it finds Tanka's live build and
-**verifies it** (signs a real create-QR; Tanka must answer `code:0`), then adopts
-it in memory — swapping the served glue + bridged WASM together. An arg-count
-change is **refused** (it needs `htdoc/src/tanka.js` rebuilt). Requires `node` on
-`PATH`; when node/Tanka are unavailable, or nothing verifies, it logs and keeps the
-**pinned fallback** (the vendored `tanka-signer.js` + the `kTankaWasmPath`
-constant). Refresh the pinned fallback for a release with
-`node res/tanka/discover.cjs --write` → `npm run build` in `htdoc/` → rebuild.
-
 ## `email.{hpp,cpp}` — verification codes
 
 `EmailCodeValidator` sends and verifies short numeric codes, returning
@@ -131,7 +93,6 @@ cache)` picks the concrete impl by what's configured, in priority order:
 The first three share `StoringEmailValidator`, which holds the common flow —
 predefined-code short-circuit (by exact address or by domain), send cooldown,
 code persistence with TTL, and single-use verification — around a pluggable
-`deliver()`. Issued codes and cooldowns live in `cache::Cache` (the redis-or-memory
-abstraction), so the validator is single-threaded by design (driven from the
+`deliver()`. Issued codes and cooldowns live in `cache::Cache`, so the validator is single-threaded by design (driven from the
 server's service thread). Codes are cryptographically random and drawn without
 modulo bias.

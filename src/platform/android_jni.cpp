@@ -82,7 +82,12 @@ Java_ai_thetahealth_mirobody_NativeBridge_nativeStart(
     if (!openai_key.empty()) cfg.openai.api_key = std::move(openai_key);
     if (!gemini_key.empty()) cfg.gemini.api_key = std::move(gemini_key);
     if (listenPort > 0) cfg.listen_port = static_cast<std::uint16_t>(listenPort);
-    if (cfg.listen_addr.empty()) cfg.listen_addr = "127.0.0.1";
+    // The host app reaches the core over loopback only. The compiled default is
+    // 0.0.0.0, which here would put the phone's health record on every network
+    // the phone joins, so it is overridden just as ios_bridge.mm does.
+    if (cfg.listen_addr.empty() || cfg.listen_addr == "0.0.0.0") {
+        cfg.listen_addr = "127.0.0.1";
+    }
 
     auto server = std::unique_ptr<mirobody::Server>(new mirobody::Server(std::move(cfg)));
     if (!server->start_in_background()) {

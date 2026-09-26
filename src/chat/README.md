@@ -2,11 +2,11 @@
 
 The chat service is organized into four tiers. Each tier depends only on the
 tiers below it, so transport concerns never leak into the domain and the domain
-never knows about HTTP/WebSocket framing.
+never knows about HTTP framing.
 
 ```
 Tier 1  Interface   service.* transport/* dispatcher.* params.* event/* packet.*
-Tier 2  Chat        chat.*                              response / live / persist
+Tier 2  Chat        chat.*                              response / persist
 Tier 3  Agent       agent.*                             pluggable agents (res/agents/*)
 Tier 4  MCP tools   src/mcp/*                           pluggable tools (res/mcp_tools/*)
 ```
@@ -18,7 +18,8 @@ for one wire protocol — `bytes → Packet` on the way in, `llm::Event → byte
 the way out — and nothing else. It does *not* run the turn: it hands the `Packet`
 plus a `Responder` (its output channel) to the `Dispatcher`, which drives the
 domain. So a transport knows only its wire, `Packet`, and `Event`; adding one
-(e.g. MQTT) is additive and touches nothing else.
+is additive and touches nothing else. (The C ABI's `mirobody_chat_messages`
+drives the same dispatcher with no transport at all.)
 
 ```
 bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stream ──Responder──▶ bytes
@@ -26,8 +27,7 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
 ```
 
 - **`transport/transport.hpp`** — the abstract `Transport` interface. Fixes only
-  the lifecycle (`name()`, `start()`); transports share nothing at the connection
-  level (HTTP/WS use the `Router`, MQTT talks to a broker).
+  the lifecycle (`name()`, `start()`).
 - **`transport/responder.hpp`** — the abstract `Responder`: a request's outbound
   channel. `send(Event)` serializes+writes one event (false ⇒ client gone);
   `finish()` emits the terminal `{"type":"end"}`. One impl per transport.
@@ -38,27 +38,22 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
   whole request body at `HTTP_MAX_BODY_BYTES` (32 MiB by default) and answers
   `413`, since the body is buffered whole and each attachment is then copied
   down this chain — see [src/config/README.md](../config/README.md#request-body-limit).
-- **`transport/ws.{hpp,cpp}`** — `WsTransport` + `WsResponder`. `GET /api/chat` →
-  **WebSocket** (JWT-guarded handshake); each frame becomes a `kOpLive` `Packet`,
-  run on a worker thread. Owns the per-connection `LiveSession` state.
-- **`transport/mqtt.{hpp,cpp}`** — `MqttTransport`. Placeholder; `start()` is inert
-  until a broker client is built. Documents the integration points.
 - **`dispatcher.{hpp,cpp}`** — `Dispatcher`. The seam between transports and
   `Chat`. First applies the **per-user rate limit** (`CHAT_RATE_MAX` /
   `CHAT_RATE_WINDOW_SEC`, via the cache) and rejects an over-limit caller before
-  any work — covering both the SSE and WebSocket paths since both arrive here;
+  any work;
   `0` disables it (the shipped `config.example.yml` caps it at 5 turns / 60s).
   Then runs an **upload preprocess** (`store_attachments`): offloads each
   of the Packet's binary attachments to object storage and records a reference in
   `params.files`, so bytes never enter the JSON — emitting a `UploadEvent`
   per file (and a `TranscriptEvent` begin/done pair around each text extraction)
   so the client sees progress. Then switches on `Packet::code()`
-  (`kOpChat` / `kOpLive`), parses the typed params struct, calls the matching
+  (`kOpChat`), parses the typed params struct, calls the matching
   `Chat` method, and streams the events into the `Responder`. Owns the
   `storage::Storage` handle. Transport-neutral and reentrant.
-- **`params.{hpp,cpp}`** — per-command typed parameters: `ChatParams` / `LiveParams`,
+- **`params.{hpp,cpp}`** — per-command typed parameters: `ChatParams`,
   each with a `parse(pkt)` that turns the generic `Packet` into a validated,
-  named-field request (`AgentRequest` / `LiveRequest`). Adding a command = a struct
+  named-field request (`AgentRequest`). Adding a command = a struct
   here + a case in the dispatcher; the wire boundary stays generic.
 - **`service.{hpp,cpp}`** — `ChatService`, the **composition root**. Constructs the
   `Chat` and `Dispatcher`, owns one transport per enabled protocol and starts
@@ -69,12 +64,12 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
   `shared_with_count`, a shared-to-me one adds `shared_by`. **`message_count` is two
   subqueries, not one**: a conversation's opening question has `conversation_id NULL`
   (its own id *is* the conversation id — see
-  [res/sql/pg/1_chat.sql](../../res/sql/pg/1_chat.sql)), so counting only the
+  [res/sql/sqlite/1_chat.sql](../../res/sql/sqlite/1_chat.sql)), so counting only the
   `conversation_id` matches is short by exactly one on every thread. They are written
   as two index-friendly probes rather than the `(id=? OR conversation_id=?)` the
   detail query uses, because this one runs per row of the page.
   `/api/files` lists the caller's uploads from the `files` table (the queryable
-  index; see [res/sql/pg/1_chat.sql](../../res/sql/pg/1_chat.sql) and
+  index; see [res/sql/sqlite/1_chat.sql](../../res/sql/sqlite/1_chat.sql) and
   `file::db_list_files`): `?page` / `?size` (default 0 / 20, max 100),
   `?sort=time|name` (default time), `?order=asc|desc` (default desc), returning
   `total` / `page` / `size`. Each entry carries `filename`, `mime_type`,
@@ -114,7 +109,7 @@ bytes ──transport.parse──▶ Packet ──Dispatcher──▶ Event stre
 - **`chat.{hpp,cpp}`** — `Chat`. The transport-agnostic core. It deals in
   `llm::Event` (streamed through an `llm::EventHandler`) and plain result structs,
   never in `server::Request`/`Response` or SSE/JSON frames. Owns the turn engine:
-  `response()`, `live_response()`, and `persist_history()` (the one history write —
+  `response()` and `persist_history()` (the one history write —
   per turn it inserts the opening question into `messages` and seeds a thin
   `conversations` row keyed on that question's id; the chat schema and its
   per-backend table/key bridge are documented in

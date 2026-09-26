@@ -1,5 +1,12 @@
 # Colors & Fonts
 
+> **Clients in this repo (2026-09).** The web client (`htdoc/`), Qt, Electron and
+> the WeChat Mini Program left this repo when it narrowed to the phone; they are
+> preserved at the `v2-full-2026-08` tag. The phone apps are moving to a native
+> shell around the [mirobody-web](https://github.com/thetahealth/mirobody-web)
+> build in a WebView, so the web renderer becomes theirs too. Rows below for the
+> removed clients are history.
+
 <style>
 /* Color swatches — render in VSCode's markdown preview; GitHub strips them
    harmlessly (the hex text still reads fine). */

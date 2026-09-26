@@ -135,7 +135,6 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
             // Notify the client the file is now in object storage.
             out.send(UploadEvent(att.filename, ctype, url, key));
 
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
             // New-schema deployments index the upload in the `files` table (the
             // queryable index GET /api/files reads). Insert the row up front;
             // text_key is filled below once extraction finishes. Best-effort:
@@ -149,7 +148,6 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
                                        att.filename.c_str(), e.what());
                 }
             }
-#endif
 
             // Extract text from non-text uploads (image/PDF/...) once, now, and
             // persist it next to the original as <key>.trans, so reads fetch it
@@ -202,7 +200,6 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
                 }
             }
 
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
             // Extraction has run: fill text_key on the row inserted above
             // (no-op when none was extracted / on a null db). Best-effort.
             if (db_ != nullptr && user_id > 0 && !ref.text_key.empty()) {
@@ -213,7 +210,6 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
                                        att.filename.c_str(), e.what());
                 }
             }
-#endif
 
             add_str(f, "url",      ref.url, a);
             add_str(f, "file_key", key, a);
@@ -224,50 +220,6 @@ void Dispatcher::store_attachments(Packet& pkt, std::int64_t user_id, Responder&
                 file::record(*cache_, user_id, ref);
             }
 
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-            // Legacy-schema deployments also keep th_files as the uploads
-            // ledger the Python stack reads. Mirror its insert shape:
-            // user_id as a decimal string (text column), file_name through
-            // the schema's encrypt_content(), file_content left at its
-            // '{}' default. The key is content-addressed, so a re-upload
-            // upserts on file_key rather than duplicating the row.
-            // Best-effort like the cache index: a failure is logged, never
-            // fails the turn.
-            if (db_ != nullptr && user_id > 0) {
-                try {
-                    // content_hash: SHA-256 hex of the file bytes, the same
-                    // value the legacy stack computes for its dedup lookups.
-                    // Re-set on conflict so rows from before the column was
-                    // filled get backfilled by a re-upload.
-                    //
-                    // original_text / text_length: this turn's extraction
-                    // (UTF-8 byte count). encrypt_content('') is NULL, so
-                    // when nothing was extracted -- text mime, reuse path,
-                    // failed extraction -- the conflict arm keeps whatever
-                    // text the row already has instead of wiping it.
-                    db_->execute(
-                        "INSERT INTO th_files"
-                        " (user_id, query_user_id, file_name, file_type, file_key, scene,"
-                        "  created_source, content_hash, original_text, text_length)"
-                        " VALUES (?, ?, encrypt_content(?), ?, ?, 'chat',"
-                        "  'mirobody', ?, encrypt_content(?), ?)"
-                        " ON CONFLICT (file_key) DO UPDATE SET"
-                        "  file_name = EXCLUDED.file_name,"
-                        "  file_type = EXCLUDED.file_type,"
-                        "  content_hash = EXCLUDED.content_hash,"
-                        "  original_text = COALESCE(EXCLUDED.original_text, th_files.original_text),"
-                        "  text_length = CASE WHEN EXCLUDED.original_text IS NULL"
-                        "                     THEN th_files.text_length ELSE EXCLUDED.text_length END,"
-                        "  updated_at = now();",
-                        {std::to_string(user_id), std::to_string(user_id), att.filename, ctype, key,
-                         storage::sha256_hex(att.data.str()), extracted_text,
-                         static_cast<std::int64_t>(extracted_text.size())});
-                } catch (const std::exception& e) {
-                    platform::log_warn("chat: th_files record failed for '%s': %s",
-                                       att.filename.c_str(), e.what());
-                }
-            }
-#endif
         } else {
             add_str(f, "file_key", att.filename, a);   // no object store: metadata only
             // Still notify -- the file was received, just not durably stored
@@ -352,13 +304,6 @@ void Dispatcher::dispatch(Packet& pkt, std::int64_t user_id, Responder& out) {
                 if (cid > 0) out.send(ConversationEvent(cid));
             }
             chat_.response(cp.agent, cp.request, sink);
-            break;
-        }
-        case kOpLive: {
-            // The live path runs tools provider-side (MiroThinker), not through
-            // the local executor, so it needs no service handles threaded in.
-            LiveParams lp = LiveParams::parse(pkt);
-            chat_.live_response(lp.request, sink);
             break;
         }
         default:

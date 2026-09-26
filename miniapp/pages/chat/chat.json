@@ -1,8 +1,0 @@
-{
-  "navigationBarTitleText": "Mirobody",
-  "navigationBarBackgroundColor": "#f2efe9",
-  "backgroundColor": "#f2efe9",
-  "usingComponents": {
-    "settings-rows": "/components/settings-rows/settings-rows"
-  }
-}

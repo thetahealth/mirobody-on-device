@@ -1,9 +1,0 @@
-{
-  "desc": "Mini Program sitemap; see https://developers.weixin.qq.com/miniprogram/dev/reference/configuration/sitemap.html",
-  "rules": [
-    {
-      "action": "allow",
-      "page": "*"
-    }
-  ]
-}

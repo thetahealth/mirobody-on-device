@@ -14,7 +14,6 @@
 // strictly single-user core lets one user reach another's records, so it gets
 // direct coverage. Exercised against a real in-memory SQLite DB (the easy
 // backend to stand up with no server; mirrors tests/chat/persist_test.cpp).
-#if defined(MIROBODY_DATABASE_SQLITE)
 
 namespace {
 
@@ -211,4 +210,3 @@ TEST_CASE("resolve_health_subject requires the target to still be sharing", "[ci
     CHECK(circle::resolve_health_subject(c, 10, handle, false) == 0);
 }
 
-#endif   // MIROBODY_DATABASE_SQLITE

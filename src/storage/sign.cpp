@@ -174,22 +174,6 @@ std::string aws_sigv4_signature(const std::string& secret_key,
 
 //------------------------------------------------------------------------------
 
-std::string oss_signature(const std::string& secret_key, const std::string& string_to_sign) {
-    const auto mac = hmac_sha1(secret_key, string_to_sign);
-    return base64_encode(mac.data(), mac.size());
-}
-
-//------------------------------------------------------------------------------
-
-std::string azure_signature(const std::string& account_key_base64,
-                            const std::string& string_to_sign) {
-    const std::string key = base64_decode(account_key_base64);
-    const auto mac = hmac_sha256(key, string_to_sign);
-    return base64_encode(mac.data(), mac.size());
-}
-
-//------------------------------------------------------------------------------
-
 namespace {
 
 // Decode the five predefined XML entities. Numeric character references are

@@ -40,8 +40,8 @@ endif()
 #         ChartEvent), the MCP tool registry, the LLM clients that speak HTTP over
 #         libcurl, transcode, storage, memory.
 #
-#   OFF (desktop / server, including the Qt and Electron frontends)
-#       - Full front door.
+#   OFF (desktop development build)
+#       - Full front door: the loopback HTTP/SSE server, CLIs and tests.
 #
 # Android and iOS default to OFF for now: their entry points ARE the embedded
 # loopback server (src/platform/android_jni.cpp, src/platform/ios_bridge.mm both
@@ -79,12 +79,6 @@ find_package(yaml-cpp CONFIG QUIET)
 if(NOT yaml-cpp_FOUND)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(YAMLCPP REQUIRED IMPORTED_TARGET yaml-cpp)
-endif()
-
-find_package(hiredis CONFIG QUIET)
-if(NOT hiredis_FOUND)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(HIREDIS REQUIRED IMPORTED_TARGET hiredis)
 endif()
 
 # Image codecs for the src/transcode image transcoder (Aliyun Qwen-VL input compliance).
@@ -161,80 +155,14 @@ if(MIROBODY_ENABLE_OCR AND NOT MIROBODY_ENABLE_PDF)
     message(FATAL_ERROR "MIROBODY_ENABLE_OCR requires MIROBODY_ENABLE_PDF (OCR only runs on rasterized PDF pages)")
 endif()
 
-# --- Database backend selection -----------------------------------------------
-# Exactly one SQL backend is linked into mirobody_core per build. See the
-# "Database backends" section in the README for the policy. On mobile the
-# default is SQLITE; on desktop / server it is POSTGRESQL.
-
-if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
-    set(_MIROBODY_DB_DEFAULT "SQLITE")
-else()
-    set(_MIROBODY_DB_DEFAULT "POSTGRESQL")
-endif()
-
-set(MIROBODY_DATABASE_BACKEND "${_MIROBODY_DB_DEFAULT}" CACHE STRING
-    "SQL backend: SQLITE (mobile), DUCKDB, POSTGRESQL, POSTGRESQL_LEGACY, MYSQL, CLICKHOUSE")
-set_property(CACHE MIROBODY_DATABASE_BACKEND PROPERTY STRINGS
-    SQLITE DUCKDB POSTGRESQL POSTGRESQL_LEGACY MYSQL CLICKHOUSE)
-
-if(NOT MIROBODY_DATABASE_BACKEND)
-    message(FATAL_ERROR
-        "MIROBODY_DATABASE_BACKEND must be set. "
-        "On desktop / server pick DUCKDB, POSTGRESQL, MYSQL, or CLICKHOUSE.")
-endif()
-
-if(ANDROID OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS)
-    if(NOT MIROBODY_DATABASE_BACKEND MATCHES "^(SQLITE|DUCKDB)$")
-        message(FATAL_ERROR
-            "On mobile, MIROBODY_DATABASE_BACKEND must be SQLITE or DUCKDB "
-            "(got: '${MIROBODY_DATABASE_BACKEND}').")
-    endif()
-endif()
-
-if(MIROBODY_DATABASE_BACKEND STREQUAL "SQLITE")
-    find_package(SQLite3 REQUIRED)
-    set(_MIROBODY_DB_SOURCE src/database/sqlite.cpp)
-    set(_MIROBODY_DB_LINK   SQLite::SQLite3)
-    set(_MIROBODY_DB_SQLDIR sqlite)
-elseif(MIROBODY_DATABASE_BACKEND STREQUAL "DUCKDB")
-    find_package(duckdb CONFIG REQUIRED)
-    set(_MIROBODY_DB_SOURCE src/database/duckdb.cpp)
-    # vcpkg's duckdb port exposes duckdb_static and duckdb_shared targets;
-    # prefer the static one to keep the desktop binary self-contained, fall
-    # back to the shared one if only that variant was built.
-    if(TARGET duckdb_static)
-        set(_MIROBODY_DB_LINK duckdb_static)
-    else()
-        set(_MIROBODY_DB_LINK duckdb_shared)
-    endif()
-    set(_MIROBODY_DB_SQLDIR duckdb)
-elseif(MIROBODY_DATABASE_BACKEND STREQUAL "POSTGRESQL")
-    find_package(PostgreSQL REQUIRED)
-    set(_MIROBODY_DB_SOURCE src/database/pg.cpp)
-    set(_MIROBODY_DB_LINK   PostgreSQL::PostgreSQL)
-    set(_MIROBODY_DB_SQLDIR pg)
-elseif(MIROBODY_DATABASE_BACKEND STREQUAL "POSTGRESQL_LEGACY")
-    # Same libpq client as POSTGRESQL, but the DDL is loaded from
-    # res/sql/pg_legacy instead of res/sql/pg (an older schema variant).
-    # Defines MIROBODY_DATABASE_PG_LEGACY; connection code that is common to
-    # both PG variants guards on (MIROBODY_DATABASE_PG || MIROBODY_DATABASE_PG_LEGACY).
-    find_package(PostgreSQL REQUIRED)
-    set(_MIROBODY_DB_SOURCE src/database/pg.cpp)
-    set(_MIROBODY_DB_LINK   PostgreSQL::PostgreSQL)
-    set(_MIROBODY_DB_SQLDIR pg_legacy)
-elseif(MIROBODY_DATABASE_BACKEND STREQUAL "MYSQL")
-    find_package(unofficial-libmysql CONFIG REQUIRED)
-    set(_MIROBODY_DB_SOURCE src/database/mysql.cpp)
-    set(_MIROBODY_DB_LINK   unofficial::libmysql::libmysql)
-    set(_MIROBODY_DB_SQLDIR mysql)
-elseif(MIROBODY_DATABASE_BACKEND STREQUAL "CLICKHOUSE")
-    # TODO: find_package(clickhouse-cpp CONFIG REQUIRED) once the dependency
-    # lands in vcpkg.json / system packages. Today the backend is a stub that
-    # throws at runtime, so no client library is linked.
-    set(_MIROBODY_DB_SOURCE src/database/clickhouse.cpp)
-    set(_MIROBODY_DB_LINK   )
-    set(_MIROBODY_DB_SQLDIR clickhouse)
-endif()
+# --- Database -----------------------------------------------------------------
+# SQLite is the one SQL backend: the phone keeps its record in a single file, and
+# the development build uses the same schema so what the tests cover is what ships.
+# The server-side backends (Postgres and friends) live in the main mirobody repo.
+find_package(SQLite3 REQUIRED)
+set(_MIROBODY_DB_SOURCE src/database/sqlite.cpp)
+set(_MIROBODY_DB_LINK   SQLite::SQLite3)
+set(_MIROBODY_DB_SQLDIR sqlite)
 
 find_package(BLAS)
 
@@ -315,15 +243,9 @@ set(MIROBODY_CORE_SOURCES
     src/client/gcp_auth.cpp
     src/storage/storage.cpp
     src/storage/sign.cpp
-    src/storage/aws_s3.cpp
-    src/storage/aliyun_oss.cpp
-    src/storage/azure_blob.cpp
     src/storage/local_storage.cpp
     src/memory/memory.cpp
     src/memory/local_memory.cpp
-    src/memory/remote_memory.cpp
-    src/memory/mem0_memory.cpp
-    src/memory/zep_memory.cpp
     src/transcode/image.cpp
     src/transcode/document.cpp
     src/fhir/units/families.cpp
@@ -341,29 +263,6 @@ set(MIROBODY_CORE_SOURCES
     src/health/vendor/vendor.cpp
     src/health/vendor/oauth2.cpp
     src/health/vendor/registry.cpp
-    src/health/vendor/platform/rook.cpp
-    src/health/vendor/platform/spike.cpp
-    src/health/vendor/platform/terra.cpp
-    src/health/vendor/platform/junction.cpp
-    src/health/vendor/platform/wefitter.cpp
-    src/health/vendor/platform/lexisnexis.cpp
-    src/health/vendor/platform/thryve.cpp
-    src/health/vendor/platform/validic.cpp
-    src/health/vendor/platform/human_api.cpp
-    src/health/vendor/platform/vitalera.cpp
-    src/health/vendor/platform/open_wearables.cpp
-    src/health/vendor/platform/redox.cpp
-    src/health/vendor/platform/particle_health.cpp
-    src/health/vendor/platform/healthconnect.cpp
-    src/health/vendor/platform/metriport.cpp
-    src/health/vendor/phone/huawei.cpp
-    src/health/vendor/device/fitbit.cpp
-    src/health/vendor/device/withings.cpp
-    src/health/vendor/device/garmin.cpp
-    src/health/vendor/device/dexcom.cpp
-    src/health/vendor/device/oura.cpp
-    src/health/vendor/device/whoop.cpp
-    src/health/vendor/device/polar.cpp
     src/health/vendor/ehr/ehr.cpp
     src/health/vendor/ehr/directory.cpp
     src/llm/event.cpp
@@ -387,21 +286,13 @@ set(MIROBODY_HTTP_SOURCES
     src/server/router.cpp
     src/chat/service.cpp
     src/chat/transport/sse.cpp
-    src/chat/transport/ws.cpp
-    src/chat/transport/mqtt.cpp
     src/circle/service.cpp
     src/mcp/service.cpp
     src/oauth/service.cpp
     src/user/service.cpp
-    src/user/tanka.cpp
     src/health/vendor_service.cpp
-    src/health/werun.cpp
     src/health/ehr_connect.cpp
     src/fhir/rest.cpp
-    # Realtime / voice LLM lanes: WebSocket upstreams via client/websocket_client.
-    src/client/websocket_client.cpp
-    src/llm/gemini_live.cpp
-    src/llm/openai_realtime.cpp
 )
 
 if(NOT MIROBODY_MOBILE)
@@ -413,9 +304,8 @@ target_include_directories(mirobody_core PUBLIC src)
 
 # --- On-device LLM (src/llm/local.cpp: llama.cpp + a GGUF model) --------------
 #
-# One switch for the whole repo: qt/CMakeLists.txt reads the same option, so the
-# frontends can't disagree about whether the engine exists. src/llm/local.cpp
-# compiles a stub when this is OFF, so the default build needs no llama.cpp.
+# src/llm/local.cpp compiles a stub when this is OFF, so the default build needs
+# no llama.cpp.
 #
 # LLAMA_CPP_DIR points at an SDK dir: include/llama.h + lib/. Both layouts work —
 # a shared build (one libllama) as the desktops use, and a static build (libllama
@@ -460,9 +350,8 @@ if(MIROBODY_ONDEVICE_LLM)
     # which reads like a bug in our code rather than a stale dependency.
     #
     # Worth a check rather than trusting the checkout, because a stale SDK outlives its
-    # source: qt/build-qt.* reuse an assembled SDK whenever the archive is merely
-    # present, and neither that script nor harmony/build-llama.* updates an existing
-    # llama.cpp clone. Whitespace is flattened first so the match does not depend on how
+    # source: the per-platform build-llama.* scripts reuse an assembled SDK and do not
+    # update an existing llama.cpp clone. Whitespace is flattened first so the match does not depend on how
     # the declaration happens to be wrapped.
     file(READ "${LLAMA_CPP_DIR}/include/llama.h" _llama_h)
     string(REGEX REPLACE "[ \t\r\n]+" "" _llama_h_flat "${_llama_h}")
@@ -511,18 +400,10 @@ if(MIROBODY_ONDEVICE_LLM)
     message(STATUS "mirobody_core: on-device LLM ON -> ${LLAMA_LIB}")
 endif()
 
-# Expose the selected backend to C++ as a presence macro so code can switch on
-# the linked backend at compile time, e.g.
-#     #if defined(MIROBODY_DATABASE_PG)
-# Exactly one is defined, named after the res/sql subdirectory:
-#     MIROBODY_DATABASE_PG / _PG_LEGACY / _SQLITE / _DUCKDB / _MYSQL / _CLICKHOUSE
-# Variants that share a client (PG and PG_LEGACY both use libpq) are handled by
-# the consuming code, which guards on both — see main.cpp / server/server.cpp.
-# MIROBODY_DATABASE_BACKEND_DIR is the matching res/sql/<dir> subdirectory the
-# schema loader reads (see main.cpp).
-string(TOUPPER "${_MIROBODY_DB_SQLDIR}" _MIROBODY_DB_SQLDIR_UPPER)
+# MIROBODY_DATABASE_BACKEND_DIR is the res/sql/<dir> subdirectory the schema
+# loader reads (see src/database/schema.cpp).
 target_compile_definitions(mirobody_core PUBLIC
-    MIROBODY_DATABASE_${_MIROBODY_DB_SQLDIR_UPPER}=1
+    MIROBODY_DATABASE_SQLITE=1
     MIROBODY_DATABASE_BACKEND_DIR="${_MIROBODY_DB_SQLDIR}")
 
 # --- MCP tools (Option A: glob + self-registration) ---------------------------
@@ -702,47 +583,6 @@ else()
     target_link_libraries(mirobody_core PUBLIC PkgConfig::YAMLCPP)
 endif()
 
-if(hiredis_FOUND)
-    # vcpkg's hiredis port exposes hiredis::hiredis (and hiredis::hiredis_static).
-    if(TARGET hiredis::hiredis_static)
-        target_link_libraries(mirobody_core PUBLIC hiredis::hiredis_static)
-    elseif(TARGET hiredis::hiredis)
-        target_link_libraries(mirobody_core PUBLIC hiredis::hiredis)
-    else()
-        target_link_libraries(mirobody_core PUBLIC hiredis)
-    endif()
-else()
-    target_link_libraries(mirobody_core PUBLIC PkgConfig::HIREDIS)
-endif()
-
-# --- hiredis SSL/TLS (optional) -----------------------------------------------
-# hiredis ships TLS support in a separate library (libhiredis_ssl) that wraps
-# OpenSSL. It is detected independently of how hiredis itself was found, since
-# Debian/Ubuntu expose no pkg-config/CMake config for it but do install the
-# header + lib at standard paths. When present we link it and define
-# MIROBODY_HAS_HIREDIS_SSL so src/cache/cache.cpp compiles the rediss:// path;
-# when absent (e.g. Windows vcpkg without the hiredis[ssl] feature, or mobile),
-# REDIS_SSL=true is rejected at runtime as before. Prefer vcpkg's CMake target
-# if it exists, else fall back to find_library/find_path.
-if(TARGET hiredis::hiredis_ssl)
-    target_link_libraries(mirobody_core PUBLIC hiredis::hiredis_ssl)
-    target_compile_definitions(mirobody_core PUBLIC MIROBODY_HAS_HIREDIS_SSL=1)
-    message(STATUS "hiredis SSL support: enabled (CMake target)")
-else()
-    find_library(HIREDIS_SSL_LIBRARY NAMES hiredis_ssl)
-    find_path(HIREDIS_SSL_INCLUDE_DIR NAMES hiredis/hiredis_ssl.h)
-    if(HIREDIS_SSL_LIBRARY AND HIREDIS_SSL_INCLUDE_DIR)
-        target_link_libraries(mirobody_core PUBLIC ${HIREDIS_SSL_LIBRARY})
-        target_include_directories(mirobody_core PUBLIC ${HIREDIS_SSL_INCLUDE_DIR})
-        # hiredis_ssl is implemented on top of OpenSSL; OpenSSL::SSL/Crypto are
-        # already linked above, satisfying its symbols.
-        target_compile_definitions(mirobody_core PUBLIC MIROBODY_HAS_HIREDIS_SSL=1)
-        message(STATUS "hiredis SSL support: enabled (${HIREDIS_SSL_LIBRARY})")
-    else()
-        message(STATUS "hiredis SSL support: not found (REDIS_SSL=true will be rejected at runtime)")
-    endif()
-endif()
-
 if(TARGET rapidjson)
     target_link_libraries(mirobody_core PUBLIC rapidjson)
 elseif(RAPIDJSON_INCLUDE_DIR)
@@ -869,48 +709,23 @@ else()
     endif()
 endif()
 
-# Host-binding build options, declared up front so the shared PIC check below
-# sees both. MIROBODY_BUILD_PYTHON: the pybind11 wheel module (off; flipped on by
-# pyproject.toml). MIROBODY_BUILD_SHARED: libmirobody, the C-ABI shared library
-# for FFI hosts (on by default on desktop).
-option(MIROBODY_BUILD_PYTHON "Build the Python extension module (.whl)" OFF)
+# MIROBODY_BUILD_SHARED: libmirobody, the C-ABI shared library for FFI hosts
+# (on by default on desktop; the mobile platforms ship their own target).
 option(MIROBODY_BUILD_SHARED "Build libmirobody, the C-ABI shared library for FFI hosts" ON)
-option(MIROBODY_BUILD_JNI "Build mirobody_jni, the desktop JNI shim (needs a JDK)" OFF)
 
-# Anything that links the static core/objects into a shared object (the Python
-# module, libmirobody, the JNI shim) needs them position-independent. No-op on
-# Windows (everything is relocatable); required on Linux/macOS.
-if(MIROBODY_BUILD_PYTHON OR MIROBODY_BUILD_SHARED OR MIROBODY_BUILD_JNI)
+# Linking the static core/objects into a shared object needs them
+# position-independent. No-op on Windows; required on Linux/macOS.
+if(MIROBODY_BUILD_SHARED)
     set_property(TARGET mirobody_core  PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET mcp_tools      PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET mcp_resources  PROPERTY POSITION_INDEPENDENT_CODE ON)
     set_property(TARGET agent_impls    PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
 
-# --- Python extension (Option #2: pybind11 + scikit-build-core) ---------------
-# Builds mirobody._mirobody, a CPython extension wrapping the C++ Server. Off by
-# default; the wheel build flips it on via pyproject.toml (scikit-build-core).
-# See python/README.md. Like the mobile targets, the self-registering res/*
-# objects are fed straight into the module so the tools/agents survive linking.
-if(MIROBODY_BUILD_PYTHON)
-    find_package(pybind11 CONFIG REQUIRED)
-
-    pybind11_add_module(_mirobody
-        src/platform/python_bridge.cpp
-        $<TARGET_OBJECTS:mcp_tools>
-        $<TARGET_OBJECTS:mcp_resources>
-        $<TARGET_OBJECTS:agent_impls>)
-    target_link_libraries(_mirobody PRIVATE mirobody_core)
-
-    # scikit-build-core installs into the wheel's platlib root, so this drops
-    # _mirobody.<abi>.{pyd,so} inside the `mirobody` package next to __init__.py.
-    install(TARGETS _mirobody LIBRARY DESTINATION mirobody)
-endif()
-
 # --- C-ABI shared library (Java / Go / C# / Rust / … via FFI) ------------------
 # libmirobody.{dll,so,dylib} exports the flat C functions in src/mirobody.h
 # (implemented in c_api.cpp). One artifact, consumed by every language with a
-# foreign-function interface — see clients under bindings/. On Windows the
+# foreign-function interface. On Windows the
 # export table is restricted to the four C functions via mirobody.def (rather
 # than WINDOWS_EXPORT_ALL_SYMBOLS, which would also publish ~1000 mangled C++
 # symbols). Built by default on desktop; skipped on mobile, which ship their own
@@ -930,32 +745,12 @@ if(MIROBODY_BUILD_SHARED AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iO
     endif()
 endif()
 
-# --- JNI shim (desktop JVM, in-process) ---------------------------------------
-# mirobody_jni.{dll,so,dylib} exports the JNI symbols for the Java class
-# ai.thetahealth.mirobody.NativeBridge (src/platform/jni_bridge.cpp), the same
-# class the Android app binds. This is the supported in-process path for desktop
-# HotSpot JVMs, where the Panama FFM downcall into libwebsockets crashes (see
-# bindings/README.md). Off by default since it needs a JDK; build-shared.cmd
-# turns it on when JAVA_HOME is set. The bridge links mirobody_core statically,
-# so the only runtime deps are the vcpkg shared libraries.
-if(MIROBODY_BUILD_JNI AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
-    find_package(JNI REQUIRED)
-    add_library(mirobody_jni SHARED
-        src/platform/jni_bridge.cpp
-        $<TARGET_OBJECTS:mcp_tools>
-        $<TARGET_OBJECTS:mcp_resources>
-        $<TARGET_OBJECTS:agent_impls>)
-    target_link_libraries(mirobody_jni PRIVATE mirobody_core ${JNI_LIBRARIES})
-    target_include_directories(mirobody_jni PRIVATE ${JNI_INCLUDE_DIRS})
-endif()
-
-# The CLIs and tests assume the full core: gemini_live / openai_realtime drive
-# the WebSocket LLM lanes and the suite covers the router, so both are skipped
-# when the front door is off. That build exists to produce a library for an
+# The CLIs and tests assume the full core (the suite covers the router), so both
+# are skipped when the front door is off. That build exists to produce a library for an
 # embedded host, not to be developed against.
 option(MIROBODY_BUILD_TOOLS "Build debug CLIs under cli/" ON)
 if(MIROBODY_BUILD_TOOLS AND NOT MIROBODY_MOBILE AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
-    foreach(_tool mirothinker openai_chat openai_responses gemini gemini_live openai_realtime google_jwt firebase_jwt jwt_keygen fernet mcp agent aws_s3 aliyun_oss azure_blob vendor image document fhir indicator file_parser file_rekey)
+    foreach(_tool mirothinker openai_chat openai_responses gemini google_jwt firebase_jwt jwt_keygen fernet mcp agent vendor image document fhir indicator file_parser file_rekey)
         add_executable(${_tool} cli/${_tool}.cpp)
         target_link_libraries(${_tool} PRIVATE mirobody_core)
         target_include_directories(${_tool} PRIVATE cli)
@@ -975,15 +770,4 @@ option(MIROBODY_BUILD_TESTS "Build unit tests" ON)
 if(MIROBODY_BUILD_TESTS AND NOT MIROBODY_MOBILE AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
     enable_testing()
     add_subdirectory(tests)
-endif()
-
-# --- Qt desktop frontend (qt/) ------------------------------------------------
-# A standalone Qt Quick (QML) desktop client that talks to a running mirobody
-# server over its HTTP/SSE API -- the native counterpart of the web client in
-# res/htdoc. It does NOT link mirobody_core (it's a pure API client), so it has
-# its own dependency set (Qt6) and its own CMake subtree; it builds only when
-# explicitly enabled and only on desktop. See qt/README.md.
-option(MIROBODY_BUILD_QT "Build the Qt Quick desktop frontend (qt/)" OFF)
-if(MIROBODY_BUILD_QT AND NOT ANDROID AND NOT (CMAKE_SYSTEM_NAME STREQUAL "iOS" OR IOS))
-    add_subdirectory(qt)
 endif()

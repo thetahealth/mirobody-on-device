@@ -5,7 +5,6 @@
 #include <rapidjson/writer.h>
 
 #include <cstdint>
-#include <ctime>
 #include <string>
 #include <vector>
 
@@ -27,21 +26,6 @@ std::string str_member(const rapidjson::Value& v, const char* key) {
     const rapidjson::Value& m = v[key];
     if (m.IsString()) return std::string(m.GetString(), m.GetStringLength());
     return std::string();
-}
-
-// Format Unix epoch seconds as an ISO-8601 UTC instant (WeRun timestamps are epoch
-// seconds; FHIR effectiveDateTime wants an ISO string).
-std::string unix_to_iso(std::int64_t secs) {
-    std::time_t t = static_cast<std::time_t>(secs);
-    std::tm tm;
-#ifdef _WIN32
-    gmtime_s(&tm, &t);
-#else
-    gmtime_r(&t, &tm);
-#endif
-    char buf[32];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%SZ", &tm);
-    return std::string(buf);
 }
 
 // Serialize one FHIR R4 Observation. `integral` prints the value as an integer
@@ -183,23 +167,6 @@ void map_dexcom(vendor::DataDomain domain, const rapidjson::Value& records,
     }
 }
 
-// WeChat WeRun decrypted payload is { "stepInfoList": [ { timestamp, step }, ... ],
-// "watermark": {...} } — one entry per day, timestamp in epoch seconds. Steps only.
-void map_werun(const rapidjson::Value& step_info, const std::string& subject,
-               std::vector<std::string>& out) {
-    for (const rapidjson::Value& it : step_info.GetArray()) {
-        if (!it.IsObject()) continue;
-        double step = 0.0;
-        if (!num_member(it, "step", step)) continue;
-        double ts = 0.0;
-        const std::string when = num_member(it, "timestamp", ts)
-                                     ? unix_to_iso(static_cast<std::int64_t>(ts)) : std::string();
-        out.push_back(build_observation(
-            "55423-8", "Number of steps in 24 hour Measured", "activity", step,
-            /*integral=*/true, "steps", "{steps}", when, subject));
-    }
-}
-
 }  // namespace
 
 //------------------------------------------------------------------------------
@@ -231,12 +198,6 @@ std::vector<std::string> vendor_json_to_observations(
                 unit.assign(u->value.GetString(), u->value.GetStringLength());
             }
             map_dexcom(domain, recs->value, unit, subject_ref, out);
-        }
-    } else if (vendor_id == "werun") {
-        // WeChat WeRun (steps only); domain is ignored (always Activity).
-        rapidjson::Value::ConstMemberIterator si = doc.FindMember("stepInfoList");
-        if (si != doc.MemberEnd() && si->value.IsArray()) {
-            map_werun(si->value, subject_ref, out);
         }
     }
     return out;

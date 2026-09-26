@@ -17,12 +17,12 @@ Library list:
 
 | Package                  | Purpose                                                      | License |
 | ------------------------ | ------------------------------------------------------------ | ------- |
-| libwebsockets            | HTTP + WebSocket server / client                             | MIT |
+| libwebsockets            | The optional loopback HTTP front door (development build; off in the mobile profile) | MIT |
 | libcurl (OpenSSL backend)| Upstream HTTPS requests                                      | MIT/X (curl) |
 | OpenSSL                  | TLS for libwebsockets and libcurl                           | Apache-2.0 |
 | RapidJSON                | JSON parsing / serialization                                 | MIT |
 | yaml-cpp                 | Config file parsing                                          | MIT |
-| hiredis                  | Redis protocol client (remote KV / cache backend)            | BSD-3-Clause |
+| SQLite                   | The record: one database file                                | Public domain |
 | libjpeg / libpng / libtiff / libwebp | Image decode / encode (image transcoder)        | BSD-3 / zlib / IJG (all permissive) |
 | xlnt                     | `.xlsx` reader for the document transcoder (auto-detected; required on Windows via vcpkg, optional elsewhere) | MIT |
 | PDFium *(optional)*      | PDF text extraction + page rasterization; enable with `-DMIROBODY_ENABLE_PDF=ON` (prebuilt binary, e.g. bblanchon/pdfium-binaries) | BSD-3-Clause (binaries wrapped MIT) |
@@ -38,35 +38,21 @@ re-checked at the point they are actually built (e.g. via each vcpkg port's inst
 `copyright` file). Tesseract's `*.traineddata` language files bundled under `res/` are a
 separate artifact (Apache-2.0, from `tessdata_fast` / `tessdata_best`).
 
-### Database client libraries
+### Database
 
-Exactly one of these is linked into `mirobody_core`, picked by
-`MIROBODY_DATABASE_BACKEND`. SQLite is the mobile default; `POSTGRESQL`
-(the libpq client with the modern `res/sql/pg` schema) is the desktop
-default - install only the one(s) you actually plan to build against.
-
-| Package                       | Direct download                                                          |
-| ----------------------------- | ------------------------------------------------------------------------ |
-| SQLite amalgamation           | https://sqlite.org/download.html                                         |
-| PostgreSQL (ships `libpq`)    | https://www.postgresql.org/download/                                     |
-| Oracle MySQL Connector/C      | https://dev.mysql.com/downloads/connector/c/                             |
-| MariaDB Connector/C (LGPL)    | https://mariadb.com/downloads/connectors/connectors-data-access/c-connector |
-| DuckDB C/C++ library          | https://duckdb.org/docs/installation/                                    |
+SQLite is the only backend, and it is linked into every build: the phone keeps
+its record in one file, and the development build uses the same schema
+([res/sql/sqlite](../res/sql/sqlite)) so what the tests cover is what ships. The
+server-side databases (Postgres and friends) live in the
+[main mirobody repo](https://github.com/thetahealth/mirobody).
 
 ### vcpkg manifest *(Windows only)*
 
-[`vcpkg.json`](../vcpkg.json) lists every backend so a fresh Windows checkout
-pulls them all; the ones you don't select get compiled by vcpkg and ignored
-at link time. To trim install time, drop the unwanted entries from
-`vcpkg.json` before configuring - or move them into the parked `$dependencies`
-array (vcpkg ignores `$`-prefixed fields), which is how `duckdb` and
-`libmysql` are currently kept out of the default build.
-
-If you'd rather not use vcpkg on Windows either, install the client library
-directly and point cmake at it via `-DCMAKE_PREFIX_PATH=<install-root>`. The
-CMake `find_package` calls currently use vcpkg-style target names, so the
-MySQL and DuckDB branches in `CMakeLists.txt` may need a small tweak when
-consuming a non-vcpkg install.
+[`vcpkg.json`](../vcpkg.json) lists the dependencies a fresh Windows checkout
+pulls. `tesseract` is parked in the `$dependencies` array (vcpkg ignores
+`$`-prefixed fields) because OCR is off by default. If you'd rather not use vcpkg,
+install the libraries directly and point cmake at them via
+`-DCMAKE_PREFIX_PATH=<install-root>`.
 
 ## Toolchain
 
@@ -157,7 +143,7 @@ C:\Tools\vcpkg\vcpkg.exe x-update-baseline
 
 #### 3. Set environment variables
 
-Target **arch and backend are command-line tokens** to `build.cmd` (see step 4),
+The target **arch is a command-line token** to `build.cmd` (see step 4),
 not environment variables. The variables below only point `build.cmd` at your
 toolchain; all are optional. Set them once in your user environment (PowerShell
 `[Environment]::SetEnvironmentVariable`, `setx` from cmd, or *System Properties
@@ -186,27 +172,22 @@ Override these via the environment rather than editing the script. To switch
 [Environment]::SetEnvironmentVariable("VCPKG_ROOT", $null, "User")
 ```
 
-The optional lanes (Qt client, Android, HarmonyOS, on-device LLM, terminology and
-fine-tuning tooling) take a few more, listed together under
+The optional lanes (Android, HarmonyOS, the on-device LLM, the terminology
+tooling) take a few more, listed together under
 [Environment variables](#environment-variables) below.
 
 #### 4. Build
 
 ```cmd
-build.cmd              :: host arch + POSTGRESQL        -> build\
-build.cmd legacy       :: POSTGRESQL_LEGACY             -> build-legacy\
-build.cmd sqlite       :: SQLITE                        -> build-sqlite\
-build.cmd legacy clean :: reconfigure that dir from scratch
-build.cmd -h           :: full token list (arch / backend / clean)
+build.cmd              :: host arch development build   -> build\
+build.cmd mobile       :: the HarmonyOS profile          -> build-mobile\
+build.cmd arm64        :: cross-compile                  -> build-arm64\
+build.cmd clean        :: reconfigure from scratch
+build.cmd -h           :: full token list
 ```
 
-Backend token: `pg` / `postgresql`, `legacy` / `pg_legacy`, `mysql`, `sqlite`,
-`duckdb`, `ck` / `clickhouse` (omit for the `POSTGRESQL` default). Arch
-token: `amd64` (default, the host) or `arm64` / `x86` to cross-compile. Each
-arch+backend combo lives in its own `build[-<arch>][-<backend>]` directory and
-they all share one `vcpkg_installed`, so you can keep several configured at once.
-
-Output: `build\mirobody.exe` (or `build-legacy\mirobody.exe`, … per backend).
+Output: `build\mirobody.exe` (the development server), `build\tests\mirobody_tests.exe`,
+and the debug CLIs.
 
 ### Linux / WSL / macOS
 
@@ -217,29 +198,24 @@ on Windows. CMake's `find_package` picks them up directly.
 # Debian / Ubuntu / WSL: core dependencies (always needed)
 sudo apt install build-essential cmake ninja-build pkg-config \
                  libwebsockets-dev libcurl4-openssl-dev libssl-dev \
-                 rapidjson-dev libyaml-cpp-dev libhiredis-dev \
-                 libjpeg-dev libpng-dev libtiff-dev libwebp-dev
+                 rapidjson-dev libyaml-cpp-dev libsqlite3-dev \
+                 libjpeg-dev libpng-dev libtiff-dev libwebp-dev catch2
 
 # Fedora / RHEL: core dependencies
 sudo dnf install gcc-c++ cmake ninja-build pkgconf-pkg-config \
                  libwebsockets-devel libcurl-devel openssl-devel \
-                 rapidjson-devel yaml-cpp-devel hiredis-devel \
-                 libjpeg-turbo-devel libpng-devel libtiff-devel libwebp-devel
+                 rapidjson-devel yaml-cpp-devel sqlite-devel \
+                 libjpeg-turbo-devel libpng-devel libtiff-devel libwebp-devel catch2-devel
 
 # macOS (Homebrew): core dependencies
 brew install cmake ninja pkg-config libwebsockets curl openssl@3 \
-             rapidjson yaml-cpp hiredis \
-             jpeg-turbo libpng libtiff webp
+             rapidjson yaml-cpp sqlite \
+             jpeg-turbo libpng libtiff webp catch2
 ```
 
-> **libwebsockets and response compression.** The packaged `libwebsockets` above
-> (apt / dnf / Homebrew) is built with `LWS_WITH_HTTP_STREAM_COMPRESSION` **off**,
-> so the server serves every response uncompressed — fine for local dev. The
-> [Docker image](../Dockerfile) builds libwebsockets from source with
-> `-DLWS_WITH_HTTP_STREAM_COMPRESSION=ON -DLWS_WITH_ZLIB=ON` (needs libwebsockets
-> >= 4.3.4 for CVE-2025-1866) so responses are gzip/deflated. Build it the same
-> way for any bandwidth-sensitive deployment; `find_package(libwebsockets CONFIG)`
-> resolves the source build over the system package when it's installed first.
+> **libwebsockets and response compression.** The packaged `libwebsockets`
+> (apt / dnf / Homebrew) is built with `LWS_WITH_HTTP_STREAM_COMPRESSION` off, so
+> the development server answers uncompressed. It only ever talks to loopback.
 
 The image codecs above also cover the document transcoder's only always-on
 external dep path (CSV is built-in, no library). The document transcoder's other
@@ -262,55 +238,32 @@ brew install tesseract                                                          
 # Legacy .xls (-DMIROBODY_ENABLE_XLS=ON): libxls has no package - vendor it.
 ```
 
-Then install **one** database client library matching the backend you
-plan to build against (PostgreSQL is the desktop default; SQLite isn't a
-desktop option; see the [Database backends](../src/database/README.md) doc for the
-full list):
+Then build via the wrapper:
 
 ```sh
-# PostgreSQL
-sudo apt install libpq-dev                        # Debian / Ubuntu / WSL
-sudo dnf install libpq-devel                      # Fedora / RHEL
-brew install libpq                                # macOS
-
-# MySQL (or libmysqlclient-dev / mysql-devel / mysql-client for Oracle MySQL)
-sudo apt install libmariadb-dev
-sudo dnf install mariadb-connector-c-devel
-brew install mariadb-connector-c
-
-# DuckDB: download a release from https://duckdb.org/docs/installation/
-# ClickHouse: stub backend today; no client library to install yet
-```
-
-Then build via the wrapper -- the backend is a command-line token (no env var),
-passed in any order with `clean`:
-
-```sh
-./build.sh             # host arch + POSTGRESQL        -> build/
-./build.sh legacy      # POSTGRESQL_LEGACY             -> build-legacy/
-./build.sh sqlite      # SQLITE                        -> build-sqlite/
-./build.sh legacy clean # reconfigure that dir from scratch
+./build.sh             # host arch development build   -> build/
+./build.sh mobile      # the HarmonyOS profile          -> build-mobile/
+./build.sh clean       # reconfigure from scratch
 ./build.sh -h          # full token list
 ```
 
-Tokens: `pg` / `postgresql`, `legacy` / `pg_legacy`, `mysql`, `sqlite`, `duckdb`,
-`ck` / `clickhouse` (omit for the `POSTGRESQL` default). Each backend
-builds into its own `build[-<backend>]` directory, so several can coexist;
+On macOS the wrapper adds Homebrew's keg-only `jpeg-turbo` to `CMAKE_PREFIX_PATH`.
 `build.sh` builds natively for the host arch.
 
 Or invoke CMake directly if you prefer:
 
 ```sh
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMIROBODY_DATABASE_BACKEND=POSTGRESQL
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-Output: `build/mirobody` (or `build-legacy/mirobody`, … per backend).
+Output: `build/mirobody` (the development server), `build/tests/mirobody_tests`, and
+the debug CLIs. Run the tests with `build/tests/mirobody_tests`.
 
 ### Runtime
 
 ```sh
-./mirobody                              # reads ./config.yml by default; override with --config <path> or MIROBODY_CONFIG
+./build/mirobody                        # from the repo root: config.example.yml, then ./config.yml, then env
 ./mirobody --help                       # also: -h, /?
 ```
 
@@ -321,8 +274,8 @@ shutdown.
 
 The desktop build needs at most the four in
 [Set environment variables](#3-set-environment-variables) above, and often none.
-Everything below belongs to an *optional* lane — the Qt client, Android,
-HarmonyOS, the on-device LLM, or the terminology / fine-tuning tooling — and tells
+Everything below belongs to an *optional* lane — Android, HarmonyOS, the
+on-device LLM, or the terminology tooling — and tells
 that lane where you installed its toolchain or put its reference data.
 
 **No script hardcodes a drive letter.** Each discovers what it can from the
@@ -332,40 +285,23 @@ wrong for your machine.
 
 | Variable | Lane | Points at | Default if unset |
 | -------- | ---- | --------- | ---------------- |
-| `QT_ROOT` | Qt desktop | Qt install root, scanned for `6.*\msvc*` | `%SystemDrive%\Qt` |
-| `QT_PREFIX` | Qt desktop | one specific Qt kit; skips the scan | the scan's newest hit |
 | `ANDROID_HOME` | Android | Android SDK root | `%LOCALAPPDATA%\Android\Sdk` |
 | `NDK_HOME` / `ANDROID_NDK_HOME` | Android | NDK for cross-compiling the deps (`.cmd` / `.sh` respectively) | the pinned NDK under `$ANDROID_HOME\ndk`, else the newest installed there |
 | `MIROBODY_NDK_PATH` | Android | space-free NDK mirror for Gradle | the mirror `build-app.cmd` makes (Windows only; `build-app.sh` passes `ANDROID_NDK_HOME` straight through) |
 | `GRADLE_BIN` | Android | `gradle` launcher (the one on PATH is usually too old) | the pinned Gradle under `%USERPROFILE%\.gradle\` |
 | `DEVECO_HOME` | HarmonyOS | DevEco Studio install root | `%ProgramFiles%\Huawei\DevEco Studio` |
 | `OHOS_SDK_ROOT` | HarmonyOS | the SDK dir *containing* `native\`; skips the DevEco probe | derived from `DEVECO_HOME` |
-| `LLAMA_SRC` | on-device LLM | llama.cpp checkout — one clone serves Qt, HarmonyOS and fine-tuning | `llama.cpp` beside the repo. `build-qt` clones it if missing; `harmony\build-llama` never does — it prints the `git clone` line and stops, so the checkout the device numbers were measured against stays pinned |
+| `LLAMA_SRC` | on-device LLM | llama.cpp checkout — one clone serves Android, iOS and HarmonyOS | `llama.cpp` beside the repo. `harmony\build-llama` never clones it — it prints the `git clone` line and stops, so the checkout the device numbers were measured against stays pinned |
 | `LLAMA_SDK_DIR` | on-device LLM (HarmonyOS) | where to assemble the cross-built SDK. Moving it off the default means naming it with `-DLLAMA_CPP_DIR` in `harmony\entry\build-profile.json5`, which the default exists to avoid | `harmony\prebuilt\llama-sdk\<abi>` — under the same `prebuilt\` parent as the vcpkg deps, found there by the module's CMake |
-| `LLAMA_CPP_DIR` | on-device LLM (Qt) | an already-built SDK; skips building one | built into `%USERPROFILE%\opt\llama-sdk-<backend>` on Windows, the build cache dir on POSIX |
-| `GLSLC` | Qt `vulkan` backend | `glslc.exe` | `%VULKAN_SDK%\Bin`, else newest under `VK_ROOT` |
-| `VK_ROOT` | Qt `vulkan` backend | root holding versioned Vulkan SDK installs | `%SystemDrive%\VulkanSDK` |
 | `MIROBODY_REF` | terminology | raw reference-data root for `indicator build-lexicon` / `build-units` | **none** - pass `--ref`, or the command exits 2 |
-| `REF_ROOT` | fine-tuning | the same root, for `fine-tuning/tool_gen.py` and `tool_coverage.py` | **none** - pass `--ref`, or the script exits |
-| `LF_HOME` | fine-tuning | LlamaFactory checkout | `LlamaFactory` beside the repo |
-| `LLAMA_BIN` | fine-tuning | dir holding `llama-quantize` | searched: a downloaded release beside the repo, then a build tree under `LLAMA_SRC`, then PATH |
-| `SAVE_DIR` | fine-tuning | trainer `output_dir` | `<LF_HOME>\saves\...` |
-| `OUT_DIR` | fine-tuning | where the built GGUFs land | `~\models` |
 
-`VULKAN_SDK` and `CUDA_PATH` are *read*, not set by you — their installers export
-them, and those two backends refuse to build without them.
-
-Non-path knobs live where they apply rather than here:
-`MIROBODY_DATABASE_BACKEND` under [Dependencies](#dependencies), `MIROBODY_CONFIG`
-under [Runtime](#runtime), `MIROBODY_VCPKG_CACHE` under
-[Set environment variables](#3-set-environment-variables), and
-`BASE_MODEL` / `QUANTS` / `LLAMA_RELEASE` / `LLAMA_BACKEND` / `TORCH_INDEX` /
-`GITHUB_TOKEN` in `python fine-tuning/tool_train.py --help`.
+Non-path knobs live where they apply rather than here: `MIROBODY_CONFIG` under
+[Runtime](#runtime) and `MIROBODY_VCPKG_CACHE` under
+[Set environment variables](#3-set-environment-variables).
 
 Each lane's own README repeats the two or three variables it needs, in context:
-[`qt/`](../qt/README.md), [`android/`](../android/README.md),
-[`harmony/`](../harmony/README.md), [`src/indicator/`](../src/indicator/README.md),
-[`docs/fine-tuning.md`](fine-tuning.md).
+[`android/`](../android/README.md), [`harmony/`](../harmony/README.md),
+[`src/indicator/`](../src/indicator/README.md).
 
 ## Building - Android
 
@@ -486,56 +422,12 @@ required), and embeds `mirobody.xcframework` via the C API above once you build 
 See [ios/README.md](../ios/README.md) for the `xcodegen generate` build steps,
 embedding instructions, and the Google-sign-in setup.
 
-## Building - Python wheel
+## Embedding - the C ABI
 
-`mirobody._mirobody` is a CPython extension (a pybind11 module wrapping
-`mirobody::Server`) packaged into a `.whl` by scikit-build-core. It exposes a
-`Server` class - start/stop the embedded server in-process from Python:
-
-```python
-import mirobody
-with mirobody.Server(listen_port=8080, openai_api_key="sk-...") as srv:
-    print("listening on", srv.listen_port())
-```
-
-Build it with [build-python.cmd](../build-python.cmd) (Windows) /
-[build-python.sh](../build-python.sh) (Linux / macOS). The build uses the
-`*-windows-static-md` vcpkg triplet so the native deps are linked into the
-`.pyd` and the wheel is self-contained - `import mirobody` needs no loose DLLs.
-Full details, gotchas, and `pip` invocations are in [python/README.md](../python/README.md).
-
-## Embedding - C-ABI shared library (Java, Go, C#, Node, Rust)
-
-Beyond the platform bridges (Android JNI, iOS static lib) and the Python wheel,
-the same [src/mirobody.h](../src/mirobody.h) C API is built as a standalone shared
-library, **`libmirobody`** (`mirobody.dll` / `libmirobody.so` / `.dylib`), that
-any language with an FFI loads and drives:
-
-```c
-mirobody_server_t* mirobody_start(config_path, data_dir);   // keys + port from config
-void mirobody_stop(mirobody_server_t*);
-int  mirobody_is_running(mirobody_server_t*);
-int  mirobody_listen_port(mirobody_server_t*);
-const char* mirobody_get_providers(void);                                    // "Agent/model" pairs
-int  mirobody_chat(provider, message, user_id, on_event, user_data);         // serverless LLM + MCP
-```
-
-Build it with [build-shared.cmd](../build-shared.cmd) / [build-shared.sh](../build-shared.sh).
-On Windows it defaults to the fully-static `x64-windows-static` triplet (`/MT`),
-so the artifact depends only on system DLLs - no vcpkg DLLs and, importantly, no
-`vcruntime`/`ucrtbase`, which is what lets it load cleanly into a JVM (whose
-bundled CRT otherwise shadows the system one). When `JAVA_HOME` is set it also
-builds **`mirobody_jni`**, a JNI shim for the desktop JVM
-([src/platform/jni_bridge.cpp](../src/platform/jni_bridge.cpp), the same
-`ai.thetahealth.mirobody.NativeBridge` class as Android).
-
-Runnable, verified bindings and the full writeup live under
-[bindings/](../bindings/) - see [bindings/README.md](../bindings/README.md):
-
-| Language  | Binding                            | Mechanism                         |
-| --------- | ---------------------------------- | --------------------------------- |
-| Go        | [bindings/go](../bindings/go)         | `syscall.NewLazyDLL` (POSIX: cgo) |
-| C# / .NET | [bindings/csharp](../bindings/csharp) | P/Invoke (`[DllImport]`)          |
-| Node.js   | [bindings/node](../bindings/node)     | koffi FFI                         |
-| Rust      | [bindings/rust](../bindings/rust)     | `extern "C"` + `build.rs`         |
-| Java      | [bindings/java](../bindings/java)     | JNI shim, or Panama FFM           |
+[src/mirobody.h](../src/mirobody.h) is the embedding surface: a plain `extern "C"`
+API that the platform bridges wrap (Android JNI, the iOS static library, the
+HarmonyOS NAPI module). The development build also produces it as a shared
+library, `libmirobody` (`mirobody.dll` / `libmirobody.so` / `.dylib`), which is
+handy for exercising the ABI from a test harness. The desktop FFI bindings (Go,
+C#, Node, Rust, Java) and the Python wheel were removed when this repo narrowed to
+the phone; they are preserved at the `v2-full-2026-08` tag.

@@ -1,36 +1,24 @@
 # Storage
 
-`mirobody::storage::Storage` is an object-store interface — `put_object` /
-`get_object` / `delete_object` / `presigned_url` / `public_url` — with four
-interchangeable backends. Unlike the SQL `Database` (one backend linked per
-build), all four compile into every build and the caller picks one at runtime
-from config:
+`mirobody::storage::Storage` is the object-store interface — `put_object` /
+`get_object` / `delete_object` / `presigned_url` / `public_url` — that uploads,
+charts and extracted text go through. It has one backend, `LocalStorage`, the
+local filesystem: on a phone every object is a file in the app sandbox, which the
+platform's backup and the record export both see. The cloud object stores (S3,
+OSS, Azure Blob) belong to the server in the
+[main mirobody repo](https://github.com/thetahealth/mirobody); they are preserved
+at the `v2-full-2026-08` tag.
 
-| Backend                | Class          | Signing                   | Config getter         |
-| ---------------------- | -------------- | ------------------------- | --------------------- |
-| AWS S3 / S3-compatible | `AwsS3`        | AWS Signature V4          | `cfg.s3()`            |
-| Alibaba Cloud OSS      | `AliyunOss`    | classic HMAC-SHA1         | `cfg.oss("name")`     |
-| Azure Blob Storage     | `AzureBlob`    | Shared Key HMAC-SHA256    | `cfg.azure_blob()`    |
-| Local filesystem       | `LocalStorage` | HMAC-SHA256 (opt.)        | `cfg.local_storage()` |
+| Backend          | Class          | Signing            | Config getter         |
+| ---------------- | -------------- | ------------------ | --------------------- |
+| Local filesystem | `LocalStorage` | HMAC-SHA256 (opt.) | `cfg.local_storage()` |
 
-**Other clouds need no new backend — they are S3-compatible.** Point `AwsS3` at
-their endpoint with `S3_ENDPOINT` (and HMAC interop keys where applicable):
-Cloudflare R2, Backblaze B2, MinIO / Ceph RGW, DigitalOcean Spaces, Wasabi,
-Tencent COS, Huawei OBS, Oracle OCI, and **Google Cloud Storage** (via its XML
-API + HMAC keys, `S3_ENDPOINT=https://storage.googleapis.com`). Only **Azure
-Blob** is genuinely not S3-compatible — different REST API, `x-ms-*` headers, and
-Shared Key signing — so it gets the dedicated `AzureBlob` class above; a service
-SAS provides its presigned read URLs. (A native Google Cloud Storage class,
-using OAuth / service-account auth instead of HMAC interop keys, would be the
-only reason to add another backend — not needed for HMAC-key access.)
-
-Each config struct exposes `configured()` and `open()`, the same shape as the
-cache / database config structs:
+The config struct exposes `configured()` and `open()`:
 
 ```cpp
 auto cfg = mirobody::load_config();
-if (cfg.s3().configured()) {
-    std::unique_ptr<mirobody::storage::Storage> store = cfg.s3().open();
+if (cfg.local_storage().configured()) {
+    std::unique_ptr<mirobody::storage::Storage> store = cfg.local_storage().open();
     std::string key = store->put_object("charts/abc.png", png_bytes, "image/png");
     std::string url = store->presigned_url(key);   // time-limited GET link
 }
@@ -38,7 +26,7 @@ if (cfg.s3().configured()) {
 
 `put_object` (and `append_to_object` / `put_user_object` / `list_objects` /
 `list_user_objects`) returns a **prefix-less** key. The configured key prefix
-(`S3_PREFIX` / `ALI_OSS_PREFIX` / `LOCAL_STORAGE_PREFIX`) is an internal
+(`LOCAL_STORAGE_PREFIX`) is an internal
 storage-access detail: `full_key()` applies it only when a method actually
 reads or writes the backend, and it is never part of a returned key. So a
 returned key is a portable handle that survives a prefix change (once the
@@ -79,8 +67,7 @@ land on the same object (content-addressed dedup) while keys stay unguessable
 without the bytes and the deployment config. `<shard>` is the digest's first
 character: a 64-way fan-out so one user's objects spread across subdirectories
 instead of piling into a single folder, which matters for the `LocalStorage`
-filesystem backend (a directory with very many entries scans slowly) and is
-harmless for the virtual-prefix cloud backends. The `<suffix>` is a filename
+filesystem backend (a directory with very many entries scans slowly). The `<suffix>` is a filename
 extension derived from the Content-Type (e.g. `.pdf`; none when the type is
 unknown), so `LocalStorage`'s extension-driven HTTP mount serves the object
 as the type it was stored with.
@@ -97,7 +84,7 @@ Alongside the object, `put_user_object` appends one record to the
 omitted). Deliberately no user id — the hashed key segment exists so stored
 objects don't carry the sequential account id. A re-upload appends a record
 (single JSON documents are hard to append; `append_to_object` is native on
-LocalStorage/OSS), so the first record is the original upload and the last
+LocalStorage), so the first record is the original upload and the last
 the current one. It is the durable per-file record: the chat
 upload index (`src/transcode/file.*`) rebuilds a user's file list from these
 sidecars on a cache miss, deriving everything else (presigned URL,
@@ -112,11 +99,7 @@ re-derives the user segment and validates the exact key shape
 the user's hashed prefix: the uploads plus their `.meta` / `.trans`
 (extracted text) sidecars, in lexicographic order.
 
-`LocalStorage` is the no-credentials **fallback** backend for self-hosted /
-on-device runs: a cloud backend (S3 / OSS) takes precedence, so when either is
-configured the server's LocalStorage HTTP mount stands down (see
-`Server::start` — the objects then live in the cloud, not on local disk).
-`LOCAL_STORAGE_DIR` need **not** live under `HTTP_ROOT` — keeping uploads
+`LocalStorage` needs no credentials. `LOCAL_STORAGE_DIR` need **not** live under `HTTP_ROOT` — keeping uploads
 outside the web root avoids serving them as ordinary static assets.
 
 - **`LOCAL_STORAGE_URL_PREFIX`** — the URL path this server serves objects at,
@@ -159,23 +142,19 @@ ctor and the server's mount setup both call `LocalConfig::validate_signing_secre
 so the server refuses to start) — a blank or trivial key would make the
 signatures forgeable while still reporting access as gated.
 
-The OSS getter takes an instance name the way `cfg.postgresql()` does:
-`cfg.oss()` reads the `ALI_OSS_*` keys, `cfg.oss("reports")` reads
-`ALI_OSS_*_REPORTS`. See the "Object Storage Configuration" block in
-[config.yml](../../config.yml) for every key (`S3_*`, `ALI_OSS_*`,
-`LOCAL_STORAGE_*`).
+The `LOCAL_STORAGE_*` keys are listed in
+[config.example.yml](../../config.example.yml).
 
-Request signing lives in [sign.*](sign.cpp) as pure
-functions of their inputs (no clock, no network), verified against the
-published AWS SigV4 and Aliyun OSS signature test vectors in
-[tests/storage/](../../tests/storage/sign_test.cpp).
+The encoding and signing primitives live in [sign.*](sign.cpp) as pure functions
+of their inputs (no clock, no network), verified against published test vectors
+in [tests/storage/](../../tests/storage/sign_test.cpp).
 
 ## Encryption at rest
 
 When `FILE_ENCRYPTION_KEY` is configured (one or more 44-char URL-safe-base64
 [`encrypt::Fernet`](../config/fernet.hpp) keys), `Storage` stores user uploads
-and their `.meta` / `.trans` sidecars **Fernet-encrypted**, so a leaked
-S3/OSS/local credential yields ciphertext rather than file contents — the keys
+and their `.meta` / `.trans` sidecars **Fernet-encrypted**, so a copied
+storage directory yields ciphertext rather than file contents — the keys
 live in app config, separate from the storage secret. The server wires them once
 after `open()` via `enable_file_encryption()`; with no key every method below is
 a passthrough and behaviour is exactly as before.
@@ -254,10 +233,6 @@ material (region, account id) would *not* close it, since the credential-holder
 knows those too; only a secret seed does.
 
 ## CLIs
-
-The `aws_s3` and `aliyun_oss` debug CLIs drive these backends from the command
-line (verify credentials, signing, bucket connectivity) without the embedded
-server — see [cli/README.md](../../cli/README.md).
 
 `file_rekey` ([cli/file_rekey.cpp](../../cli/file_rekey.cpp)) re-encrypts stored
 uploads under the newest `FILE_ENCRYPTION_KEY`, in place, so an old key can be

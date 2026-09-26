@@ -13,7 +13,6 @@
 using mirobody::cache::Cache;
 using mirobody::cache::MemoryKv;
 using mirobody::cache::MemoryKvConfig;
-using mirobody::cache::RedisConfig;
 
 //------------------------------------------------------------------------------
 
@@ -317,24 +316,3 @@ TEST_CASE("MemoryKvConfig::open builds a working Cache", "[cache]") {
     REQUIRE(c.get("foo").value() == "bar");
 }
 
-//------------------------------------------------------------------------------
-
-TEST_CASE("RedisConfig::open rejects empty host", "[cache]") {
-    RedisConfig cfg;
-    REQUIRE_THROWS_AS(cfg.open(), std::runtime_error);
-}
-
-//------------------------------------------------------------------------------
-
-TEST_CASE("RedisConfig::open with ssl=true", "[cache]") {
-    RedisConfig cfg;
-    cfg.host = "127.0.0.1";
-    cfg.port = 1;            // nothing listens here, so open() fails deterministically
-    cfg.ssl  = true;
-    // Either way open() throws, but for a different reason depending on the build:
-    //  - with hiredis_ssl linked: the TLS context is built, then the connect to a
-    //    dead port fails;
-    //  - without it: ssl=true is rejected outright.
-    // The TLS path is exercised against a live server by the integration suite.
-    REQUIRE_THROWS_AS(cfg.open(), std::runtime_error);
-}

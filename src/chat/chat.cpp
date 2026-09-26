@@ -5,18 +5,6 @@
 #include "platform/clock.hpp"   // now_unix_ms
 #include "platform/log.hpp"
 
-// The realtime (voice) lanes speak WebSocket, which the mobile/embedded profile
-// does not link (MIROBODY_MOBILE in CMakeLists.txt). There live_response reports
-// the lane as unavailable; the text turn is unaffected.
-#ifndef MIROBODY_MOBILE
-#  define MIROBODY_MOBILE 0
-#endif
-
-#if !MIROBODY_MOBILE
-#  include "llm/gemini_live.hpp"
-#  include "llm/openai_realtime.hpp"
-#endif
-
 #include <openssl/rand.h>
 
 #include <rapidjson/document.h>
@@ -31,27 +19,6 @@ namespace mirobody { namespace chat {
 
 namespace {
 
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-// 128 bits of randomness as lowercase hex, used as a th_sessions.session_id for
-// a persisted history row on the legacy backend (whose session_id is a string
-// key supplied by the writer). The modern backends auto-assign a BIGINT
-// session_id instead, so this is compiled only for the legacy build.
-std::string new_history_id() {
-    unsigned char b[16];
-    if (RAND_bytes(b, sizeof(b)) != 1) {
-        std::random_device rd;
-        for (std::size_t i = 0; i < sizeof(b); ++i) b[i] = static_cast<unsigned char>(rd());
-    }
-    static const char kHex[] = "0123456789abcdef";
-    std::string s;
-    s.reserve(sizeof(b) * 2);
-    for (std::size_t i = 0; i < sizeof(b); ++i) {
-        s.push_back(kHex[b[i] >> 4]);
-        s.push_back(kHex[b[i] & 0x0F]);
-    }
-    return s;
-}
-#endif
 
 // Serialize a turn's attachments to the JSON array stored in conversations.files:
 // [{"name": <filename>, "key": <file_key>}, ...]. Returns "" for no files, so
@@ -165,47 +132,6 @@ void Chat::response(const std::string& agent_name, AgentRequest& req,
 }
 
 //------------------------------------------------------------------------------
-// Realtime turn
-//------------------------------------------------------------------------------
-
-void Chat::live_response(const LiveRequest& req, const llm::EventHandler& on_event) {
-#if MIROBODY_MOBILE
-    (void)req;
-    emit_error(on_event, "realtime lane not built (no WebSocket support in this build)");
-#else
-    if (req.provider == "openai") {
-        if (cfg_.openai.api_key.empty()) {
-            emit_error(on_event, "OPENAI_API_KEY not configured");
-            return;
-        }
-        llm::OpenAIRealtimeOptions opt;
-        opt.mode               = llm::OpenAIRealtimeMode::OpenAI;
-        opt.api_key            = cfg_.openai.api_key;
-        if (!cfg_.openai.realtime_url.empty()) opt.openai_base_url = cfg_.openai.realtime_url;
-        opt.connect_timeout_ms = cfg_.connect_timeout_ms;
-        opt.request_timeout_ms = cfg_.request_timeout_ms;
-        llm::OpenAIRealtimeClient client{std::move(opt)};
-        client.ainvoke(req.messages, req.system, on_event);
-    } else if (req.provider == "gemini") {
-        if (cfg_.gemini.api_key.empty()) {
-            emit_error(on_event, "GOOGLE_API_KEY not configured");
-            return;
-        }
-        llm::GeminiLiveOptions opt;
-        opt.mode               = llm::GeminiLiveMode::AiStudio;
-        opt.api_key            = cfg_.gemini.api_key;
-        opt.connect_timeout_ms = cfg_.connect_timeout_ms;
-        opt.request_timeout_ms = cfg_.request_timeout_ms;
-        llm::GeminiLiveClient client{std::move(opt)};
-        client.ainvoke(req.messages, req.system, on_event);
-    } else {
-        emit_error(on_event, "unknown provider: " +
-                             (req.provider.empty() ? std::string("(none)") : req.provider));
-    }
-#endif
-}
-
-//------------------------------------------------------------------------------
 // History
 //------------------------------------------------------------------------------
 
@@ -223,17 +149,6 @@ std::int64_t Chat::persist_history(AgentRequest& req) {
     const std::string uid = std::to_string(req.user_id);
 
     try {
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-        // Legacy th_sessions: one row keyed on a supplied string session_id,
-        // carrying the question detail inline (no separate messages table here).
-        // The legacy backend has no message-level thread/responses, so it
-        // surfaces no conversation id and persists no answer.
-        db_.execute(
-            "INSERT INTO th_sessions (session_id, user_id, summary, language, timezone, files) "
-            "VALUES (?, ?, ?, ?, ?, ?);",
-            {new_history_id(), uid, summary, req.language, req.timezone, files});
-        return 0;
-#else
         // Modern: one messages row per message; one id (the opening question's)
         // names the whole thread across conversations + messages. A turn writes
         // its question here (the answer is persisted by persist_response once the
@@ -255,20 +170,11 @@ std::int64_t Chat::persist_history(AgentRequest& req) {
 
         if (append) {
             const std::int64_t cid = req.conversation_id;   // the thread this turn extends
-  #if defined(MIROBODY_DATABASE_PG)
-            database::Result qr = tx.execute(
-                "INSERT INTO messages (user_id, conversation_id, role, content, language, timezone, files, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id;",
-                {uid, cid, role, req.question, req.language, req.timezone, files, now});
-            const std::int64_t qid =
-                (qr.rows.empty() || qr.rows[0].empty()) ? 0 : qr.rows[0][0].as_int();
-  #else
             database::Result qr = tx.execute(
                 "INSERT INTO messages (user_id, conversation_id, role, content, language, timezone, files, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?);",
                 {uid, cid, role, req.question, req.language, req.timezone, files, now});
             const std::int64_t qid = qr.last_insert_id;
-  #endif
             tx.execute("UPDATE conversations SET updated_at=? WHERE id=? AND user_id=?;",
                        {now, cid, uid});
             tx.commit();
@@ -279,21 +185,11 @@ std::int64_t Chat::persist_history(AgentRequest& req) {
         // New thread: the opening question (conversation_id NULL -- it is the
         // root) seeds a thin conversations row whose id IS that question's id. The
         // two writes share a transaction so a conversation never exists without it.
-  #if defined(MIROBODY_DATABASE_PG)
-        // PG has no last_insert_id; read the assigned id back with RETURNING.
-        database::Result qr = tx.execute(
-            "INSERT INTO messages (user_id, role, content, language, timezone, files, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id;",
-            {uid, role, req.question, req.language, req.timezone, files, now});
-        const std::int64_t qid =
-            (qr.rows.empty() || qr.rows[0].empty()) ? 0 : qr.rows[0][0].as_int();
-  #else
         database::Result qr = tx.execute(
             "INSERT INTO messages (user_id, role, content, language, timezone, files, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?);",
             {uid, role, req.question, req.language, req.timezone, files, now});
         const std::int64_t qid = qr.last_insert_id;
-  #endif
         tx.execute(
             // updated_at left NULL until the thread is later touched.
             "INSERT INTO conversations (id, user_id, summary, created_at) "
@@ -303,7 +199,6 @@ std::int64_t Chat::persist_history(AgentRequest& req) {
         req.conversation_id = qid;
         req.question_id     = qid;
         return qid;
-#endif
     } catch (const std::exception& e) {
         platform::log_warn("history: persist failed: %s", e.what());
         return 0;
@@ -314,7 +209,6 @@ std::int64_t Chat::persist_history(AgentRequest& req) {
 
 void Chat::persist_response(const AgentRequest& req, const std::string& agent_name,
                             const std::string& reply) {
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
     // Need the question this answers (persist_history set both ids); a turn that
     // produced no answer (error/abort) writes nothing.
     if (req.user_id <= 0 || req.conversation_id <= 0 || req.question_id <= 0 || reply.empty())
@@ -338,9 +232,6 @@ void Chat::persist_response(const AgentRequest& req, const std::string& agent_na
     } catch (const std::exception& e) {
         platform::log_warn("history: response persist failed: %s", e.what());
     }
-#else
-    (void)req; (void)agent_name; (void)reply;
-#endif
 }
 
 //------------------------------------------------------------------------------
@@ -374,18 +265,10 @@ bool update_latest_conversation_summary(database::Database& db,
             (idv.type() == database::Value::Type::Int) ? std::to_string(idv.as_int())
                                                        : idv.as_text();
 
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-        // Legacy th_sessions has no updated_at column.
-        db.execute(
-            "UPDATE " MIROBODY_CONVERSATIONS_TABLE " SET summary=? "
-            "WHERE " MIROBODY_CONVERSATION_ID_COL "=? AND user_id=?;",
-            {summary, cid, uid});
-#else
         db.execute(
             "UPDATE " MIROBODY_CONVERSATIONS_TABLE " SET summary=?, updated_at=? "
             "WHERE " MIROBODY_CONVERSATION_ID_COL "=? AND user_id=?;",
             {summary, platform::now_unix_ms(), cid, uid});
-#endif
         return true;
     } catch (const std::exception& e) {
         platform::log_warn("history: summary update failed: %s", e.what());

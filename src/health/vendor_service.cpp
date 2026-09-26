@@ -55,41 +55,13 @@ std::string vendor_id_of(const server::Request& req) {
 // Cache key for a pending OAuth connect (state -> {user_id, vendor_id}), single-use.
 const char* kOAuthStatePrefix = "vendoroauth:state:";
 
-// Fetch a site's favicon bytes for the icon bundle. Tries DuckDuckGo's icon service
-// (resolves CDN-hosted icons, returns directly — no 301), then the site's own
-// /favicon.ico. Returns false when neither yields an image. `ctype` is cleaned of any
-// "; charset" suffix so it's a valid data-URI media type.
-bool fetch_favicon(const std::string& domain, const std::string& explicit_url,
-                   std::string* body, std::string* ctype) {
-    // Try an explicit per-vendor icon URL first (for sites that serve their icon at a
-    // non-standard path and aren't in DDG), then DDG, then the site's /favicon.ico.
-    std::vector<std::string> tries;
-    if (!explicit_url.empty()) tries.push_back(explicit_url);
-    tries.push_back("https://icons.duckduckgo.com/ip3/" + domain + ".ico");
-    tries.push_back("https://" + domain + "/favicon.ico");
-    for (std::size_t i = 0; i < tries.size(); ++i) {
-        client::HttpResponse r = client::HttpClient().get(tries[i], /*timeout_ms=*/5000, {});
-        if (r.status >= 200 && r.status < 300 && !r.body.empty()) {
-            std::string ct = r.content_type.empty() ? std::string("image/x-icon") : r.content_type;
-            std::size_t sc = ct.find(';');
-            if (sc != std::string::npos) ct = ct.substr(0, sc);
-            std::size_t b = ct.find_first_not_of(" \t");
-            std::size_t e = ct.find_last_not_of(" \t");
-            *ctype = (b == std::string::npos) ? std::string("image/x-icon") : ct.substr(b, e - b + 1);
-            *body = r.body;
-            return true;
-        }
-    }
-    return false;
-}
-
 }  // namespace
 
 //------------------------------------------------------------------------------
 
 VendorService::VendorService(server::Router& router, const Config& cfg,
                              database::Database& db, cache::Cache& cache, const jwt::Jwt& jwt)
-    : cfg_(cfg), db_(db), cache_(cache), store_(db), jwt_(jwt), icons_stop_(false) {
+    : cfg_(cfg), db_(db), cache_(cache), store_(db), jwt_(jwt) {
     register_routes(router);
     // Migrate any tokens still under an old encryption key to the current one. No-op
     // unless a rotation is in progress (>=2 keys). Runs synchronously here — before
@@ -100,14 +72,6 @@ VendorService::VendorService(server::Router& router, const Config& cfg,
     } catch (const std::exception& e) {
         platform::log_warn("vendor token re-encrypt failed: %s", e.what());
     }
-    // Fetch the vendor icon bundle off the service thread so boot isn't blocked and
-    // a dead network can't hang startup; GET /vendors/icons serves it once ready.
-    icons_thread_ = std::thread([this]{ build_icons(); });
-}
-
-VendorService::~VendorService() {
-    icons_stop_.store(true);
-    if (icons_thread_.joinable()) icons_thread_.join();
 }
 
 void VendorService::register_routes(server::Router& router) {
@@ -165,57 +129,11 @@ void VendorService::on_list(const server::Request& req, server::Response& res) {
     res.ok(std::string(sb.GetString(), sb.GetSize()));
 }
 
-// Background-thread worker: fetch each vendor's site favicon and build the
-// { id: "data:<mime>;base64,<...>" } JSON map served by GET /vendors/icons. Vendors
-// with no resolvable icon (or a fetch failure) are simply omitted -> the client shows
-// its monogram for those. Bails early if the service is shutting down.
-void VendorService::build_icons() {
-    // `url` is an explicit icon URL for sites whose icon isn't at /favicon.ico and
-    // isn't in DDG; "" means resolve via DDG / the site's /favicon.ico.
-    struct Item { const char* id; const char* domain; const char* url; };
-    static const Item kItems[] = {
-        {"oura", "ouraring.com", ""}, {"whoop", "www.whoop.com", ""}, {"polar", "www.polar.com", ""},
-        {"fitbit", "www.fitbit.com", ""}, {"withings", "www.withings.com", ""}, {"dexcom", "www.dexcom.com", ""},
-        {"garmin", "www.garmin.com", ""}, {"huawei", "www.huawei.com", ""},
-        {"terra", "tryterra.co", ""}, {"validic", "validic.com", ""}, {"rook", "tryrook.io", ""},
-        {"spike", "spikeapi.com", ""}, {"junction", "junction.com", ""},
-        {"wefitter", "wefitter.com", "https://www.wefitter.com/static/frontend/img/website/favicon-32x32.png"},
-        {"thryve", "thryve.health", ""},
-        {"human_api", "humanapi.co", "https://reference.humanapi.co/favicon.ico"},
-        {"vitalera", "vitalera.io", ""},
-        {"metriport", "metriport.com", ""}, {"open_wearables", "themomentum.ai", ""},
-        {"redox", "redoxengine.com", ""}, {"particle_health", "particlehealth.com", ""},
-        {"healthconnect", "www.mindbowser.com", ""},   // HealthConnect CoPilot (Mindbowser)
-        {"lexisnexis", "risk.lexisnexis.com", ""}
-    };
-    rapidjson::StringBuffer sb;
-    rapidjson::Writer<rapidjson::StringBuffer> w(sb);
-    w.StartObject();
-    for (std::size_t i = 0; i < sizeof(kItems) / sizeof(kItems[0]); ++i) {
-        if (icons_stop_.load()) break;
-        std::string body, ctype;
-        if (fetch_favicon(kItems[i].domain, kItems[i].url, &body, &ctype)) {
-            const std::string uri = "data:" + ctype + ";base64," + storage::base64_encode(body);
-            w.Key(kItems[i].id);
-            w.String(uri.data(), static_cast<rapidjson::SizeType>(uri.size()));
-        }
-    }
-    w.EndObject();
-    std::string json(sb.GetString(), sb.GetSize());
-    std::lock_guard<std::mutex> lk(icons_mu_);
-    icons_json_.swap(json);
-}
-
-// GET /vendors/icons -- the { id: dataURI } icon bundle (one request, base64 data
-// URIs, no third-party calls from the browser). "{}" until the background fetch
-// finishes (client then falls back to monograms and can retry).
+// GET /vendors/icons -- always "{}": the clients fall back to monograms. The
+// icons used to be fetched from each vendor's website at startup, which on a
+// phone means contacting third parties before the user has done anything.
 void VendorService::on_icons(const server::Request& /*req*/, server::Response& res) {
-    std::string json;
-    {
-        std::lock_guard<std::mutex> lk(icons_mu_);
-        json = icons_json_;
-    }
-    res.ok(json.empty() ? std::string("{}") : json);
+    res.ok("{}");
 }
 
 // GET /vendors/{id}/authorize -- build the vendor's OAuth authorize URL, stash a

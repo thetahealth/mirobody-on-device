@@ -108,43 +108,12 @@ std::string reencrypt_to_primary(const Config& cfg, const std::string& cipher) {
 }  // namespace
 
 vendor::VendorConfig vendor_config(const Config& cfg, const std::string& vendor_id) {
-    // Base: the MIROBODY_VENDOR_<ID>_* env convention. Still the path for the vendor
-    // CLI and for aggregators not (yet) wired to central config.
-    vendor::VendorConfig vc = vendor::VendorConfig::from_env(vendor_id);
-
-    // Overlay the central config credentials — the clean <ID>_CLIENT_ID / _SECRET /
-    // _API_KEY / _BASE_URL keys, read from YAML or env through the config store.
-    // When set they win over the env fallback above.
-    std::unordered_map<std::string, VendorCredentials>::const_iterator it =
-        cfg.vendor_credentials.find(vendor_id);
-    if (it != cfg.vendor_credentials.end()) {
-        const VendorCredentials& c = it->second;
-        if (!c.client_id.empty())     vc.client_id     = c.client_id;
-        if (!c.client_secret.empty()) vc.client_secret = c.client_secret;
-        if (!c.api_key.empty())       vc.api_key       = c.api_key;
-        if (!c.base_url.empty())      vc.base_url      = c.base_url;
-    }
-
-    if (vendor_id == "vitalera") {
-        // Central config carries Vitalera's pre-issued bearer.
-        if (!cfg.vitalera.api_key.empty()) {
-            vc.api_key = cfg.vitalera.api_key;
-        }
-    } else if (vendor_id == "dexcom") {
-        // Map the Dexcom deployment name to the API host, unless a base_url is
-        // already set (DEXCOM_BASE_URL / env). Empty/"sandbox" leaves base_url empty
-        // so the client falls back to its sandbox default.
-        if (vc.base_url.empty()) {
-            const std::string& e = cfg.dexcom.environment;
-            if (e == "us" || e == "production") {
-                vc.base_url = "https://api.dexcom.com";
-            } else if (e == "eu" || e == "ous") {
-                vc.base_url = "https://api.dexcom.eu";
-            }
-        }
-    }
-    return vc;
+    // The MIROBODY_VENDOR_<ID>_* env convention (the one connector left, ehr,
+    // drives its per-tenant token through ehr_connect rather than static config).
+    (void)cfg;
+    return vendor::VendorConfig::from_env(vendor_id);
 }
+
 
 //------------------------------------------------------------------------------
 

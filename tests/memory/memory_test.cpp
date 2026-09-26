@@ -7,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#if defined(MIROBODY_DATABASE_SQLITE)
 
 namespace {
 
@@ -121,4 +120,3 @@ TEST_CASE("LocalMemory forget removes only the owner's row", "[memory][db]") {
     REQUIRE(store.recall(3, "cat", 5, &err).empty());
 }
 
-#endif   // MIROBODY_DATABASE_SQLITE

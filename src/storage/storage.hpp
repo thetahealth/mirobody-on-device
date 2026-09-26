@@ -1,20 +1,11 @@
 #pragma once
 
-// Object-storage abstraction. Mirrors the role database::Database plays for SQL:
-// a single interface the rest of the server talks to, with the concrete backend
-// chosen at runtime from config. Unlike Database (one SQL backend linked per
-// build), both storage backends are always compiled in — a deployment may use
-// S3 for one bucket and Aliyun OSS for another — so Storage is a virtual
-// interface and the config structs hand back a std::unique_ptr<Storage>.
-//
-// Backends:
-//   - AwsS3        (src/storage/aws_s3.*)        — AWS S3 and S3-compatible
-//                                                  stores, AWS Signature V4.
-//   - AliyunOss    (src/storage/aliyun_oss.*)    — Alibaba Cloud OSS, classic
-//                                                  HMAC-SHA1 signature.
-//   - LocalStorage (src/storage/local_storage.*) — the local filesystem; for
-//                                                  self-hosted / on-device runs
-//                                                  with no cloud credentials.
+// Object-storage abstraction: the interface the rest of the core stores uploads,
+// charts and extracted text through. One backend, LocalStorage
+// (src/storage/local_storage.*): on a phone every object is a file in the app
+// sandbox. Kept as a virtual interface so a test can substitute its own. The
+// cloud object stores (S3, OSS, Azure Blob) belong to the server in the main
+// mirobody repo.
 
 #include "compat/cxx11.hpp"
 #include "config/fernet.hpp"
@@ -45,85 +36,9 @@ public:
 // Backend configuration structs
 //------------------------------------------------------------------------------
 //
-// Populated by the lazy getters on mirobody::Config (cfg.s3() / cfg.oss()).
-// open() constructs the matching backend; callers hold the returned Storage
-// through the interface and never name the concrete type.
-
-// AWS S3 (and S3-compatible stores). Loaded from S3_KEY / S3_TOKEN / S3_REGION
-// / S3_BUCKET / S3_PREFIX / S3_CDN (see Config::s3). `endpoint` is empty for
-// real AWS — the virtual-hosted host "<bucket>.s3.<region>.amazonaws.com" is
-// derived from region — and set only to target an S3-compatible service.
-struct S3Config {
-    std::string access_key;   // S3_KEY    — AWS access key id
-    std::string secret_key;   // S3_TOKEN  — AWS secret access key
-    std::string region;       // S3_REGION — e.g. "us-east-1"
-    std::string bucket;       // S3_BUCKET
-    std::string prefix;       // S3_PREFIX — key prefix prepended to every object
-    std::string cdn;          // S3_CDN    — CDN host for public_url(); optional
-    std::string endpoint;     // S3-compatible host override; empty => real AWS
-
-    // Build an AwsS3 backend. Throws StorageError if access_key / secret_key /
-    // bucket / region are not all set. Defined in aws_s3.cpp.
-    std::unique_ptr<Storage> open() const;
-
-    bool configured() const {
-        return !access_key.empty() && !secret_key.empty() && !bucket.empty();
-    }
-};
-
-//------------------------------------------------------------------------------
-
-// Alibaba Cloud OSS. Loaded from ALI_OSS_ACCESS_KEY / ALI_OSS_SECRET_KEY /
-// ALI_OSS_ENDPOINT / ALI_OSS_BUCKET_NAME / ALI_OSS_PREFIX / ALI_OSS_DOMAIN,
-// each optionally suffixed by an instance name (see Config::oss). `endpoint`
-// is the region host, e.g. "oss-cn-hangzhou.aliyuncs.com".
-struct OssConfig {
-    std::string access_key_id;      // ALI_OSS_ACCESS_KEY
-    std::string secret_access_key;  // ALI_OSS_SECRET_KEY
-    std::string endpoint;           // ALI_OSS_ENDPOINT (region host)
-    std::string bucket;             // ALI_OSS_BUCKET_NAME
-    std::string prefix;             // ALI_OSS_PREFIX
-    std::string cdn;                // ALI_OSS_DOMAIN — custom domain for public_url()
-
-    // Build an AliyunOss backend. Throws StorageError if access_key_id /
-    // secret_access_key / endpoint / bucket are not all set. Defined in
-    // aliyun_oss.cpp.
-    std::unique_ptr<Storage> open() const;
-
-    bool configured() const {
-        return !access_key_id.empty() && !secret_access_key.empty() &&
-               !endpoint.empty() && !bucket.empty();
-    }
-};
-
-//------------------------------------------------------------------------------
-
-// Azure Blob Storage. NOT S3-compatible -- its own REST API and Shared Key
-// HMAC-SHA256 auth, so it has a dedicated backend (AzureBlob, src/storage/
-// azure_blob.*). Loaded from AZURE_BLOB_ACCOUNT / AZURE_BLOB_KEY /
-// AZURE_BLOB_CONTAINER / AZURE_BLOB_PREFIX / AZURE_BLOB_ENDPOINT_SUFFIX /
-// AZURE_BLOB_CDN (see Config::azure_blob). `key` is the account key (base64
-// text, as the portal shows it). `endpoint_suffix` defaults to
-// "core.windows.net" (override for sovereign clouds, e.g. "core.chinacloudapi.cn");
-// the blob host is "<account>.blob.<endpoint_suffix>".
-struct AzureBlobConfig {
-    std::string account;          // AZURE_BLOB_ACCOUNT — storage account name
-    std::string key;              // AZURE_BLOB_KEY — account key (base64)
-    std::string container;        // AZURE_BLOB_CONTAINER
-    std::string prefix;           // AZURE_BLOB_PREFIX — key prefix prepended to every object
-    std::string endpoint_suffix;  // AZURE_BLOB_ENDPOINT_SUFFIX (default core.windows.net)
-    std::string cdn;              // AZURE_BLOB_CDN — custom domain for public_url(); optional
-
-    // Build an AzureBlob backend. Throws StorageError if account / key /
-    // container are not all set. Defined in azure_blob.cpp.
-    std::unique_ptr<Storage> open() const;
-
-    bool configured() const {
-        return !account.empty() && !key.empty() && !container.empty();
-    }
-};
-
-//------------------------------------------------------------------------------
+// Populated by the lazy getter on mirobody::Config (cfg.local_storage()).
+// open() constructs the backend; callers hold the returned Storage through the
+// interface and never name the concrete type.
 
 // Local filesystem. Objects are written as files under `root`; the key becomes
 // the relative path beneath it. Loaded from LOCAL_STORAGE_DIR /
@@ -291,10 +206,7 @@ public:
     // put of the concatenation): not atomic under concurrent writers, and
     // the whole object rides through memory -- meant for logs and
     // incremental records, not large objects. Backends with a native append
-    // override it: LocalStorage appends to the file directly, AliyunOss uses
-    // AppendObject (falling back to the base for objects not created by
-    // append). AwsS3 keeps the base -- S3 appends only on directory buckets
-    // (S3 Express One Zone), which this client does not target.
+    // override it: LocalStorage appends to the file directly.
     // `content_type` applies to the (re)written object. Throws StorageError
     // on failure (including a failed read of an object that does exist --
     // never truncates). Defined in storage.cpp.

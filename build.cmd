@@ -3,12 +3,11 @@ setlocal EnableExtensions
 
 set "PROJECT_DIR=%~dp0"
 
-:: --- Parse args: arch and/or backend selectors in any order, plus `clean`. ---
-:: Arch tokens set _ARCH; backend tokens set _DB_BACKEND (the canonical CMake
-:: value); `clean` sets _CLEAN. Unknown tokens are an error. Selection is purely
-:: from the command line -- no environment variables influence arch or backend.
+:: --- Parse args: an arch selector, `mobile` and `clean`, in any order. ---
+:: Arch tokens set _ARCH; `clean` sets _CLEAN. Unknown tokens are an error.
+:: Selection is purely from the command line -- no environment variables
+:: influence the arch. SQLite is the only database backend.
 set "_ARCH="
-set "_DB_BACKEND="
 set "_CLEAN="
 set "_MOBILE="
 
@@ -26,15 +25,6 @@ if /I "%_T%"=="x86_64"  ( set "_ARCH=amd64"       & shift & goto :parse )
 if /I "%_T%"=="x64"     ( set "_ARCH=amd64"       & shift & goto :parse )
 if /I "%_T%"=="arm64"   ( set "_ARCH=arm64"       & shift & goto :parse )
 if /I "%_T%"=="x86"     ( set "_ARCH=x86"         & shift & goto :parse )
-if /I "%_T%"=="pg"          ( set "_DB_BACKEND=POSTGRESQL"        & shift & goto :parse )
-if /I "%_T%"=="postgresql"  ( set "_DB_BACKEND=POSTGRESQL"        & shift & goto :parse )
-if /I "%_T%"=="legacy"      ( set "_DB_BACKEND=POSTGRESQL_LEGACY" & shift & goto :parse )
-if /I "%_T%"=="pg_legacy"   ( set "_DB_BACKEND=POSTGRESQL_LEGACY" & shift & goto :parse )
-if /I "%_T%"=="mysql"       ( set "_DB_BACKEND=MYSQL"             & shift & goto :parse )
-if /I "%_T%"=="sqlite"      ( set "_DB_BACKEND=SQLITE"            & shift & goto :parse )
-if /I "%_T%"=="duckdb"      ( set "_DB_BACKEND=DUCKDB"            & shift & goto :parse )
-if /I "%_T%"=="ck"          ( set "_DB_BACKEND=CLICKHOUSE"        & shift & goto :parse )
-if /I "%_T%"=="clickhouse"  ( set "_DB_BACKEND=CLICKHOUSE"        & shift & goto :parse )
 echo Unknown argument: %_T%
 echo Run "build.cmd -h" for usage.
 exit /b 1
@@ -48,25 +38,13 @@ call "%PROJECT_DIR%_build_env.cmd"
 if errorlevel 1 exit /b 1
 set "VCPKG_TRIPLET=%VCPKG_ARCH%-windows"
 
-:: Resolve backend: CLI token, else the POSTGRESQL default. Then derive the
-:: short dir tag (the default POSTGRESQL has none, so its dir is plain "build").
-if not defined _DB_BACKEND set "_DB_BACKEND=POSTGRESQL"
-set "_DB_TAG="
-if /I "%_DB_BACKEND%"=="POSTGRESQL_LEGACY" set "_DB_TAG=legacy"
-if /I "%_DB_BACKEND%"=="MYSQL"      set "_DB_TAG=mysql"
-if /I "%_DB_BACKEND%"=="SQLITE"     set "_DB_TAG=sqlite"
-if /I "%_DB_BACKEND%"=="DUCKDB"     set "_DB_TAG=duckdb"
-if /I "%_DB_BACKEND%"=="CLICKHOUSE" set "_DB_TAG=ck"
-
-:: Build dir: build[-<arch>][-<tag>]. The arch suffix is dropped when targeting
-:: the host arch (the common case); the backend suffix is dropped for the
-:: POSTGRESQL default. So the plain host+postgresql build is just "build".
+:: Build dir: build[-<arch>]. The arch suffix is dropped when targeting the host
+:: arch (the common case).
 set "_ARCH_SUFFIX="
 if /I not "%VS_ARCH%"=="%HOST_ARCH%" set "_ARCH_SUFFIX=-%VS_ARCH%"
 set "_TAG_SUFFIX="
-if defined _DB_TAG set "_TAG_SUFFIX=-%_DB_TAG%"
 
-:: `mobile` builds the shape HarmonyOS/Android/iOS ship: no HTTP front door (so
+:: `mobile` builds the shape HarmonyOS ships: no HTTP front door (so
 :: no libwebsockets). Verifying it on a desktop host
 :: catches profile-specific breakage without a device. It gets its own build dir
 :: so it never clobbers the normal one, and yields libraries only -- no
@@ -78,7 +56,6 @@ if defined _MOBILE (
 )
 
 set "BUILD_DIR=%PROJECT_DIR%build%_ARCH_SUFFIX%%_TAG_SUFFIX%"
-set "_DB_BACKEND_ARG=-DMIROBODY_DATABASE_BACKEND=%_DB_BACKEND%"
 
 :: clean: wipe the build dir so the next run reconfigures from scratch. vcpkg
 :: dependencies live in the shared %PROJECT_DIR%vcpkg_installed (see
@@ -102,7 +79,7 @@ if not exist "%BUILD_DIR%\build.ninja" (
         -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
         -DVCPKG_TARGET_TRIPLET=%VCPKG_TRIPLET% ^
         -DVCPKG_INSTALLED_DIR="%PROJECT_DIR%vcpkg_installed" ^
-        %_DB_BACKEND_ARG% %_PROFILE_ARG%
+        %_PROFILE_ARG%
     if errorlevel 1 exit /b 1
 )
 
@@ -115,30 +92,23 @@ cmake --build "%BUILD_DIR%" --config Release
 exit /b %errorlevel%
 
 :usage
-echo Usage: build.cmd [arch] [backend] [mobile] [clean]      (tokens in any order)
+echo Usage: build.cmd [arch] [mobile] [clean]      (tokens in any order)
 echo.
-echo   With no arguments: build the host arch with the POSTGRESQL default
-echo   (into "build"). Pass help / -h / --help / /? to show this help.
+echo   With no arguments: the development build for the host arch (into "build"):
+echo   the core, the optional loopback HTTP front door, the debug CLIs and tests.
+echo   Pass help / -h / --help / /? to show this help.
 echo.
 echo   Arch      amd64 (or x86_64), arm64, x86       default: host arch
-echo   Backend   pg / postgresql, legacy / pg_legacy, mysql, sqlite, ck / clickhouse, duckdb
-echo             (omit for the POSTGRESQL default)
-echo   mobile    build the profile HarmonyOS/Android/iOS ship: no HTTP front door
+echo   mobile    build the profile HarmonyOS ships: no HTTP front door
 echo             (no libwebsockets). Libraries only -- no exe, CLIs or tests.
 echo   clean     clear CMake's cache (keep the dir's vcpkg_installed) and
 echo             reconfigure -- use after changing options or moving the repo
 echo   help / -h / --help / /?   show this help
 echo.
-echo The build dir is build[-^<arch^>][-^<backend^>]: the arch suffix is omitted for
-echo the host arch, the backend suffix for the POSTGRESQL default. Examples
-echo below assume an amd64 host, so each combo gets its own coexisting dir:
-echo   build.cmd                 -^> build               (host arch, POSTGRESQL)
-echo   build.cmd legacy          -^> build-legacy        (host arch, POSTGRESQL_LEGACY)
-echo   build.cmd sqlite          -^> build-sqlite        (host arch, SQLITE)
-echo   build.cmd arm64           -^> build-arm64         (cross-arch, POSTGRESQL)
-echo   build.cmd arm64 legacy    -^> build-arm64-legacy  (cross-arch, POSTGRESQL_LEGACY)
+echo The build dir is build[-^<arch^>][-mobile]; the arch suffix is omitted for the
+echo host arch. SQLite is the only database backend.
 echo.
-echo Environment variables (see README "Building - Windows"):
+echo Environment variables (see docs/BUILDING.md "Windows"):
 echo   VS_DIR       Visual Studio install root.
 echo                Default: %%ProgramFiles%%\Microsoft Visual Studio\18\Community
 echo   VCPKG_ROOT   vcpkg checkout. If unset, vcvarsall.bat points at VS-bundled vcpkg.
@@ -147,5 +117,5 @@ echo                Default: %%VS_DIR%%\Common7\IDE\CommonExtensions\Microsoft\C
 echo   MIROBODY_VCPKG_CACHE  Optional dir for a shared vcpkg binary cache, reused
 echo                across machines and build dirs. Created if missing.
 echo.
-echo Arch and backend come only from the command line (no env vars).
+echo The arch comes only from the command line (no env vars).
 exit /b 0

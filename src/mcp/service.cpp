@@ -74,9 +74,6 @@ private:
     // anonymous caller (the table's user_id is NOT NULL with an FK to users).
     // Best-effort: a failed write is logged and swallowed.
     void log_mcp_access() {
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-        // The legacy schema has no user_mcp_access_logs table.
-#else
         if (db_ == nullptr || user_id_ <= 0) return;
         const std::int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - start_).count();
@@ -93,7 +90,6 @@ private:
         } catch (const std::exception& e) {
             platform::log_warn("audit: mcp access log failed: %s", e.what());
         }
-#endif
     }
 
     database::Database*                   db_;
