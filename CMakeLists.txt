@@ -722,11 +722,10 @@ if(MIROBODY_BUILD_SHARED)
     set_property(TARGET agent_impls    PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
 
-# --- C-ABI shared library (Java / Go / C# / Rust / … via FFI) ------------------
+# --- C-ABI shared library (any FFI host) --------------------------------------
 # libmirobody.{dll,so,dylib} exports the flat C functions in src/mirobody.h
-# (implemented in c_api.cpp). One artifact, consumed by every language with a
-# foreign-function interface. On Windows the
-# export table is restricted to the four C functions via mirobody.def (rather
+# (implemented in c_api.cpp and c_api_llm.cpp). On Windows the export table is
+# restricted to exactly those functions via mirobody.def (rather
 # than WINDOWS_EXPORT_ALL_SYMBOLS, which would also publish ~1000 mangled C++
 # symbols). Built by default on desktop; skipped on mobile, which ship their own
 # platform target also named "mirobody".
