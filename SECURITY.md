@@ -1,7 +1,7 @@
 # Security Policy
 
-mirobody-on-device keeps a person's health record on their phone, and on the
-phone it is usually the only copy. A defect here can expose it to another app,
+mirobody-on-device can keep a person's health record on their phone when the
+embedded core is the selected backend. A defect here can expose it to another app,
 to the local network, or to a model provider the person never chose, so we would
 rather hear about a suspected problem that turns out to be nothing than not
 hear about a real one.
@@ -36,17 +36,21 @@ and `harmony/`.
 
 Of particular interest:
 
-- **Reaching the record from off the device.** The loopback front door must
-  answer on `127.0.0.1` only. Anything that makes it reachable from the LAN,
-  or from another app without the session token, is a vulnerability. The
-  Android build bound every interface until September 2026.
+- **Reaching the record from off the device.** Embedded phone listeners must
+  answer on `127.0.0.1` only, even if config names a LAN address. Anything
+  that makes one reachable from the LAN, or gives another app unauthorized
+  access, is a vulnerability. Per-launch
+  authentication is planned, so loopback binding alone is not an access
+  control. The standalone development process accepts an explicit `HTTP_HOST`
+  override; the Android build bound every interface until September 2026.
 - **Reaching the record from another app on the same device.** Exported
   components, content providers, URL schemes, the WebView bridge, files
   written outside the app sandbox.
-- **Data leaving in a lane that promised it would not.** The on-device lane
-  must send nothing; the BYOK lane must send the turn to the chosen provider
-  and nowhere else. [docs/privacy-tiers.md](docs/privacy-tiers.md) is the
-  contract, and a gap between it and the code is in scope.
+- **Data leaving in a lane that promised it would not.** The selected backend
+  controls health uploads; a direct BYOK turn can send included context to the
+  chosen provider. [docs/privacy-tiers.md](docs/privacy-tiers.md) distinguishes
+  current behavior from target privacy requirements. A gap between an app's
+  stated destination and its actual network path is in scope.
 - **Secrets at rest.** The user's own API keys, session tokens, and
   `FILE_ENCRYPTION_KEY` handling for stored uploads.
 - **The agent tool surface.** Prompt injection through an uploaded document, a

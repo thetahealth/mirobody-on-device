@@ -6,11 +6,26 @@ dated by the day they reached `main`.
 
 ## Unreleased
 
+### Changed
+
+- The shared core now requires C++17. The custom `optional` compatibility layer
+  is gone, the host-facing C ABI is unchanged, and the build guide documents the
+  Android, Apple and OpenHarmony toolchain floor. Rebuild native libraries and
+  XCFrameworks against the new core: internal C++ APIs changed even though the
+  C ABI contract did not.
+- Added [architecture.md](docs/architecture.md), which defines the host/core
+  boundary, local/BYOK/server lanes and the mobile-first build profiles. The
+  English and Chinese READMEs now describe this repository as a phone runtime
+  instead of a second server.
+- Embedded Android and iOS servers now bind loopback even when a config file or
+  `HTTP_HOST` requests a LAN address. The standalone development process still
+  accepts an explicit host override.
+
 ### Added
 
 - The project files the main repo has and this one did not:
   [CONTRIBUTING.md](CONTRIBUTING.md) (which repo a change belongs in, the gates,
-  the C++11 and C ABI rules), [SECURITY.md](SECURITY.md) (scoped to what a phone
+  the C++17 and C ABI rules), [SECURITY.md](SECURITY.md) (scoped to what a phone
   runtime exposes: the loopback front door, other apps, the lanes),
   [AGENTS.md](AGENTS.md), the [Code of Conduct](CODE_OF_CONDUCT.md), issue
   forms for a wrongly coded reading and for everything else, a pull-request

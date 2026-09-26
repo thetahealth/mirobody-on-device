@@ -1,7 +1,7 @@
 # Building mirobody
 
-Full build instructions for every target. For the two-minute desktop version,
-see [Try it in two minutes](../README.md#try-it-in-two-minutes) in the README.
+Full build instructions for every target. For the short desktop path,
+see [Try the core on desktop](../README.md#try-the-core-on-desktop) in the README.
 
 ## Dependencies
 
@@ -56,32 +56,31 @@ install the libraries directly and point cmake at them via
 
 ## Toolchain
 
-C++11 is the floor. Set via `CMAKE_CXX_STANDARD 11` / `_REQUIRED ON` /
-`_EXTENSIONS OFF`; `mirobody_core` exposes `cxx_std_11` as a public
-`target_compile_features` so every downstream target inherits the
-requirement, and a `static_assert` in
-[src/platform/log.hpp](../src/platform/log.hpp) catches any consumer that
-slips through. MSVC builds add `/W4 /utf-8 /permissive- /Zc:__cplusplus`.
+The shared core requires **C++17**. CMake sets `CMAKE_CXX_STANDARD 17`, marks it
+required, disables compiler extensions, and exports `cxx_std_17` from
+`mirobody_core`. `src/platform/log.hpp` contains a compile-time assertion so a
+host that accidentally downgrades the target fails at the boundary instead of
+failing later on a standard-library symbol.
 
-| Compiler    | Minimum                                              |
-| ----------- | ---------------------------------------------------- |
-| MSVC        | Visual Studio 2015 (2017 / 2019 / 2022 / Preview 18) |
-| GCC         | 4.8.1 (Linux / WSL)                                  |
-| Clang       | 3.3 (Linux / WSL)                                    |
-| Apple Clang | Xcode 5 (iOS / macOS)                                |
-| Android NDK | r14                                                  |
+C++17 is the portability floor chosen for the Android NDK and Apple toolchains;
+the HarmonyOS native build must also pass before we treat that host as verified.
+C++20 is not a project requirement: three hosts consume the native library on
+independent release schedules, and the core currently needs no C++20 feature.
 
-### C++11
+| Build path | Configuration in this repository | Verification |
+|---|---|---|
+| Linux desktop | Ubuntu 24.04 CI | Core, tests and mobile CMake profile |
+| macOS desktop | macOS 15 CI | Core, tests and mobile CMake profile |
+| Windows desktop | Visual Studio 2019 or newer in `build.cmd` | Not in current CI |
+| Android host | NDK `27.0.12077973` in `android/app/build.gradle.kts` | App/native build not in current CI |
+| iOS host | iOS 16 deployment target in `ios/project.yml` | App/XCFramework build not in current CI |
+| HarmonyOS host | DevEco Studio 6.0 / native SDK API 21 per `harmony/README.md` | App/native build not in current CI |
 
-The code was retreated to C++11 to widen the
-set of host environments mirobody can embed into. Features that are post-C++11
-are shimmed in [src/compat/cxx11.hpp](../src/compat/cxx11.hpp):
-
-- `mirobody::optional<T>` / `mirobody::nullopt` - minimal drop-in for
-  `std::optional` using `std::aligned_storage` under the hood.
-
-(The codebase deals in `const std::string&` / `const char*` / `(const void*,
-size_t)` directly rather than a `string_view` shim.)
+Use the standard library directly. The old `src/compat/cxx11.hpp` optional shim
+has been removed; `std::optional` and `std::nullopt` are part of the core API
+implementation now. The public host boundary remains C, so this change does not
+expose C++ types to Kotlin, Swift or ArkTS. Rebuild any existing native binary
+or XCFramework because the internal C++ ABI has changed.
 
 ## Building - desktop
 
@@ -89,9 +88,7 @@ size_t)` directly rather than a `string_view` shim.)
 
 #### 1. Install Visual Studio
 
-**Visual Studio 2017 or newer** (2019 / 2022 / Preview 18 all work; 2015 also
-compiles but Ninja didn't ship with it, so you'd have to install Ninja
-separately). Community edition is fine - download from
+**Visual Studio 2019 or newer** for the C++17 core. Community edition is fine - download from
 [visualstudio.microsoft.com](https://visualstudio.microsoft.com/downloads/).
 
 In the installer, under *Workloads*, tick **Desktop development with C++**.
