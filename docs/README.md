@@ -9,6 +9,7 @@ is English; the top-level README also ships in Chinese.
 |---|---|
 | [architecture.md](architecture.md) | The shared core, host apps, C ABI, data flow and build profiles |
 | [BUILDING.md](BUILDING.md) | Every build target: dependencies per host, the development and mobile profiles, the app sysroots, Windows with vcpkg |
+| [testing.md](testing.md) | CI coverage, host-app verification and the evidence to include in a pull request |
 | [privacy-tiers.md](privacy-tiers.md) | Current host data paths, what can leave the device, and target privacy requirements |
 | [on-device-llm.md](on-device-llm.md) | The on-device model: runtimes, formats, quantization, measured phone numbers (a Marp slide deck) |
 | [markdown.md](markdown.md) | The Markdown a mirobody client must render, and where each client stands against it |

@@ -1,9 +1,9 @@
 # Contributing to mirobody-on-device
 
 Thank you for helping. This repo is the phone runtime of
-[mirobody](https://github.com/thetahealth/mirobody): a C++ core and the three
-apps that embed it. Most of what makes a contribution land here, rather than
-bounce, is knowing which of the two repos it belongs in.
+[mirobody](https://github.com/thetahealth/mirobody): a C++ core embedded by
+HarmonyOS and optionally by Android and iOS, plus the three host apps. Most
+of what makes a contribution land here is knowing which repo owns it.
 
 ## 🧭 Which repo
 
@@ -68,12 +68,17 @@ settled before the code is written.
 
    **The apps are not built in CI yet**: they need cross-compiled dependency
    sysroots. If your change touches `android/`, `ios/`, `harmony/`, the C ABI or
-   `src/platform/`, build the affected app (its README says how) and say in the
-   pull request which app you ran, on which device or emulator, and what you
-   checked.
+   `src/platform/`, build the affected app when possible (its README says how).
+   Say in the pull request which app and device or emulator you checked, or
+   explicitly say that the app build was not verified. The full evidence matrix
+   is in [docs/testing.md](docs/testing.md).
 
-5. **Open a pull request** against `main`. The template asks which gates you
-   ran; paste the test count line.
+5. **Open a pull request** against `main`. The active
+   [main rule](https://github.com/thetahealth/mirobody-on-device/rules/24043212)
+   requires a PR and both desktop CI jobs, and blocks force pushes and branch
+   deletion. The template asks which gates you ran; paste the test count line.
+   Status checks protect the core, while the app verification you report
+   covers the native host path CI cannot build yet.
 
 ## 📝 Coding style
 
@@ -83,7 +88,7 @@ assume, so they are worth reading once.
 ### Priorities, in order
 
 1. **Correct.** A confident wrong answer is the worst thing this project can
-   produce: it is health data, and here it is the only copy.
+   produce: it is health data, and an embedded record may be the only copy.
 2. **Testable.** Prefer a function that takes its inputs over one that reaches
    for global config. If it cannot be tested without a device, say why in the
    comment above it.
@@ -101,15 +106,16 @@ assume, so they are worth reading once.
 - **A new third-party dependency costs four builds**: vcpkg on Windows, and the
   Android, iOS and HarmonyOS prebuilt sysroots. Propose it in an issue before
   adding it.
-- **The C ABI in [`src/mirobody.h`](src/mirobody.h) is a contract** with three
-  apps that ship on their own schedules. Add functions rather than changing
-  one's meaning; a new function is also added to
+- **The C ABI in [`src/mirobody.h`](src/mirobody.h) is the native integration
+  contract**, even while Android uses direct JNI and Android/iOS use HTTP for
+  most app operations. Keep existing meanings stable as the hosts migrate to
+  direct calls; add a function rather than changing one. Add it to
   [`src/platform/mirobody.def`](src/platform/mirobody.def), which
   `tools/check_exports.py` enforces.
-- **An MCP tool or an agent is one file.** Drop a `.cpp` into
-  [`res/mcp_tools/`](res/mcp_tools/) (or `res/agents/`) that self-registers
-  with `MIROBODY_REGISTER_TOOL`; `echo.cpp` is the example. No edit to
-  `CMakeLists.txt` is needed.
+- **An MCP tool or an agent is one file.** A `.cpp` in
+  [`res/mcp_tools/`](res/mcp_tools/) registers with `MIROBODY_REGISTER_TOOL`;
+  `echo.cpp` is the example. Agents under `res/agents/` use
+  `MIROBODY_REGISTER_AGENT`. CMake discovers both directories.
 - **Logs carry ids, counts, durations and status codes. Never a value.** A
   reading, a note, a message body or an indicator name in a log line is health
   data outside the record: in logcat, in a crash report, in the log excerpt
@@ -131,10 +137,9 @@ a lie the first time the line changes.
 cfg.listen_addr = "127.0.0.1";
 
 // Good: records the bug that motivated the line
-// A caller passing 0.0.0.0 is asking for the default, not for the LAN: the
-// embedded server used to bind every interface and served the health record
-// to anyone on the same Wi-Fi.
-if (cfg.listen_addr.empty() || cfg.listen_addr == "0.0.0.0") cfg.listen_addr = "127.0.0.1";
+// HTTP_HOST or a config file can name a LAN address. An embedded server may
+// hold a health record, so it must not expose its listener to that network.
+cfg.listen_addr = "127.0.0.1";
 ```
 
 A stale comment is a bug. If you change behaviour, the comments describing it

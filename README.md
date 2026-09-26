@@ -254,6 +254,7 @@ containing values.
 
 - [Architecture](docs/architecture.md): the core, host bridges, build profiles and data flow.
 - [Building](docs/BUILDING.md): desktop builds, mobile profiles, sysroots and app toolchains.
+- [Testing](docs/testing.md): CI coverage, phone app verification and PR evidence.
 - [Privacy tiers](docs/privacy-tiers.md): what each lane can send off the phone.
 - [On-device LLM](docs/on-device-llm.md): runtimes, formats, quantization and measurements.
 - [Markdown contract](docs/markdown.md): rendering requirements for clients.
