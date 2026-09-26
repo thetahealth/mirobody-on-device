@@ -12,18 +12,6 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>LSRequiresIPhoneOS</key>
-	<true/>
-	<key>UILaunchScreen</key>
-	<dict/>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>en</string>
@@ -34,7 +22,48 @@
 		<string>de</string>
 		<string>ru</string>
 		<string>es</string>
+		<string>ar</string>
+		<string>he</string>
 	</array>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>REVERSED_CLIENT_ID</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>weixin</string>
+		<string>weixinULAPI</string>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Mirobody connects to Bluetooth health sensors (heart-rate strap, blood-pressure cuff, thermometer) to add their readings to your health record.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Mirobody reads your activity, heart rate, sleep, and weight from Apple Health to add them to your health record.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save chat images to your photo library.</string>
+	<key>UILaunchScreen</key>
+	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -47,34 +76,6 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
-	</array>
-	<!-- The app talks to user-configured HTTP backends (e.g. http://localhost:8080).
-	     Loopback is always allowed; arbitrary loads enabled so self-hosted http://
-	     backends work — tighten for the App Store if you only ship https backends. -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Save chat images to your photo library.</string>
-	<!-- Direct BLE GATT health sensors (Data/Health/BleHealthController). Core
-	     Bluetooth (central role) requires this string; prompted on first scan. -->
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Mirobody connects to Bluetooth health sensors (heart-rate strap, blood-pressure cuff, thermometer) to add their readings to your health record.</string>
-	<!-- Google sign-in (Firebase web OAuth) redirects back via a custom URL scheme.
-	     Replace REVERSED_CLIENT_ID with the value from the iOS Firebase app once
-	     registered (see ios/README.md). -->
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>REVERSED_CLIENT_ID</string>
-			</array>
-		</dict>
 	</array>
 </dict>
 </plist>

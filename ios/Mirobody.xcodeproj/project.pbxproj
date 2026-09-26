@@ -7,157 +7,725 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		100000000000000000000015 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000012 /* FirebaseAuth */; };
-		100000000000000000000016 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000013 /* FirebaseCore */; };
-		100000000000000000000017 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000014 /* MarkdownUI */; };
+		01A454ADAC14C0EE61F6733A /* ModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBE0302BC165F79CA20707AC /* ModelManager.swift */; };
+		029A0014D1F3E2F3EE270239 /* MathMarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F2AC9CBA19A9D3D1286B84D /* MathMarkdownText.swift */; };
+		067E37883E90AF1B74154CE0 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = DC1CC517EADEAEBEB886DE0A /* MarkdownUI */; };
+		099E4A434A0083BFB5F47CFB /* ApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D12D84CE7AEBBBE66145F1C2 /* ApiClient.swift */; };
+		0BCE1A7C8C8CEBF0C25F1EE7 /* OnDeviceModelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21DE84EBFB07CB341BF36151 /* OnDeviceModelView.swift */; };
+		0BE8953BC58648BDAC9BC0EE /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21C0082FB44F231ACEEB6D04 /* MessageBubble.swift */; };
+		0C8D1A28C27B21302875A7DF /* BleHealthController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD5E070AF99FFE9BA056A7B7 /* BleHealthController.swift */; };
+		10442BB11885ECF64837CB09 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABF1D3888F4525C55938F044 /* ChatViewModel.swift */; };
+		122D6DD5B16A42D4DC03D629 /* Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE9E4C6CC1AA91DC0F5273D1 /* Layout.swift */; };
+		1A481240CF6DAB8C5F55ED05 /* VendorsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ED2F43C96C580200CD922C2 /* VendorsView.swift */; };
+		1C3E025866C23F93F5D4DCE7 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3EBE242231C672F90DDAD6E7 /* FirebaseCore */; };
+		1E8FA3C72D64DE293BF5F535 /* ChatModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEC94FA00E57307CAE330B62 /* ChatModels.swift */; };
+		2502EC53458B836913DB33CB /* WeChatAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 635FD0FC0F3A722971713024 /* WeChatAuthRepository.swift */; };
+		250CB0FF7523C53C38033D26 /* GoogleAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF3C4D392AA1785DFD9FA004 /* GoogleAuthRepository.swift */; };
+		26AF5D8022DDF925B9FD845E /* EmailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 203435ABD18041C3B26A2B50 /* EmailView.swift */; };
+		2DFDE1D2E572AD7E0581F974 /* EhrRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7EF8681B7D409CB8E3369FE /* EhrRepository.swift */; };
+		349A79F867A0A1D940BB2706 /* ServerConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7F518862154B9A9C989C24D /* ServerConfig.swift */; };
+		3AEBEE290A8D990FB044EE8B /* EChartsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 357861F173467C245A8D5CC4 /* EChartsView.swift */; };
+		3E76401973C256C7BE23B03F /* ServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F55FC4C0A7FD38B6DBD200E /* ServerController.swift */; };
+		41F01BB6B0ABCDA8EF45F0F4 /* AuthViewModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1313B4564BB5E768E99A3FD3 /* AuthViewModels.swift */; };
+		4565DF74C484763F590A06BB /* AppleAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11F0E57E5968FB15F3DFAA9 /* AppleAuthRepository.swift */; };
+		4588CE18425B0AC379F38106 /* ChatStreamClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66778C139CF5AF759DA30B92 /* ChatStreamClient.swift */; };
+		4B440C3ECCBDC7E138F1BAEB /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F916D046E37C05AA4FA946E7 /* HistoryView.swift */; };
+		4CD6093B2DC143C90AA4E10C /* GattHealthCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = A180990B788128A31164CE24 /* GattHealthCodec.swift */; };
+		4D1FFB4481DAC32CC61AD982 /* BaseUrlDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBE4928834A715EADB50607 /* BaseUrlDialog.swift */; };
+		5178F6580E58F295FF3DA244 /* NavDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B6A64ED782BFD6E6BBB997F /* NavDrawer.swift */; };
+		53B8FA4198BA25AD5A539273 /* GattHealthCodecTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FFED06D80B2ADDBD9AD3D50 /* GattHealthCodecTests.swift */; };
+		53E3D394409375F58F08978A /* FhirObservation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEE22CF6C8467B69B0CB4244 /* FhirObservation.swift */; };
+		5B31338A3FBDFD37BA18FB07 /* ImageViewer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 119E6AFC211224C1E04399C2 /* ImageViewer.swift */; };
+		5D3379A936DF26DAF6DFF45B /* HealthSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D4076530CA95FB4E5327F16 /* HealthSyncView.swift */; };
+		698216E419784155B4442208 /* BleDeviceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 009B4306DAA139780F52AF59 /* BleDeviceView.swift */; };
+		6A93694A2AAEAB7D030E6086 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEE372DAE98D3C5635E654D6 /* ChatView.swift */; };
+		6EDCDB992E7B7B23B61DA164 /* LlamaCppEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3503C3EA767455B12A4B20C3 /* LlamaCppEngine.swift */; };
+		7050D2F77DABB600CF179140 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F03DAF774A447D4103EC648E /* RootView.swift */; };
+		72F7549A41D476E93B1B413A /* Localizable.stringsdict in Resources */ = {isa = PBXBuildFile; fileRef = 77BDA2BEEFB615BFE700B5A2 /* Localizable.stringsdict */; };
+		749638E45285C3FF9F4E8AA9 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9A9C3E5EB76364DC7F48A10 /* HistoryViewModel.swift */; };
+		749A58B199CEC2CE366B51F6 /* XAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A235713042E8B8C18B412496 /* XAuthRepository.swift */; };
+		8787E3E8B9EBC1195D4E0971 /* ChatRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D90701EC07F0C8B4AFDB7C /* ChatRepository.swift */; };
+		8982362F84CF0E5B7422C5A1 /* HealthKitRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E9700428F88C357138BB2E0 /* HealthKitRepository.swift */; };
+		8C3DDB29452CC8493CEDFC3D /* VendorDtos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BC695EFDA9147DE6E403B02 /* VendorDtos.swift */; };
+		8DEA641EF57EE6111C4A8454 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 97955ED851D503FBF73DCAF6 /* Localizable.strings */; };
+		8F2E2450C5A87EF6204508E9 /* ChatImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25A3B76F36285C83B5B8B56E /* ChatImage.swift */; };
+		901589C0B5AE46E067BAD790 /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8464727FF7D74BF5ED17CDB /* MarkdownText.swift */; };
+		93332D7CFF957CEF046BF8EC /* MirobodyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E5B2376985EDCA8673CCA07 /* MirobodyApp.swift */; };
+		97C95C03238BE99AF84CD897 /* echarts.min.js in Resources */ = {isa = PBXBuildFile; fileRef = 1954E7A5D64047AFDB088080 /* echarts.min.js */; };
+		982DF9019BBD03CF3B80B732 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B917F6812F8F3694215350D /* AuthRepository.swift */; };
+		9E999324F009F1FF4BB21398 /* LanguageDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82181224C867A2966ABE2F41 /* LanguageDialog.swift */; };
+		A2F543EE4B8B106AD7F2045B /* ErrorBus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A391DAAABD2651D9D47B515 /* ErrorBus.swift */; };
+		AD4E3F046C9B89A6A976EA8C /* AppSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 178300EDB33B290B61F7D633 /* AppSettingsSection.swift */; };
+		AF62B95D411C5FDBDEC6A2F5 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BE62B85EB0ED15715F8948F /* Theme.swift */; };
+		B01C1A360771612ADF0BC452 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E951D03378BCF34859C46E6 /* AppError.swift */; };
+		B2CF7F01982E382D2D113523 /* VendorRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C9243A9A582BB071F135A2E /* VendorRepository.swift */; };
+		B45E6AE9DB6D9B8B8BDF0A82 /* AuthDtos.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8B6937A905C073CADE9534F /* AuthDtos.swift */; };
+		B4826E51E285C7A95DB01ADF /* LiteRtLlmEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38404ABADBD5F591ABD4A6EB /* LiteRtLlmEngine.swift */; };
+		B8F68C115C3D2DBAAD5DFEEE /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09052772DF0921C6198293BC /* JSONValue.swift */; };
+		BD0E67F55E9E72BE896CE8E8 /* OnDeviceEngines.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6F8B05524A8CF7AE5318F09 /* OnDeviceEngines.swift */; };
+		C319A04C044D7636F56AE621 /* ChatDtos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 808EA76967E7F27850E0D243 /* ChatDtos.swift */; };
+		C4B8F1E52A26F0F89AD179EA /* math in Resources */ = {isa = PBXBuildFile; fileRef = 47801592A7736DE78720A247 /* math */; };
+		CB268B94062A696167E5AFB6 /* ApiEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD8152A271F725FB4FE5B51F /* ApiEnvelope.swift */; };
+		D163161B554A6C076C301568 /* EhrDtos.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26D388B0DCC2F0F707646AE4 /* EhrDtos.swift */; };
+		D4E35A1EF212FCE6E21A73AC /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4A9228CA398C0E72C170C22 /* AppContainer.swift */; };
+		D63AF7EA1AA71185A57E5E70 /* DrawerRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 036AFA1F1DAB1CCA10FFFBC4 /* DrawerRow.swift */; };
+		DAA0EF8CCCC6BB2E6F297961 /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60B0359708B98757A0CD2362 /* SettingsStore.swift */; };
+		DE7BCE04D52781176105C1A7 /* HealthSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = D294F3CF9B1DE93194F4208E /* HealthSample.swift */; };
+		E0564C9701F1C14AC19AD32A /* chart-theme.js in Resources */ = {isa = PBXBuildFile; fileRef = 5637FF9F96EAD4F7B7B9BB42 /* chart-theme.js */; };
+		E27C239F6CF16299652054BA /* OnDeviceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E1F298A7FB3C77488F1FE74 /* OnDeviceModel.swift */; };
+		E561839C8DDCB6F3D3E9423B /* OnDeviceLlmEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70D926FDE59A9BE05FB47E7B /* OnDeviceLlmEngine.swift */; };
+		E656F257796FF69EB632749A /* GitHubAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F40F3B31CC200B2798A88F87 /* GitHubAuthRepository.swift */; };
+		EAF1E97D59F410C69E2F875F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5F072456EB05EBE68D90FA1B /* Assets.xcassets */; };
+		EC425C8AE35D45D64DD0054D /* FirebaseInitializer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F8000097F02473783B3FD55 /* FirebaseInitializer.swift */; };
+		ECAA99EFDF45F6E0950C28B0 /* ServerConfigStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B96D6C6A44EA720575F80E9 /* ServerConfigStore.swift */; };
+		F066A575F0EBBBA88BDC0D50 /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = 58BB41BAB036225ED55EAD20 /* LiteRTLM */; };
+		F35231FA4919F15B89E3B9E3 /* AppErrorMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 963CE5CB8A28B07A23191C41 /* AppErrorMessage.swift */; };
+		F37AABD84DD835AA5CCED41C /* EhrView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71DBAEF5AFE5766A67D5193E /* EhrView.swift */; };
+		F657BC92E8B7622307908984 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = CB6548BCB597A63BF5E379F5 /* FirebaseAuth */; };
+		FCD7AB4EF7D3760E08F1AC7F /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7751E41E28300508B62A3D9 /* Localization.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		983CFF3B64CE7A921E35A860 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CE9FA8F1377199CFFE6EF8DB /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 33988D4C2E87FFF25CC8AEAF;
+			remoteInfo = Mirobody;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
-		100000000000000000000006 /* Mirobody.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Mirobody.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		009B4306DAA139780F52AF59 /* BleDeviceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleDeviceView.swift; sourceTree = "<group>"; };
+		01212ADE21CFB1A9FCBCC3D3 /* Mirobody.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Mirobody.entitlements; sourceTree = "<group>"; };
+		036AFA1F1DAB1CCA10FFFBC4 /* DrawerRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DrawerRow.swift; sourceTree = "<group>"; };
+		09052772DF0921C6198293BC /* JSONValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSONValue.swift; sourceTree = "<group>"; };
+		1193DB832770E81E2E974B23 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ja; path = ja.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		119E6AFC211224C1E04399C2 /* ImageViewer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageViewer.swift; sourceTree = "<group>"; };
+		1313B4564BB5E768E99A3FD3 /* AuthViewModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModels.swift; sourceTree = "<group>"; };
+		178300EDB33B290B61F7D633 /* AppSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsSection.swift; sourceTree = "<group>"; };
+		1954E7A5D64047AFDB088080 /* echarts.min.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = echarts.min.js; sourceTree = "<group>"; };
+		1BC695EFDA9147DE6E403B02 /* VendorDtos.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorDtos.swift; sourceTree = "<group>"; };
+		1ED2F43C96C580200CD922C2 /* VendorsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorsView.swift; sourceTree = "<group>"; };
+		1F55FC4C0A7FD38B6DBD200E /* ServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerController.swift; sourceTree = "<group>"; };
+		203435ABD18041C3B26A2B50 /* EmailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmailView.swift; sourceTree = "<group>"; };
+		21C0082FB44F231ACEEB6D04 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
+		21DE84EBFB07CB341BF36151 /* OnDeviceModelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceModelView.swift; sourceTree = "<group>"; };
+		24B50EFD90E767D85A847987 /* Mirobody-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Mirobody-Bridging-Header.h"; sourceTree = "<group>"; };
+		25A3B76F36285C83B5B8B56E /* ChatImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatImage.swift; sourceTree = "<group>"; };
+		26D388B0DCC2F0F707646AE4 /* EhrDtos.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EhrDtos.swift; sourceTree = "<group>"; };
+		2C9243A9A582BB071F135A2E /* VendorRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VendorRepository.swift; sourceTree = "<group>"; };
+		2D4076530CA95FB4E5327F16 /* HealthSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSyncView.swift; sourceTree = "<group>"; };
+		34078FA8EF8CA26109A94713 /* MirobodyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MirobodyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3503C3EA767455B12A4B20C3 /* LlamaCppEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaCppEngine.swift; sourceTree = "<group>"; };
+		357861F173467C245A8D5CC4 /* EChartsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EChartsView.swift; sourceTree = "<group>"; };
+		35BF2696E9B2B1AC7AD8FE79 /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
+		38404ABADBD5F591ABD4A6EB /* LiteRtLlmEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteRtLlmEngine.swift; sourceTree = "<group>"; };
+		3B96D6C6A44EA720575F80E9 /* ServerConfigStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerConfigStore.swift; sourceTree = "<group>"; };
+		3BE62B85EB0ED15715F8948F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		3E5B2376985EDCA8673CCA07 /* MirobodyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirobodyApp.swift; sourceTree = "<group>"; };
+		45A3BF9CC663BB25B8030098 /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/Localizable.strings; sourceTree = "<group>"; };
+		47801592A7736DE78720A247 /* math */ = {isa = PBXFileReference; lastKnownFileType = folder; name = math; path = Mirobody/Resources/math; sourceTree = SOURCE_ROOT; };
+		4841CC11A446707D2D0566D1 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
+		4B3C8605D1B949E62E984CDE /* zh */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = zh; path = zh.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		4E1F298A7FB3C77488F1FE74 /* OnDeviceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceModel.swift; sourceTree = "<group>"; };
+		4E9700428F88C357138BB2E0 /* HealthKitRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitRepository.swift; sourceTree = "<group>"; };
+		5637FF9F96EAD4F7B7B9BB42 /* chart-theme.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "chart-theme.js"; sourceTree = "<group>"; };
+		5A391DAAABD2651D9D47B515 /* ErrorBus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBus.swift; sourceTree = "<group>"; };
+		5B917F6812F8F3694215350D /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
+		5F072456EB05EBE68D90FA1B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		60B0359708B98757A0CD2362 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
+		635FD0FC0F3A722971713024 /* WeChatAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeChatAuthRepository.swift; sourceTree = "<group>"; };
+		6677188AE7F733896F6BAAFE /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = en; path = en.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		66778C139CF5AF759DA30B92 /* ChatStreamClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatStreamClient.swift; sourceTree = "<group>"; };
+		6B6A64ED782BFD6E6BBB997F /* NavDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavDrawer.swift; sourceTree = "<group>"; };
+		6E569001B23477B00E96FBAB /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = es; path = es.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		6F2AC9CBA19A9D3D1286B84D /* MathMarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MathMarkdownText.swift; sourceTree = "<group>"; };
+		6F5DD700D86E33A94871D794 /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = he; path = he.lproj/Localizable.strings; sourceTree = "<group>"; };
+		70D926FDE59A9BE05FB47E7B /* OnDeviceLlmEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceLlmEngine.swift; sourceTree = "<group>"; };
+		71DBAEF5AFE5766A67D5193E /* EhrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EhrView.swift; sourceTree = "<group>"; };
+		7E951D03378BCF34859C46E6 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		802A183A04473F1061C07AF8 /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ru; path = ru.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		808EA76967E7F27850E0D243 /* ChatDtos.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDtos.swift; sourceTree = "<group>"; };
+		80D90701EC07F0C8B4AFDB7C /* ChatRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRepository.swift; sourceTree = "<group>"; };
+		82181224C867A2966ABE2F41 /* LanguageDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageDialog.swift; sourceTree = "<group>"; };
+		8F8000097F02473783B3FD55 /* FirebaseInitializer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseInitializer.swift; sourceTree = "<group>"; };
+		8FFED06D80B2ADDBD9AD3D50 /* GattHealthCodecTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GattHealthCodecTests.swift; sourceTree = "<group>"; };
+		942345CFBF92DA99052D5B4B /* zh */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh; path = zh.lproj/Localizable.strings; sourceTree = "<group>"; };
+		963CE5CB8A28B07A23191C41 /* AppErrorMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppErrorMessage.swift; sourceTree = "<group>"; };
+		A180990B788128A31164CE24 /* GattHealthCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GattHealthCodec.swift; sourceTree = "<group>"; };
+		A235713042E8B8C18B412496 /* XAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XAuthRepository.swift; sourceTree = "<group>"; };
+		A8B6937A905C073CADE9534F /* AuthDtos.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthDtos.swift; sourceTree = "<group>"; };
+		AA1EF0F31B410E9C88CB8B26 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		ABF1D3888F4525C55938F044 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		AE9E4C6CC1AA91DC0F5273D1 /* Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Layout.swift; sourceTree = "<group>"; };
+		AF78CFF0871F43C7734911A3 /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ar; path = ar.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		B48F5DB6CA0CE763385058C3 /* Mirobody.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Mirobody.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B98AF2FF343B992CDC9F45AC /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = ko; path = ko.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		BA6C52FF0AEDAACBADEEA23B /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		BD5E070AF99FFE9BA056A7B7 /* BleHealthController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHealthController.swift; sourceTree = "<group>"; };
+		BEE22CF6C8467B69B0CB4244 /* FhirObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FhirObservation.swift; sourceTree = "<group>"; };
+		BEE372DAE98D3C5635E654D6 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		BF3C4D392AA1785DFD9FA004 /* GoogleAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleAuthRepository.swift; sourceTree = "<group>"; };
+		C6F8B05524A8CF7AE5318F09 /* OnDeviceEngines.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnDeviceEngines.swift; sourceTree = "<group>"; };
+		C7751E41E28300508B62A3D9 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		C7F518862154B9A9C989C24D /* ServerConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerConfig.swift; sourceTree = "<group>"; };
+		CBBE4928834A715EADB50607 /* BaseUrlDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseUrlDialog.swift; sourceTree = "<group>"; };
+		CEC94FA00E57307CAE330B62 /* ChatModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatModels.swift; sourceTree = "<group>"; };
+		D00D1EB47ECF8033646E9BB1 /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = fr; path = fr.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		D12D84CE7AEBBBE66145F1C2 /* ApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApiClient.swift; sourceTree = "<group>"; };
+		D294F3CF9B1DE93194F4208E /* HealthSample.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthSample.swift; sourceTree = "<group>"; };
+		D4A9228CA398C0E72C170C22 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		D7EF8681B7D409CB8E3369FE /* EhrRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EhrRepository.swift; sourceTree = "<group>"; };
+		D9A9C3E5EB76364DC7F48A10 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
+		DBE0302BC165F79CA20707AC /* ModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelManager.swift; sourceTree = "<group>"; };
+		DD8152A271F725FB4FE5B51F /* ApiEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApiEnvelope.swift; sourceTree = "<group>"; };
+		DDAAD765D2EBABD9C13B56FD /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E05FFB3D9FDD03B331B65478 /* ar */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ar; path = ar.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E11F0E57E5968FB15F3DFAA9 /* AppleAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleAuthRepository.swift; sourceTree = "<group>"; };
+		E6EB0663066BD609400773C1 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
+		EB1A2B9AA5DA9C8F0EDB1C2D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		F03DAF774A447D4103EC648E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		F40F3B31CC200B2798A88F87 /* GitHubAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitHubAuthRepository.swift; sourceTree = "<group>"; };
+		F4DB2142D6C33799A1D02B10 /* he */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = he; path = he.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
+		F8464727FF7D74BF5ED17CDB /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownText.swift; sourceTree = "<group>"; };
+		F916D046E37C05AA4FA946E7 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		FE240F857F51245611946DE5 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = de; path = de.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		100000000000000000000004 /* Mirobody */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Mirobody;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
-
 /* Begin PBXFrameworksBuildPhase section */
-		100000000000000000000008 /* Frameworks */ = {
+		2DF57D287AC697112E4F2F9D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				100000000000000000000015 /* FirebaseAuth in Frameworks */,
-				100000000000000000000016 /* FirebaseCore in Frameworks */,
-				100000000000000000000017 /* MarkdownUI in Frameworks */,
+				F657BC92E8B7622307908984 /* FirebaseAuth in Frameworks */,
+				1C3E025866C23F93F5D4DCE7 /* FirebaseCore in Frameworks */,
+				067E37883E90AF1B74154CE0 /* MarkdownUI in Frameworks */,
+				F066A575F0EBBBA88BDC0D50 /* LiteRTLM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		100000000000000000000002 = {
+		1B650787FB92C8D0EFF0868E /* Chat */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000004 /* Mirobody */,
-				100000000000000000000003 /* Products */,
+				808EA76967E7F27850E0D243 /* ChatDtos.swift */,
+				80D90701EC07F0C8B4AFDB7C /* ChatRepository.swift */,
+				66778C139CF5AF759DA30B92 /* ChatStreamClient.swift */,
 			);
+			path = Chat;
 			sourceTree = "<group>";
 		};
-		100000000000000000000003 /* Products */ = {
+		1D23B0CED5042475AB23BDCD /* Settings */ = {
 			isa = PBXGroup;
 			children = (
-				100000000000000000000006 /* Mirobody.app */,
+				60B0359708B98757A0CD2362 /* SettingsStore.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		240A85E3CFE1D956200C7A0E /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				5F9E62A6BC78122401B3332E /* Auth */,
+				1B650787FB92C8D0EFF0868E /* Chat */,
+				2E7A587930A9DBC2899D45BE /* Config */,
+				9543629DA6DDB06A4B3F519D /* Health */,
+				5D04439BBEA2AFA3134217CB /* LLM */,
+				A7A448B1B51782C5D1E4E119 /* Net */,
+				1D23B0CED5042475AB23BDCD /* Settings */,
+				D2635CCEC9D7AAF078573152 /* Vendor */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
+		2BFE1E54C189D74CBEA2A406 /* Health */ = {
+			isa = PBXGroup;
+			children = (
+				009B4306DAA139780F52AF59 /* BleDeviceView.swift */,
+				71DBAEF5AFE5766A67D5193E /* EhrView.swift */,
+				2D4076530CA95FB4E5327F16 /* HealthSyncView.swift */,
+			);
+			path = Health;
+			sourceTree = "<group>";
+		};
+		2E7A587930A9DBC2899D45BE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				C7F518862154B9A9C989C24D /* ServerConfig.swift */,
+				3B96D6C6A44EA720575F80E9 /* ServerConfigStore.swift */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		35CA99899B239F16FD2F8E7D /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				178300EDB33B290B61F7D633 /* AppSettingsSection.swift */,
+				CBBE4928834A715EADB50607 /* BaseUrlDialog.swift */,
+				82181224C867A2966ABE2F41 /* LanguageDialog.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		38CC3169B577C6BDB6AB45B8 /* Mirobody */ = {
+			isa = PBXGroup;
+			children = (
+				B63E44A5F78F2C8663E391E7 /* App */,
+				5E4D1D5A696B5673CF5C8202 /* Bridging */,
+				240A85E3CFE1D956200C7A0E /* Data */,
+				6884918D7E49941813218AA0 /* Resources */,
+				6CF1BC45487AB3B6EE07F032 /* UI */,
+			);
+			path = Mirobody;
+			sourceTree = "<group>";
+		};
+		423F47A62E76C5E3C197D2CB /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B48F5DB6CA0CE763385058C3 /* Mirobody.app */,
+				34078FA8EF8CA26109A94713 /* MirobodyTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		4CFE0332098720BFA7C27287 /* MirobodyTests */ = {
+			isa = PBXGroup;
+			children = (
+				8FFED06D80B2ADDBD9AD3D50 /* GattHealthCodecTests.swift */,
+			);
+			path = MirobodyTests;
+			sourceTree = "<group>";
+		};
+		4D2F1E52BDDF675BEEE599CE /* Vendors */ = {
+			isa = PBXGroup;
+			children = (
+				1ED2F43C96C580200CD922C2 /* VendorsView.swift */,
+			);
+			path = Vendors;
+			sourceTree = "<group>";
+		};
+		5D04439BBEA2AFA3134217CB /* LLM */ = {
+			isa = PBXGroup;
+			children = (
+				38404ABADBD5F591ABD4A6EB /* LiteRtLlmEngine.swift */,
+				3503C3EA767455B12A4B20C3 /* LlamaCppEngine.swift */,
+				DBE0302BC165F79CA20707AC /* ModelManager.swift */,
+				C6F8B05524A8CF7AE5318F09 /* OnDeviceEngines.swift */,
+				70D926FDE59A9BE05FB47E7B /* OnDeviceLlmEngine.swift */,
+				4E1F298A7FB3C77488F1FE74 /* OnDeviceModel.swift */,
+			);
+			path = LLM;
+			sourceTree = "<group>";
+		};
+		5E4D1D5A696B5673CF5C8202 /* Bridging */ = {
+			isa = PBXGroup;
+			children = (
+				24B50EFD90E767D85A847987 /* Mirobody-Bridging-Header.h */,
+			);
+			path = Bridging;
+			sourceTree = "<group>";
+		};
+		5F9E62A6BC78122401B3332E /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				E11F0E57E5968FB15F3DFAA9 /* AppleAuthRepository.swift */,
+				A8B6937A905C073CADE9534F /* AuthDtos.swift */,
+				5B917F6812F8F3694215350D /* AuthRepository.swift */,
+				8F8000097F02473783B3FD55 /* FirebaseInitializer.swift */,
+				F40F3B31CC200B2798A88F87 /* GitHubAuthRepository.swift */,
+				BF3C4D392AA1785DFD9FA004 /* GoogleAuthRepository.swift */,
+				635FD0FC0F3A722971713024 /* WeChatAuthRepository.swift */,
+				A235713042E8B8C18B412496 /* XAuthRepository.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		6884918D7E49941813218AA0 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				5F072456EB05EBE68D90FA1B /* Assets.xcassets */,
+				5637FF9F96EAD4F7B7B9BB42 /* chart-theme.js */,
+				1954E7A5D64047AFDB088080 /* echarts.min.js */,
+				47801592A7736DE78720A247 /* math */,
+				97955ED851D503FBF73DCAF6 /* Localizable.strings */,
+				77BDA2BEEFB615BFE700B5A2 /* Localizable.stringsdict */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		6CF1BC45487AB3B6EE07F032 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				963CE5CB8A28B07A23191C41 /* AppErrorMessage.swift */,
+				036AFA1F1DAB1CCA10FFFBC4 /* DrawerRow.swift */,
+				AE9E4C6CC1AA91DC0F5273D1 /* Layout.swift */,
+				C7751E41E28300508B62A3D9 /* Localization.swift */,
+				F03DAF774A447D4103EC648E /* RootView.swift */,
+				3BE62B85EB0ED15715F8948F /* Theme.swift */,
+				F293519CE7B3934D58AD5DC6 /* Auth */,
+				A2B90F63F2CDF087A0A255FC /* Chat */,
+				2BFE1E54C189D74CBEA2A406 /* Health */,
+				35CA99899B239F16FD2F8E7D /* Settings */,
+				4D2F1E52BDDF675BEEE599CE /* Vendors */,
+			);
+			path = UI;
+			sourceTree = "<group>";
+		};
+		9543629DA6DDB06A4B3F519D /* Health */ = {
+			isa = PBXGroup;
+			children = (
+				BD5E070AF99FFE9BA056A7B7 /* BleHealthController.swift */,
+				26D388B0DCC2F0F707646AE4 /* EhrDtos.swift */,
+				D7EF8681B7D409CB8E3369FE /* EhrRepository.swift */,
+				BEE22CF6C8467B69B0CB4244 /* FhirObservation.swift */,
+				A180990B788128A31164CE24 /* GattHealthCodec.swift */,
+				4E9700428F88C357138BB2E0 /* HealthKitRepository.swift */,
+				D294F3CF9B1DE93194F4208E /* HealthSample.swift */,
+			);
+			path = Health;
+			sourceTree = "<group>";
+		};
+		A2B90F63F2CDF087A0A255FC /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				25A3B76F36285C83B5B8B56E /* ChatImage.swift */,
+				CEC94FA00E57307CAE330B62 /* ChatModels.swift */,
+				BEE372DAE98D3C5635E654D6 /* ChatView.swift */,
+				ABF1D3888F4525C55938F044 /* ChatViewModel.swift */,
+				357861F173467C245A8D5CC4 /* EChartsView.swift */,
+				F916D046E37C05AA4FA946E7 /* HistoryView.swift */,
+				D9A9C3E5EB76364DC7F48A10 /* HistoryViewModel.swift */,
+				119E6AFC211224C1E04399C2 /* ImageViewer.swift */,
+				F8464727FF7D74BF5ED17CDB /* MarkdownText.swift */,
+				6F2AC9CBA19A9D3D1286B84D /* MathMarkdownText.swift */,
+				21C0082FB44F231ACEEB6D04 /* MessageBubble.swift */,
+				6B6A64ED782BFD6E6BBB997F /* NavDrawer.swift */,
+				21DE84EBFB07CB341BF36151 /* OnDeviceModelView.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		A7A448B1B51782C5D1E4E119 /* Net */ = {
+			isa = PBXGroup;
+			children = (
+				D12D84CE7AEBBBE66145F1C2 /* ApiClient.swift */,
+				DD8152A271F725FB4FE5B51F /* ApiEnvelope.swift */,
+				7E951D03378BCF34859C46E6 /* AppError.swift */,
+				5A391DAAABD2651D9D47B515 /* ErrorBus.swift */,
+				09052772DF0921C6198293BC /* JSONValue.swift */,
+			);
+			path = Net;
+			sourceTree = "<group>";
+		};
+		B63E44A5F78F2C8663E391E7 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				D4A9228CA398C0E72C170C22 /* AppContainer.swift */,
+				EB1A2B9AA5DA9C8F0EDB1C2D /* Info.plist */,
+				01212ADE21CFB1A9FCBCC3D3 /* Mirobody.entitlements */,
+				3E5B2376985EDCA8673CCA07 /* MirobodyApp.swift */,
+				1F55FC4C0A7FD38B6DBD200E /* ServerController.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		D2635CCEC9D7AAF078573152 /* Vendor */ = {
+			isa = PBXGroup;
+			children = (
+				1BC695EFDA9147DE6E403B02 /* VendorDtos.swift */,
+				2C9243A9A582BB071F135A2E /* VendorRepository.swift */,
+			);
+			path = Vendor;
+			sourceTree = "<group>";
+		};
+		F293519CE7B3934D58AD5DC6 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				1313B4564BB5E768E99A3FD3 /* AuthViewModels.swift */,
+				203435ABD18041C3B26A2B50 /* EmailView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		F901D5CBD52CB89EF13A347F = {
+			isa = PBXGroup;
+			children = (
+				38CC3169B577C6BDB6AB45B8 /* Mirobody */,
+				4CFE0332098720BFA7C27287 /* MirobodyTests */,
+				423F47A62E76C5E3C197D2CB /* Products */,
+			);
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		100000000000000000000005 /* Mirobody */ = {
+		33988D4C2E87FFF25CC8AEAF /* Mirobody */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 10000000000000000000000B /* Build configuration list for PBXNativeTarget "Mirobody" */;
+			buildConfigurationList = FBE214645DAF761550D86B64 /* Build configuration list for PBXNativeTarget "Mirobody" */;
 			buildPhases = (
-				100000000000000000000007 /* Sources */,
-				100000000000000000000008 /* Frameworks */,
-				100000000000000000000009 /* Resources */,
+				9926114B55C959025A6E5B36 /* Sources */,
+				E1CDAF6C61D61B86E315E1D1 /* Resources */,
+				2DF57D287AC697112E4F2F9D /* Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			fileSystemSynchronizedGroups = (
-				100000000000000000000004 /* Mirobody */,
-			);
 			name = Mirobody;
 			packageProductDependencies = (
-				100000000000000000000012 /* FirebaseAuth */,
-				100000000000000000000013 /* FirebaseCore */,
-				100000000000000000000014 /* MarkdownUI */,
+				CB6548BCB597A63BF5E379F5 /* FirebaseAuth */,
+				3EBE242231C672F90DDAD6E7 /* FirebaseCore */,
+				DC1CC517EADEAEBEB886DE0A /* MarkdownUI */,
+				58BB41BAB036225ED55EAD20 /* LiteRTLM */,
 			);
 			productName = Mirobody;
-			productReference = 100000000000000000000006 /* Mirobody.app */;
+			productReference = B48F5DB6CA0CE763385058C3 /* Mirobody.app */;
 			productType = "com.apple.product-type.application";
+		};
+		FA826FB45DDEB8B4AB4E6A80 /* MirobodyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FFA5C5162C79D6C30C1891ED /* Build configuration list for PBXNativeTarget "MirobodyTests" */;
+			buildPhases = (
+				40756BB79F13DCAFF72CFDD2 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C1092CBA5B69515B6DE373AB /* PBXTargetDependency */,
+			);
+			name = MirobodyTests;
+			packageProductDependencies = (
+			);
+			productName = MirobodyTests;
+			productReference = 34078FA8EF8CA26109A94713 /* MirobodyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		100000000000000000000001 /* Project object */ = {
+		CE9FA8F1377199CFFE6EF8DB /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1600;
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
 				TargetAttributes = {
-					100000000000000000000005 = {
-						CreatedOnToolsVersion = 16.0;
+					33988D4C2E87FFF25CC8AEAF = {
+						DevelopmentTeam = "";
+					};
+					FA826FB45DDEB8B4AB4E6A80 = {
+						DevelopmentTeam = "";
 					};
 				};
 			};
-			buildConfigurationList = 10000000000000000000000A /* Build configuration list for PBXProject "Mirobody" */;
-			compatibilityVersion = "Xcode 15.0";
+			buildConfigurationList = 0C6F78AF99328C69A1B3070C /* Build configuration list for PBXProject "Mirobody" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
 				Base,
-				zh,
+				ar,
+				de,
+				en,
+				es,
+				fr,
+				he,
 				ja,
 				ko,
-				fr,
-				de,
 				ru,
-				es,
-				ar,
-				he,
+				zh,
 			);
-			mainGroup = 100000000000000000000002;
+			mainGroup = F901D5CBD52CB89EF13A347F;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				100000000000000000000010 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
-				100000000000000000000011 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
+				BD08B6155BBA65C15FBFC320 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				53CD19C5E32F53A0E4FA39E4 /* XCRemoteSwiftPackageReference "LiteRT-LM" */,
+				B5E1619088F46960EB888733 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 			);
-			productRefGroup = 100000000000000000000003 /* Products */;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 423F47A62E76C5E3C197D2CB /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				100000000000000000000005 /* Mirobody */,
+				33988D4C2E87FFF25CC8AEAF /* Mirobody */,
+				FA826FB45DDEB8B4AB4E6A80 /* MirobodyTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		100000000000000000000009 /* Resources */ = {
+		E1CDAF6C61D61B86E315E1D1 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EAF1E97D59F410C69E2F875F /* Assets.xcassets in Resources */,
+				8DEA641EF57EE6111C4A8454 /* Localizable.strings in Resources */,
+				72F7549A41D476E93B1B413A /* Localizable.stringsdict in Resources */,
+				E0564C9701F1C14AC19AD32A /* chart-theme.js in Resources */,
+				97C95C03238BE99AF84CD897 /* echarts.min.js in Resources */,
+				C4B8F1E52A26F0F89AD179EA /* math in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		100000000000000000000007 /* Sources */ = {
+		40756BB79F13DCAFF72CFDD2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				53B8FA4198BA25AD5A539273 /* GattHealthCodecTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9926114B55C959025A6E5B36 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				099E4A434A0083BFB5F47CFB /* ApiClient.swift in Sources */,
+				CB268B94062A696167E5AFB6 /* ApiEnvelope.swift in Sources */,
+				D4E35A1EF212FCE6E21A73AC /* AppContainer.swift in Sources */,
+				B01C1A360771612ADF0BC452 /* AppError.swift in Sources */,
+				F35231FA4919F15B89E3B9E3 /* AppErrorMessage.swift in Sources */,
+				AD4E3F046C9B89A6A976EA8C /* AppSettingsSection.swift in Sources */,
+				4565DF74C484763F590A06BB /* AppleAuthRepository.swift in Sources */,
+				B45E6AE9DB6D9B8B8BDF0A82 /* AuthDtos.swift in Sources */,
+				982DF9019BBD03CF3B80B732 /* AuthRepository.swift in Sources */,
+				41F01BB6B0ABCDA8EF45F0F4 /* AuthViewModels.swift in Sources */,
+				4D1FFB4481DAC32CC61AD982 /* BaseUrlDialog.swift in Sources */,
+				698216E419784155B4442208 /* BleDeviceView.swift in Sources */,
+				0C8D1A28C27B21302875A7DF /* BleHealthController.swift in Sources */,
+				C319A04C044D7636F56AE621 /* ChatDtos.swift in Sources */,
+				8F2E2450C5A87EF6204508E9 /* ChatImage.swift in Sources */,
+				1E8FA3C72D64DE293BF5F535 /* ChatModels.swift in Sources */,
+				8787E3E8B9EBC1195D4E0971 /* ChatRepository.swift in Sources */,
+				4588CE18425B0AC379F38106 /* ChatStreamClient.swift in Sources */,
+				6A93694A2AAEAB7D030E6086 /* ChatView.swift in Sources */,
+				10442BB11885ECF64837CB09 /* ChatViewModel.swift in Sources */,
+				D63AF7EA1AA71185A57E5E70 /* DrawerRow.swift in Sources */,
+				3AEBEE290A8D990FB044EE8B /* EChartsView.swift in Sources */,
+				D163161B554A6C076C301568 /* EhrDtos.swift in Sources */,
+				2DFDE1D2E572AD7E0581F974 /* EhrRepository.swift in Sources */,
+				F37AABD84DD835AA5CCED41C /* EhrView.swift in Sources */,
+				26AF5D8022DDF925B9FD845E /* EmailView.swift in Sources */,
+				A2F543EE4B8B106AD7F2045B /* ErrorBus.swift in Sources */,
+				53E3D394409375F58F08978A /* FhirObservation.swift in Sources */,
+				EC425C8AE35D45D64DD0054D /* FirebaseInitializer.swift in Sources */,
+				4CD6093B2DC143C90AA4E10C /* GattHealthCodec.swift in Sources */,
+				E656F257796FF69EB632749A /* GitHubAuthRepository.swift in Sources */,
+				250CB0FF7523C53C38033D26 /* GoogleAuthRepository.swift in Sources */,
+				8982362F84CF0E5B7422C5A1 /* HealthKitRepository.swift in Sources */,
+				DE7BCE04D52781176105C1A7 /* HealthSample.swift in Sources */,
+				5D3379A936DF26DAF6DFF45B /* HealthSyncView.swift in Sources */,
+				4B440C3ECCBDC7E138F1BAEB /* HistoryView.swift in Sources */,
+				749638E45285C3FF9F4E8AA9 /* HistoryViewModel.swift in Sources */,
+				5B31338A3FBDFD37BA18FB07 /* ImageViewer.swift in Sources */,
+				B8F68C115C3D2DBAAD5DFEEE /* JSONValue.swift in Sources */,
+				9E999324F009F1FF4BB21398 /* LanguageDialog.swift in Sources */,
+				122D6DD5B16A42D4DC03D629 /* Layout.swift in Sources */,
+				B4826E51E285C7A95DB01ADF /* LiteRtLlmEngine.swift in Sources */,
+				6EDCDB992E7B7B23B61DA164 /* LlamaCppEngine.swift in Sources */,
+				FCD7AB4EF7D3760E08F1AC7F /* Localization.swift in Sources */,
+				901589C0B5AE46E067BAD790 /* MarkdownText.swift in Sources */,
+				029A0014D1F3E2F3EE270239 /* MathMarkdownText.swift in Sources */,
+				0BE8953BC58648BDAC9BC0EE /* MessageBubble.swift in Sources */,
+				93332D7CFF957CEF046BF8EC /* MirobodyApp.swift in Sources */,
+				01A454ADAC14C0EE61F6733A /* ModelManager.swift in Sources */,
+				5178F6580E58F295FF3DA244 /* NavDrawer.swift in Sources */,
+				BD0E67F55E9E72BE896CE8E8 /* OnDeviceEngines.swift in Sources */,
+				E561839C8DDCB6F3D3E9423B /* OnDeviceLlmEngine.swift in Sources */,
+				E27C239F6CF16299652054BA /* OnDeviceModel.swift in Sources */,
+				0BCE1A7C8C8CEBF0C25F1EE7 /* OnDeviceModelView.swift in Sources */,
+				7050D2F77DABB600CF179140 /* RootView.swift in Sources */,
+				349A79F867A0A1D940BB2706 /* ServerConfig.swift in Sources */,
+				ECAA99EFDF45F6E0950C28B0 /* ServerConfigStore.swift in Sources */,
+				3E76401973C256C7BE23B03F /* ServerController.swift in Sources */,
+				DAA0EF8CCCC6BB2E6F297961 /* SettingsStore.swift in Sources */,
+				AF62B95D411C5FDBDEC6A2F5 /* Theme.swift in Sources */,
+				8C3DDB29452CC8493CEDFC3D /* VendorDtos.swift in Sources */,
+				B2CF7F01982E382D2D113523 /* VendorRepository.swift in Sources */,
+				1A481240CF6DAB8C5F55ED05 /* VendorsView.swift in Sources */,
+				2502EC53458B836913DB33CB /* WeChatAuthRepository.swift in Sources */,
+				749A58B199CEC2CE366B51F6 /* XAuthRepository.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		C1092CBA5B69515B6DE373AB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 33988D4C2E87FFF25CC8AEAF /* Mirobody */;
+			targetProxy = 983CFF3B64CE7A921E35A860 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		77BDA2BEEFB615BFE700B5A2 /* Localizable.stringsdict */ = {
+			isa = PBXVariantGroup;
+			children = (
+				AF78CFF0871F43C7734911A3 /* ar */,
+				FE240F857F51245611946DE5 /* de */,
+				6677188AE7F733896F6BAAFE /* en */,
+				6E569001B23477B00E96FBAB /* es */,
+				D00D1EB47ECF8033646E9BB1 /* fr */,
+				F4DB2142D6C33799A1D02B10 /* he */,
+				1193DB832770E81E2E974B23 /* ja */,
+				B98AF2FF343B992CDC9F45AC /* ko */,
+				802A183A04473F1061C07AF8 /* ru */,
+				4B3C8605D1B949E62E984CDE /* zh */,
+			);
+			name = Localizable.stringsdict;
+			sourceTree = "<group>";
+		};
+		97955ED851D503FBF73DCAF6 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				E05FFB3D9FDD03B331B65478 /* ar */,
+				E6EB0663066BD609400773C1 /* de */,
+				AA1EF0F31B410E9C88CB8B26 /* en */,
+				DDAAD765D2EBABD9C13B56FD /* es */,
+				BA6C52FF0AEDAACBADEEA23B /* fr */,
+				6F5DD700D86E33A94871D794 /* he */,
+				4841CC11A446707D2D0566D1 /* ja */,
+				35BF2696E9B2B1AC7AD8FE79 /* ko */,
+				45A3BF9CC663BB25B8030098 /* ru */,
+				942345CFBF92DA99052D5B4B /* zh */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
 /* Begin XCBuildConfiguration section */
-		10000000000000000000000C /* Debug */ = {
+		0BB9452E34A9D243675F77ED /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Mirobody/App/Mirobody.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mirobody/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.thetahealth.mirobody;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		0E6F3B458E3AAB7FBE896554 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
@@ -173,6 +741,7 @@
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
@@ -183,17 +752,18 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
 					"$(inherited)",
+					"DEBUG=1",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -201,24 +771,67 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../src",
+				);
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OBJC_BRIDGING_HEADER = "Mirobody/Bridging/Mirobody-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
 			};
 			name = Debug;
 		};
-		10000000000000000000000D /* Release */ = {
+		2B7B49581FCE976F399440C8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.thetahealth.mirobodyTests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mirobody.app/Mirobody";
+			};
+			name = Debug;
+		};
+		94327A71053AECB659F1DBF5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Mirobody/App/Mirobody.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mirobody/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = ai.thetahealth.mirobody;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		E7A0673ED4B07BA8A984CFA5 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
@@ -234,6 +847,7 @@
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
 				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
@@ -244,11 +858,12 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
@@ -256,128 +871,123 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../src",
+				);
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
-				VALIDATE_PRODUCT = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Mirobody/Bridging/Mirobody-Bridging-Header.h";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
 			};
 			name = Release;
 		};
-		10000000000000000000000E /* Debug */ = {
+		F22CD33E9D93B5EEA38F34BB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/../src";
-				INFOPLIST_FILE = "Mirobody/App/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.thetahealth.mirobody;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Mirobody/Bridging/Mirobody-Bridging-Header.h";
-				SWIFT_VERSION = 5.9;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.thetahealth.mirobodyTests;
+				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		10000000000000000000000F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				GENERATE_INFOPLIST_FILE = NO;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/../src";
-				INFOPLIST_FILE = "Mirobody/App/Info.plist";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.thetahealth.mirobody;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "Mirobody/Bridging/Mirobody-Bridging-Header.h";
-				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mirobody.app/Mirobody";
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		10000000000000000000000A /* Build configuration list for PBXProject "Mirobody" */ = {
+		0C6F78AF99328C69A1B3070C /* Build configuration list for PBXProject "Mirobody" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				10000000000000000000000C /* Debug */,
-				10000000000000000000000D /* Release */,
+				0E6F3B458E3AAB7FBE896554 /* Debug */,
+				E7A0673ED4B07BA8A984CFA5 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
-		10000000000000000000000B /* Build configuration list for PBXNativeTarget "Mirobody" */ = {
+		FBE214645DAF761550D86B64 /* Build configuration list for PBXNativeTarget "Mirobody" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				10000000000000000000000E /* Debug */,
-				10000000000000000000000F /* Release */,
+				94327A71053AECB659F1DBF5 /* Debug */,
+				0BB9452E34A9D243675F77ED /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
+		};
+		FFA5C5162C79D6C30C1891ED /* Build configuration list for PBXNativeTarget "MirobodyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2B7B49581FCE976F399440C8 /* Debug */,
+				F22CD33E9D93B5EEA38F34BB /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		100000000000000000000010 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+		53CD19C5E32F53A0E4FA39E4 /* XCRemoteSwiftPackageReference "LiteRT-LM" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			repositoryURL = "https://github.com/google-ai-edge/LiteRT-LM";
 			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 11.0.0;
+				kind = versionRange;
+				maximumVersion = 1.0.0;
+				minimumVersion = 0.12.0;
 			};
 		};
-		100000000000000000000011 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+		B5E1619088F46960EB888733 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
 			requirement = {
-				kind = upToNextMajorVersion;
+				kind = versionRange;
+				maximumVersion = 3.0.0;
 				minimumVersion = 2.3.0;
+			};
+		};
+		BD08B6155BBA65C15FBFC320 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = versionRange;
+				maximumVersion = 12.0.0;
+				minimumVersion = 11.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		100000000000000000000012 /* FirebaseAuth */ = {
+		3EBE242231C672F90DDAD6E7 /* FirebaseCore */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 100000000000000000000010 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseAuth;
-		};
-		100000000000000000000013 /* FirebaseCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 100000000000000000000010 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			package = BD08B6155BBA65C15FBFC320 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCore;
 		};
-		100000000000000000000014 /* MarkdownUI */ = {
+		58BB41BAB036225ED55EAD20 /* LiteRTLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 100000000000000000000011 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			package = 53CD19C5E32F53A0E4FA39E4 /* XCRemoteSwiftPackageReference "LiteRT-LM" */;
+			productName = LiteRTLM;
+		};
+		CB6548BCB597A63BF5E379F5 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BD08B6155BBA65C15FBFC320 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		DC1CC517EADEAEBEB886DE0A /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B5E1619088F46960EB888733 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
 			productName = MarkdownUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = 100000000000000000000001 /* Project object */;
+	rootObject = CE9FA8F1377199CFFE6EF8DB /* Project object */;
 }

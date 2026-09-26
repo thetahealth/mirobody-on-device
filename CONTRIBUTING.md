@@ -66,19 +66,21 @@ settled before the code is written.
    includes the front door from a file the phone profile also compiles builds
    fine on your desktop and breaks HarmonyOS.
 
-   **The apps are not built in CI yet**: they need cross-compiled dependency
-   sysroots. If your change touches `android/`, `ios/`, `harmony/`, the C ABI or
-   `src/platform/`, build the affected app when possible (its README says how).
-   Say in the pull request which app and device or emulator you checked, or
-   explicitly say that the app build was not verified. The full evidence matrix
-   is in [docs/testing.md](docs/testing.md).
+   CI also runs Android phone-flavor JVM tests and builds/runs the pure-client
+   iOS app on a simulator. Neither job builds the embedded C++ libraries;
+   HarmonyOS packaging also needs its cross-compiled dependency sysroot. If
+   your change touches `android/`, `ios/`, `harmony/`, the C ABI or
+   `src/platform/`, build the affected native app path when possible (its README
+   says how). Say in the pull request which app and device or emulator you
+   checked, or explicitly say that the native app build was not verified. The
+   full evidence matrix is in [docs/testing.md](docs/testing.md).
 
 5. **Open a pull request** against `main`. The active
    [main rule](https://github.com/thetahealth/mirobody-on-device/rules/24043212)
    requires a PR and both desktop CI jobs, and blocks force pushes and branch
    deletion. The template asks which gates you ran; paste the test count line.
-   Status checks protect the core, while the app verification you report
-   covers the native host path CI cannot build yet.
+   The host-test jobs add pure-client coverage; report native app verification
+   separately until those builds have their own CI jobs.
 
 ## 📝 Coding style
 

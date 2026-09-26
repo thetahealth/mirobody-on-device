@@ -7,9 +7,12 @@ theming. It can run as a **pure client** against a remote Mirobody backend, or
 **embed** the in-process C++ server (`mirobody.xcframework`) the same way the
 Android app loads `libmirobody.so` over JNI.
 
-> Build on macOS. This project is checked in from a Windows machine and has not
-> been compiled here — treat the first `xcodegen generate && build` as the
-> validation step.
+The checked-in Xcode project is generated from `project.yml`. Its shared
+Mirobody scheme includes the `MirobodyTests` target; the pure-client simulator
+build and tests run in CI. The generated project includes the LiteRT-LM Swift
+package and its Apple sign-in and HealthKit entitlements. Signed device builds
+need the matching capabilities provisioned; the embedded Mirobody XCFramework
+needs separate validation.
 
 ## Prerequisites
 
@@ -31,6 +34,17 @@ and MarkdownUI on first build.
 in sync with [`project.yml`](project.yml) — if you prefer to regenerate it (or it
 ever drifts), `brew install xcodegen && xcodegen generate` rewrites it from the
 spec.
+
+For pure-client tests, select the Mirobody scheme's **Test** action in Xcode,
+or run:
+
+```sh
+xcodebuild test -project Mirobody.xcodeproj -scheme Mirobody \
+  -destination "platform=iOS Simulator,id=<available-iPhone-UDID>" \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+The test target currently checks GATT health decoding with synthetic readings.
 
 On launch the app talks to the base URL configured in-app (default
 `http://localhost:8080`). Set a reachable backend via the nav drawer (☰) → **Backend**,
