@@ -4,6 +4,7 @@
 #include "platform/log.hpp"
 #include "sentry.hpp"
 #include "server/server.hpp"
+#include <optional>
 
 #include <libwebsockets.h>
 
@@ -86,7 +87,7 @@ void lws_log_to_stderr(int level, const char* line) {
 int main(int argc, char** argv) {
     install_signal_handlers();
 
-    mirobody::optional<std::string> yaml_path;
+    std::optional<std::string> yaml_path;
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "/?" || arg == "-h" || arg == "--help") {

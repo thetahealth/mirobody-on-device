@@ -75,7 +75,7 @@ bool file_on_disk(const std::string& path) {
 }
 
 // Recursively delete `path` (file or whole directory tree); no-op if absent.
-// C++11 has no <filesystem>, so walk the tree with the platform directory API.
+// The test uses the portable directory API so it runs on every host profile.
 void remove_tree(const std::string& path) {
 #if defined(_WIN32)
     WIN32_FIND_DATAA fd;

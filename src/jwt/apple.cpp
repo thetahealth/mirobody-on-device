@@ -1,4 +1,5 @@
 #include "jwt/apple.hpp"
+#include <optional>
 
 #include "client/http_client.hpp"
 
@@ -29,7 +30,7 @@ namespace {
 // Base64url decode, padding-optional. Local copy of the same helper that lives
 // in jwt.cpp / google.cpp (internal linkage, so no ODR clash); if a sixth
 // caller turns up it's time to hoist into a utils/base64 module.
-mirobody::optional<std::string> b64url_decode(const std::string& in) {
+std::optional<std::string> b64url_decode(const std::string& in) {
     std::size_t len = in.size();
     while (len > 0 && in[len - 1] == '=') --len;
 
@@ -49,7 +50,7 @@ mirobody::optional<std::string> b64url_decode(const std::string& in) {
     for (std::size_t i = 0; i < len; ++i) {
         char c = in[i];
         int v = decode_char(c);
-        if (v < 0) return mirobody::nullopt;
+        if (v < 0) return std::nullopt;
         buf = (buf << 6) | static_cast<std::uint32_t>(v);
         bits += 6;
         if (bits >= 8) {
@@ -281,10 +282,8 @@ struct AppleTokenValidator::Impl {
     }
 };
 
-// Out-of-line definitions for the static constexpr members. Required in C++11/14
-// because parse_max_age() takes seconds by value, and copy-constructing a class
-// type binds a reference to the member — an ODR-use. (C++17 makes these implicitly
-// inline and the definitions redundant, but harmless.)
+// Out-of-line definitions are retained for toolchains that still emit references
+// when a class-type constant is passed by value.
 constexpr std::chrono::seconds AppleTokenValidator::Impl::kDefaultTtl;
 constexpr std::chrono::seconds AppleTokenValidator::Impl::kMinTtl;
 constexpr std::chrono::seconds AppleTokenValidator::Impl::kMaxTtl;

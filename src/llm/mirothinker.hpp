@@ -1,6 +1,6 @@
 #pragma once
 
-#include "compat/cxx11.hpp"   // Blob
+#include "blob.hpp"
 #include "llm/event.hpp"
 
 #include <cstddef>

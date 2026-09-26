@@ -6,7 +6,6 @@
 // their inputs -- no clock, no network -- so they are unit-tested against the
 // published test vectors.
 
-#include "compat/cxx11.hpp"
 
 #include <array>
 #include <cstddef>

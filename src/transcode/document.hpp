@@ -33,7 +33,6 @@
 // init via a one-time guard, so Transcoder itself is safe to call from multiple
 // threads; calls are simply not parallel while a PDF is being processed.
 
-#include "compat/cxx11.hpp"
 #include "transcode/image.hpp"
 
 #include <cstddef>

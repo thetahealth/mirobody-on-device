@@ -2,7 +2,7 @@
 
 // Canonical UCUM unit -> LOINC PROPERTY family.
 //
-// C++11 port of mirobody/indicator/fhir/units/families.py. LOINC's PROPERTY
+// C++ port of mirobody/indicator/fhir/units/families.py. LOINC's PROPERTY
 // axis is the dimensional family of a measurement (MCnc = mass concentration,
 // SCnc = substance/molar concentration, NCnc = number concentration, ...). For
 // a given analyte every PROPERTY family selects a fixed set of units — glucose

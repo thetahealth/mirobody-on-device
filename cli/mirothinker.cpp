@@ -32,9 +32,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
-#include "compat/cxx11.hpp"
+#include <optional>
 #include <string>
-#include "compat/cxx11.hpp"
 #include <utility>
 #include <vector>
 
@@ -82,7 +81,7 @@ struct Args {
 
 int parse_args(int argc, char** argv, Args& out) {
     // First pass: find --config (and bail on --help / unknown options).
-    mirobody::optional<std::string> config_path;
+    std::optional<std::string> config_path;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "-h" || a == "--help") { print_usage(argv[0]); return 1; }

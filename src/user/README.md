@@ -79,7 +79,7 @@ POST use sequential negative codes; the `msg` carries the human-readable reason.
 ## `email.{hpp,cpp}` — verification codes
 
 `EmailCodeValidator` sends and verifies short numeric codes, returning
-`mirobody::nullopt` on success or a human-readable error otherwise (the Python
+`std::nullopt` on success or a human-readable error otherwise (the Python
 `str | None` contract, where `None` means "ok"). `create_email_validator(opts,
 cache)` picks the concrete impl by what's configured, in priority order:
 

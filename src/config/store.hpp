@@ -6,7 +6,6 @@
 
 #include <cstdint>
 #include <memory>
-#include "compat/cxx11.hpp"
 #include <string>
 #include <unordered_map>
 #include <vector>

@@ -1,6 +1,6 @@
 #include "fhir/units/families.hpp"
 
-// C++11 port of mirobody/indicator/fhir/units/families.py. The data tables
+// C++ port of mirobody/indicator/fhir/units/families.py. The data tables
 // below are a verbatim copy of the Python dicts; keep them in sync. Insertion
 // order of UCUM_FAMILY is significant (see families.hpp) so it is encoded as an
 // ordered vector rather than a map literal.

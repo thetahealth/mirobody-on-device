@@ -2,7 +2,7 @@
 
 // Morpheme + alias tables — source of truth for unit normalization.
 //
-// C++11 port of mirobody/indicator/fhir/units/tokens.py. Two layers:
+// C++ port of mirobody/indicator/fhir/units/tokens.py. Two layers:
 //   - morphemes() : atomic tokens consumed by the tokenize-compose path
 //                   ("Millimol" + "/" + "L" -> "mmol/L").
 //   - aliases()   : full-string mappings looked up directly without composing

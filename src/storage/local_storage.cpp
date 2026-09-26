@@ -59,7 +59,7 @@ int make_dir(const std::string& path) {
 #endif
 }
 
-// Create `path` and any missing parents (the `mkdir -p` behaviour the C++11
+// Create `path` and any missing parents (the `mkdir -p` behaviour the supported phone
 // standard library lacks without <filesystem>). Accepts '/'-separated paths;
 // returns true if the directory exists afterwards.
 bool make_dirs(const std::string& path) {
@@ -158,7 +158,7 @@ std::size_t nonblank_len(const std::string& s) {
 
 // Append every regular file under `dir` (recursively) to `out` as a
 // '/'-separated key relative to the walk's start; `rel` is the relative path
-// of `dir` itself ("" at the start). C++11 has no <filesystem>, so this walks
+// of `dir` itself ("" at the start). the portable directory API is used here, so this walks
 // with the platform directory API.
 void walk_files(const std::string& dir, const std::string& rel, std::vector<std::string>& out) {
 #if defined(_WIN32)
