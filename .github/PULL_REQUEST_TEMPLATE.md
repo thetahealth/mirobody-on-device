@@ -15,4 +15,12 @@
 
 <!-- CI builds no app yet. If this touches android/, ios/, harmony/, src/platform/
      or the C ABI: which app, which device or emulator, and what you checked.
-     "Core only" is a fine answer for everything else. -->
+     If you could not build it, write "App build not verified" and name the
+     missing sysroot/toolchain. "Core only" is fine for unrelated changes.
+     See docs/testing.md for the host matrix. -->
+
+## Data boundary, if affected
+
+<!-- State the selected backend and model lane you tested. If a new artifact
+     can leave the phone, update docs/privacy-tiers.md in this PR. Otherwise,
+     write "No data-boundary change". -->

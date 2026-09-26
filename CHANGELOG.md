@@ -8,6 +8,14 @@ dated by the day they reached `main`.
 
 ### Changed
 
+- Clarified the contributor and agent guides after the C++17 migration: the
+  native registration macros, unconditional embedded loopback binding, and
+  current Android/iOS integration paths now match the code. Added a
+  [testing guide](docs/testing.md) that separates CI coverage from phone app
+  builds and records the checks required for pull requests.
+- Protected `main` with a PR requirement and the Ubuntu and macOS core checks;
+  blocked force pushes, deletion and unresolved review threads. Approval
+  count is zero while the project has no guaranteed independent reviewer.
 - The shared core now requires C++17. The custom `optional` compatibility layer
   is gone, the host-facing C ABI is unchanged, and the build guide documents the
   Android, Apple and OpenHarmony toolchain floor. Rebuild native libraries and

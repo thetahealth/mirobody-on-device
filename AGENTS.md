@@ -6,11 +6,12 @@ Read this before touching the tree. It is the short version of
 ## What this is
 
 The phone runtime of [mirobody](https://github.com/thetahealth/mirobody): a
-C++17 core that the Android, iOS and HarmonyOS apps embed, plus those apps.
+C++17 core embedded by HarmonyOS and optionally by Android and iOS, plus
+those apps.
 
 | Part | Where | Notes |
 |---|---|---|
-| The public C ABI | `src/mirobody.h` | the only surface the apps use; mirrored in `src/platform/mirobody.def` |
+| The public C ABI | `src/mirobody.h` | host integration contract; mirrored in `src/platform/mirobody.def`. Android and iOS still use HTTP for most app operations |
 | Platform bridges | `src/platform/` (`android_jni.cpp`, `ios_bridge.mm`, `c_api*.cpp`), `harmony/entry/src/main/cpp/napi_init.cpp` | JNI, iOS, NAPI |
 | Agent loop, model clients, tools | `src/chat/`, `src/llm/`, `src/mcp/`, `res/mcp_tools/`, `res/agents/` | tools and agents self-register, one file each |
 | The record | `src/fhir/`, `src/health/timeseries/` (health-store ingest), `src/database/` (SQLite only), `src/storage/` (local files only) | |
@@ -46,8 +47,9 @@ report it as verified.
   cross-built into three phone sysroots and vcpkg.
 - **The C ABI is append-only in meaning.** Add a function rather than change what
   one does; the three apps ship on their own schedules.
-- **The loopback front door binds `127.0.0.1`.** Never widen it, not even for a
-  test.
+- **Embedded listeners bind `127.0.0.1`.** Never widen them, not even for a
+  test. The standalone development process accepts an explicit `HTTP_HOST`
+  override; do not carry that behavior into the phone bridges.
 - **Logs carry ids, counts, durations, status codes. Never a value**, and never
   an indicator name.
 - **Preserve each file's line endings.** Some `.md` files and `.gitignore` are

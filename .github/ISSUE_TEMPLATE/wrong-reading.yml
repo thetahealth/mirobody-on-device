@@ -27,7 +27,8 @@ body:
   - type: input
     id: value
     attributes:
-      label: Value and unit as the store reported them
+      label: Synthetic example value and unit in the store's format
+      description: Use an invented value that reproduces the mapping. Never paste a real reading.
       placeholder: "58 count/min"
     validations:
       required: true

@@ -187,6 +187,7 @@ python3 tools/check_exports.py
 
 - [架构](docs/architecture.md)：核心、宿主桥接、构建 profile 和数据流。
 - [构建](docs/BUILDING.md)：桌面构建、手机 profile、sysroot 和 App 工具链。
+- [测试](docs/testing.md)：CI 覆盖范围、手机 App 验证与 PR 证据。
 - [隐私分级](docs/privacy-tiers.md)：各通道可以把什么数据发出手机。
 - [端侧 LLM](docs/on-device-llm.md)：运行时、格式、量化和实测数据。
 - [Markdown 契约](docs/markdown.md)：各客户端需要支持的渲染能力。
