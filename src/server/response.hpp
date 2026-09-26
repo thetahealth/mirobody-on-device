@@ -6,7 +6,6 @@
 // includes this, so #include "server/router.hpp" still pulls in everything;
 // include this header directly when you only touch the response side.
 
-#include "compat/cxx11.hpp"
 #include "platform/log.hpp"   // log_warn (error())
 #include "server/request.hpp" // Request (error()'s log)
 #include "server/stream_writer.hpp"

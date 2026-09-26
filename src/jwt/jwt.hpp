@@ -1,6 +1,5 @@
 #pragma once
 
-#include "compat/cxx11.hpp"
 
 #include <cstdint>
 #include <memory>

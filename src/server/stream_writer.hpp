@@ -9,7 +9,6 @@
 // wakeup that nudges the single-threaded service loop); it is forward-declared
 // below so this header stays light -- includers do not pull in <libwebsockets.h>.
 
-#include "compat/cxx11.hpp"
 
 #include <chrono>
 #include <mutex>

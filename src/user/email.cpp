@@ -1,4 +1,5 @@
 #include "user/email.hpp"
+#include <optional>
 
 #include "client/curl_tls.hpp"
 #include "client/http_client.hpp"
@@ -41,13 +42,13 @@ std::string to_lower_trim(const std::string& s) {
 
 // Normalize + sanity-check an address. On success writes the trimmed/lowered
 // form to *out and returns nullopt; otherwise returns an error message.
-mirobody::optional<std::string> normalize_email(const std::string& in, std::string* out) {
+std::optional<std::string> normalize_email(const std::string& in, std::string* out) {
     std::string lower = to_lower_trim(in);
     if (lower.empty() || lower.find('@') == std::string::npos) {
         return std::string("Invalid email address.");
     }
     *out = lower;
-    return mirobody::nullopt;
+    return std::nullopt;
 }
 
 bool all_digits(const std::string& s) {
@@ -101,7 +102,7 @@ std::string domain_of(const std::string& email) {
 
 // The predefined code for `email`, preferring an exact address match and falling
 // back to a domain-wide match. Returns nullopt when neither map covers it.
-mirobody::optional<std::string> lookup_predefined(
+std::optional<std::string> lookup_predefined(
     const std::unordered_map<std::string, std::string>& by_email,
     const std::unordered_map<std::string, std::string>& by_domain,
     const std::string& email) {
@@ -112,7 +113,7 @@ mirobody::optional<std::string> lookup_predefined(
             by_domain.find(domain_of(email));
         if (dit != by_domain.end()) return dit->second;
     }
-    return mirobody::nullopt;
+    return std::nullopt;
 }
 
 const char* kCodePrefix  = "mirobody:email:code:";
@@ -153,57 +154,57 @@ public:
           predefined_(std::move(predefined)),
           predefined_domains_(std::move(predefined_domains)) {}
 
-    mirobody::optional<std::string> send(
+    std::optional<std::string> send(
         const std::string& to_email, int expires_in, const std::string& service) override {
         std::string lower;
-        mirobody::optional<std::string> err = normalize_email(to_email, &lower);
+        std::optional<std::string> err = normalize_email(to_email, &lower);
         if (err) return err;
 
         // Predefined addresses/domains never trigger a real send; verify() checks them.
-        if (lookup_predefined(predefined_, predefined_domains_, lower)) return mirobody::nullopt;
+        if (lookup_predefined(predefined_, predefined_domains_, lower)) return std::nullopt;
 
-        mirobody::optional<std::string> cfg = config_error();
+        std::optional<std::string> cfg = config_error();
         if (cfg) return cfg;
 
         const std::string key = scope_key(lower, service);
 
         // Honor the cooldown: a recent send leaves the limit key alive. Report
         // success so callers don't surface an error for benign rapid retries.
-        if (cache_.exists(kLimitPrefix + key)) return mirobody::nullopt;
+        if (cache_.exists(kLimitPrefix + key)) return std::nullopt;
 
         const int ttl = (expires_in > 0) ? expires_in : expires_in_;
         const std::string code = generate_code();
 
-        mirobody::optional<std::string> derr = deliver(lower, code);
+        std::optional<std::string> derr = deliver(lower, code);
         if (derr) return derr;
 
         cache_.set(kCodePrefix + key, code, std::chrono::seconds(ttl));
         cache_.set(kLimitPrefix + key, code, std::chrono::seconds(sending_interval_));
-        return mirobody::nullopt;
+        return std::nullopt;
     }
 
-    mirobody::optional<std::string> verify(
+    std::optional<std::string> verify(
         const std::string& to_email, const std::string& code, const std::string& service) override {
         std::string lower;
-        mirobody::optional<std::string> err = normalize_email(to_email, &lower);
+        std::optional<std::string> err = normalize_email(to_email, &lower);
         if (err) return err;
 
-        mirobody::optional<std::string> predef = lookup_predefined(predefined_, predefined_domains_, lower);
+        std::optional<std::string> predef = lookup_predefined(predefined_, predefined_domains_, lower);
         if (predef) {
-            return *predef == code ? mirobody::optional<std::string>()
-                                   : mirobody::optional<std::string>(std::string("Invalid code."));
+            return *predef == code ? std::optional<std::string>()
+                                   : std::optional<std::string>(std::string("Invalid code."));
         }
 
         if (code.empty()) return std::string("Empty code.");
         if (!all_digits(code)) return std::string("Invalid code.");
 
         const std::string key = scope_key(lower, service);
-        mirobody::optional<std::string> stored = cache_.get(kCodePrefix + key);
+        std::optional<std::string> stored = cache_.get(kCodePrefix + key);
         if (stored && *stored == code) {
             // Single-use: consume the code on a successful match. (The Python
             // redis path left it until TTL; deleting is the safer behavior.)
             cache_.del(kCodePrefix + key);
-            return mirobody::nullopt;
+            return std::nullopt;
         }
         // A missing key here also covers natural TTL expiry, reported the same
         // as a wrong code so the response doesn't leak which case occurred.
@@ -212,12 +213,12 @@ public:
 
 protected:
     // Deliver `code` to `to_email`. Returns nullopt on success, else an error.
-    virtual mirobody::optional<std::string> deliver(
+    virtual std::optional<std::string> deliver(
         const std::string& to_email, const std::string& code) = 0;
 
     // nullopt when the transport is usable; otherwise the error send() returns
     // before attempting delivery.
-    virtual mirobody::optional<std::string> config_error() const = 0;
+    virtual std::optional<std::string> config_error() const = 0;
 
     cache::Cache& cache_;
     int sending_interval_;
@@ -249,7 +250,7 @@ size_t smtp_read_cb(char* buffer, size_t size, size_t nitems, void* userp) {
 
 // Send a prebuilt RFC 5322 `message` to one recipient over SMTP(S). Transport
 // only -- the caller composes the message. nullopt on success, else an error.
-mirobody::optional<std::string> smtp_send(const std::string& host, int port,
+std::optional<std::string> smtp_send(const std::string& host, int port,
                                           const std::string& user, const std::string& pass,
                                           const std::string& from_email, const std::string& to_email,
                                           const std::string& message) {
@@ -292,7 +293,7 @@ mirobody::optional<std::string> smtp_send(const std::string& host, int port,
     if (rc != CURLE_OK) {
         return std::string("Failed to send email: ") + curl_easy_strerror(rc);
     }
-    return mirobody::nullopt;
+    return std::nullopt;
 }
 
 // Build a minimal RFC 5322 HTML message (CRLF line endings as SMTP requires).
@@ -312,7 +313,7 @@ std::string build_rfc5322(const std::string& from_display, const std::string& to
 }
 
 // Send a one-off HTML email via Mandrill's raw messages/send.json (no template).
-mirobody::optional<std::string> mandrill_send_html(const std::string& api_key,
+std::optional<std::string> mandrill_send_html(const std::string& api_key,
                                                    const std::string& from_email, const std::string& from_name,
                                                    const std::string& to_email, const std::string& subject,
                                                    const std::string& html_body) {
@@ -354,7 +355,7 @@ mirobody::optional<std::string> mandrill_send_html(const std::string& api_key,
     if (status != "sent" && status != "queued") {
         return std::string("Failed to send email to ") + to_email + ": " + resp.body;
     }
-    return mirobody::nullopt;
+    return std::nullopt;
 }
 
 class SmtpEmailValidator : public StoringEmailValidator {
@@ -375,20 +376,20 @@ public:
           from_name_(std::move(from_name)) {}
 
 protected:
-    mirobody::optional<std::string> config_error() const override {
+    std::optional<std::string> config_error() const override {
         if (host_.empty() || user_.empty() || pass_.empty()) {
             return std::string("Invalid SMTP configuration.");
         }
-        return mirobody::nullopt;
+        return std::nullopt;
     }
 
-    mirobody::optional<std::string> deliver(
+    std::optional<std::string> deliver(
         const std::string& to_email, const std::string& code) override {
-        mirobody::optional<std::string> err =
+        std::optional<std::string> err =
             smtp_send(host_, port_, user_, pass_, from_email_, to_email, build_message(to_email, code));
         if (err) return err;
         platform::log_debug("email: verification code sent to %s via SMTP", to_email.c_str());
-        return mirobody::nullopt;
+        return std::nullopt;
     }
 
 private:
@@ -456,12 +457,12 @@ public:
           from_name_(std::move(from_name)) {}
 
 protected:
-    mirobody::optional<std::string> config_error() const override {
+    std::optional<std::string> config_error() const override {
         if (api_key_.empty()) return std::string("Invalid email client.");
-        return mirobody::nullopt;
+        return std::nullopt;
     }
 
-    mirobody::optional<std::string> deliver(
+    std::optional<std::string> deliver(
         const std::string& to_email, const std::string& code) override {
         std::string formatted;         // "<span>1</span><span>2</span>..."
         for (std::size_t i = 0; i < code.size(); ++i) {
@@ -498,7 +499,7 @@ protected:
             return std::string("Failed to send email to ") + to_email + ": " + resp.body;
         }
         platform::log_debug("email: verification code sent to %s via Mandrill", to_email.c_str());
-        return mirobody::nullopt;
+        return std::nullopt;
     }
 
 private:
@@ -572,18 +573,18 @@ public:
         : predefined_(std::move(predefined)),
           predefined_domains_(std::move(predefined_domains)) {}
 
-    mirobody::optional<std::string> send(
+    std::optional<std::string> send(
         const std::string& to_email, int /*expires_in*/, const std::string& /*service*/) override {
         std::string lower = to_lower_trim(to_email);
-        if (lookup_predefined(predefined_, predefined_domains_, lower)) return mirobody::nullopt;
+        if (lookup_predefined(predefined_, predefined_domains_, lower)) return std::nullopt;
         return std::string("No SMTP server configured.");
     }
 
-    mirobody::optional<std::string> verify(
+    std::optional<std::string> verify(
         const std::string& to_email, const std::string& code, const std::string& /*service*/) override {
         std::string lower = to_lower_trim(to_email);
-        mirobody::optional<std::string> predef = lookup_predefined(predefined_, predefined_domains_, lower);
-        if (predef && *predef == code) return mirobody::nullopt;
+        std::optional<std::string> predef = lookup_predefined(predefined_, predefined_domains_, lower);
+        if (predef && *predef == code) return std::nullopt;
         return std::string("No SMTP server configured.");
     }
 
@@ -653,12 +654,12 @@ std::unique_ptr<EmailCodeValidator> create_email_validator(
 // One-off transactional mail
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::string> send_email(const EmailValidatorOptions& opts,
+std::optional<std::string> send_email(const EmailValidatorOptions& opts,
                                            const std::string& to_email,
                                            const std::string& subject,
                                            const std::string& html_body) {
     std::string to;
-    mirobody::optional<std::string> err = normalize_email(to_email, &to);
+    std::optional<std::string> err = normalize_email(to_email, &to);
     if (err) return err;
 
     const std::string from_name = opts.from_name.empty() ? std::string("Theta Wellness") : opts.from_name;

@@ -6,7 +6,7 @@ Read this before touching the tree. It is the short version of
 ## What this is
 
 The phone runtime of [mirobody](https://github.com/thetahealth/mirobody): a
-C++11 core that the Android, iOS and HarmonyOS apps embed, plus those apps.
+C++17 core that the Android, iOS and HarmonyOS apps embed, plus those apps.
 
 | Part | Where | Notes |
 |---|---|---|
@@ -40,8 +40,8 @@ report it as verified.
   Postgres, no object stores, no Redis, no cloud vendor connector, no second
   server agent. They were cut in September 2026 and preserved at the
   `v2-full-2026-08` tag. Do not restore them from there.
-- **C++11.** No `std::optional`, `std::string_view` or structured bindings;
-  `src/compat/cxx11.hpp` has the backports the code uses.
+- **C++17.** Use the standard library directly. Do not add a compatibility
+  shim for features already covered by the project floor. C++20 is not required.
 - **No new third-party dependency without an issue first.** Each one has to be
   cross-built into three phone sysroots and vcpkg.
 - **The C ABI is append-only in meaning.** Add a function rather than change what
@@ -76,7 +76,8 @@ report it as verified.
 - [CHANGELOG.md](CHANGELOG.md): **Unreleased** gets an entry for every
   user-visible change.
 - [docs/README.md](docs/README.md): which document owns what.
-- [docs/privacy-tiers.md](docs/privacy-tiers.md): what may leave the device, per
-  lane. A change that sends something new off the phone changes this file too.
+- [docs/privacy-tiers.md](docs/privacy-tiers.md): target lanes and current
+  host-specific data flows. A change that sends something new off the phone
+  changes this file too.
 - The main repo owns the API contract, the SSE wire format and the terminology.
   Match it; do not fork it.

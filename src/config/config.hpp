@@ -6,7 +6,7 @@
 #include "storage/storage.hpp"
 
 #include <cstdint>
-#include "compat/cxx11.hpp"
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -549,7 +549,7 @@ struct Config {
 // exercise the precedence without the network.
 void reconcile_firebase_projects(std::string& primary, std::vector<std::string>& all);
 
-Config load_config(const mirobody::optional<std::string>& yaml_path = mirobody::nullopt);
+Config load_config(const std::optional<std::string>& yaml_path = std::nullopt);
 
 // Process-wide Config, initialized automatically on first access from the same
 // sources load_config() reads with no path (MIROBODY_CONFIG env, then
@@ -567,7 +567,7 @@ Config& config();
 // nullopt) and return it. Call once during startup — before any config() reader
 // runs — when the host needs the global to come from a specific file rather
 // than the default discovery. Returns the freshly loaded instance.
-Config& init_config(const mirobody::optional<std::string>& yaml_path = mirobody::nullopt);
+Config& init_config(const std::optional<std::string>& yaml_path = std::nullopt);
 
 // Build a populated key-value store from the same sources `load_config` reads:
 //
@@ -581,7 +581,7 @@ Config& init_config(const mirobody::optional<std::string>& yaml_path = mirobody:
 //
 // Intended as the entry point for the debug CLIs under cli/ so they share
 // the server's config discovery without dragging in server-specific schema.
-utils::LocalYamlStore load_config_store(const mirobody::optional<std::string>& yaml_path = mirobody::nullopt);
+utils::LocalYamlStore load_config_store(const std::optional<std::string>& yaml_path = std::nullopt);
 
 // Read the Azure OpenAI resource fields from an already-loaded store. Shared by
 // load_config (to populate Config::azure) and the debug CLIs so the AZURE_OPENAI_*

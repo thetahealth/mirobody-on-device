@@ -27,7 +27,6 @@
 #include "mcp/tool.hpp"
 #include "platform/log.hpp"
 
-#include "compat/cxx11.hpp"
 
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>

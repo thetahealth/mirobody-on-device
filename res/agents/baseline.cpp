@@ -62,7 +62,7 @@ std::string build_system_prompt(const std::string& language, const std::string& 
     std::tm tmv;
 
     // Always report UTC. The client sends its IANA timezone (e.g.
-    // "America/New_York"), but C++11 has no portable way to render `now` in an
+    // "America/New_York"), but the supported phone toolchains do not share a portable date-formatting API for `now` in an
     // arbitrary zone, and tagging a server-local timestamp with the client's
     // zone would misstate the time on any host not in that zone (every hosted
     // *.mirobody.ai deployment). UTC is unambiguous; when the client's zone is

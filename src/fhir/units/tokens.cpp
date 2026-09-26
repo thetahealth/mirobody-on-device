@@ -1,6 +1,6 @@
 #include "fhir/units/tokens.hpp"
 
-// Verbatim C++11 port of mirobody/indicator/fhir/units/tokens.py. UTF-8 source;
+// Verbatim C++ port of mirobody/indicator/fhir/units/tokens.py. UTF-8 source;
 // the build adds /utf-8 on MSVC so the multibyte literals encode correctly.
 // Keep the entries — keys (canonical UCUM) and variant lists — in sync with the
 // Python tables, in the same order (the inverted lookup is order-sensitive).

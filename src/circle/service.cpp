@@ -1,5 +1,6 @@
 #include "circle/service.hpp"
 #include "circle/access.hpp"
+#include <optional>
 
 #include "database/enums.hpp"   // CircleRole, CircleStatus, ShareAccess
 #include "platform/clock.hpp"   // now_unix_ms
@@ -353,7 +354,7 @@ void CircleService::send_invite_email(const std::string& to_email, const std::st
     html += "<p style=\"color:#999;font-size:12px;\">If you didn't expect this, you can ignore this email.</p>"
             "</div></body></html>";
 
-    mirobody::optional<std::string> err =
+    std::optional<std::string> err =
         user::send_email(eo, to_email, "You've been invited to a care circle", html);
     if (err) platform::log_warn("circle: invite email to %s not sent: %s", to_email.c_str(), err->c_str());
     else     platform::log_info("circle: invite email sent to %s", to_email.c_str());
@@ -470,7 +471,7 @@ void CircleService::handle_invite(const server::Request& req, server::Response& 
         const int window = cfg_.circle.invite_window_seconds > 0
                                ? cfg_.circle.invite_window_seconds : 3600;
         const std::string rk = "circle:invite:" + std::to_string(uid);
-        mirobody::optional<std::int64_t> n = cache_.incr(rk);
+        std::optional<std::int64_t> n = cache_.incr(rk);
         if (n) {
             if (*n == 1) cache_.set(rk, "1", std::chrono::seconds(window));
             if (*n > cfg_.circle.invite_max_per_window) {

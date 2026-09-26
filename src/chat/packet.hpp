@@ -21,12 +21,12 @@
 // The typed getters mirror mcp::Args and read directly from the params object;
 // they are tolerant (a missing / wrong-typed key yields the supplied default).
 
-#include "compat/cxx11.hpp"   // Blob
 
 #include <rapidjson/document.h>
 
 #include <string>
 #include <vector>
+#include "blob.hpp"
 
 namespace mirobody { namespace chat {
 

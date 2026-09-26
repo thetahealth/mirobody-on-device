@@ -7,8 +7,9 @@ is English; the top-level README also ships in Chinese.
 
 | File | What it holds |
 |---|---|
+| [architecture.md](architecture.md) | The shared core, host apps, C ABI, data flow and build profiles |
 | [BUILDING.md](BUILDING.md) | Every build target: dependencies per host, the development and mobile profiles, the app sysroots, Windows with vcpkg |
-| [privacy-tiers.md](privacy-tiers.md) | The contract for what leaves the device: the model lanes, the storage tiers, what each artifact sends where |
+| [privacy-tiers.md](privacy-tiers.md) | Current host data paths, what can leave the device, and target privacy requirements |
 | [on-device-llm.md](on-device-llm.md) | The on-device model: runtimes, formats, quantization, measured phone numbers (a Marp slide deck) |
 | [markdown.md](markdown.md) | The Markdown a mirobody client must render, and where each client stands against it |
 | [colors-and-fonts.md](colors-and-fonts.md) | The palette and type every client draws from |

@@ -4,7 +4,7 @@
 //
 // The C++ analog of the Python reference's mcp/tool.py. Python derived each
 // tool's JSON Schema from runtime reflection over the function signature and
-// docstring; C++11 has no such reflection, so a tool instead *declares* its
+// docstring; C++17 has no standard reflection, so each tool declares its
 // parameters in a small table (`std::vector<Param>`) and the registry expands
 // that into the MCP `inputSchema` (and the OpenAI / Gemini function-descriptor
 // variants). The declaration is explicit and checked at compile time, which
@@ -18,7 +18,7 @@
 // library) for why the objects are fed straight into the final binary rather
 // than buried in the mirobody_core archive.
 
-#include "platform/log.hpp"   // C++11 floor static_assert + logging
+#include "platform/log.hpp"   // C++17 floor static_assert + logging
 
 #include <cstdint>
 #include <functional>
@@ -54,8 +54,7 @@ const bool Required = true;
 const bool Optional = false;
 
 // One declared tool parameter. Has a user-provided constructor (so it is not
-// an aggregate) purely to give `description` and `item` sensible defaults under
-// C++11, which lacks default member initializers in aggregates.
+// an aggregate) to give `description` and `item` explicit defaults.
 struct Param {
     std::string name;
     Type        type;
@@ -159,8 +158,8 @@ private:
 // Tool definition
 //------------------------------------------------------------------------------
 
-// A registered tool. This is a C++11 aggregate (no constructors, no default
-// member initializers) so it can be brace-initialized positionally:
+// A registered tool. This is an aggregate record (no constructors or hidden
+// initialization) so it can be brace-initialized positionally:
 //
 //     const Tool kEcho = {
 //         "echo",

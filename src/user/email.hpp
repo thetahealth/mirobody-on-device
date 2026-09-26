@@ -1,9 +1,9 @@
 #pragma once
 
 #include "cache/cache.hpp"
-#include "compat/cxx11.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -14,7 +14,7 @@ namespace mirobody { namespace user {
 //------------------------------------------------------------------------------
 
 // Sends and verifies short numeric verification codes delivered to an email
-// address. Both calls return mirobody::nullopt on success, or a human-readable
+// address. Both calls return std::nullopt on success, or a human-readable
 // error message on failure — mirroring the Python `str | None` contract where
 // `None` means "ok".
 //
@@ -31,10 +31,10 @@ class EmailCodeValidator {
 public:
     virtual ~EmailCodeValidator() {}
 
-    virtual mirobody::optional<std::string> send(
+    virtual std::optional<std::string> send(
         const std::string& to_email, int expires_in = 0, const std::string& service = "") = 0;
 
-    virtual mirobody::optional<std::string> verify(
+    virtual std::optional<std::string> verify(
         const std::string& to_email, const std::string& code, const std::string& service = "") = 0;
 };
 
@@ -94,7 +94,7 @@ std::unique_ptr<EmailCodeValidator> create_email_validator(
 // for transactional mail such as the care-circle invite link. Returns nullopt on
 // success, or a human-readable error (e.g. "no email transport configured"), so
 // callers can treat delivery as best-effort.
-mirobody::optional<std::string> send_email(const EmailValidatorOptions& opts,
+std::optional<std::string> send_email(const EmailValidatorOptions& opts,
                                            const std::string& to_email,
                                            const std::string& subject,
                                            const std::string& html_body);

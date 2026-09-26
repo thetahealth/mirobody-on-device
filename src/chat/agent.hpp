@@ -5,17 +5,17 @@
 // The C++ port of the Python reference's chat/agent.py. Python discovered
 // agent classes by reflection (any class with a generate_response method, with
 // the "Agent" suffix stripped to name it) and held their built LLM clients in
-// a global dict. C++11 has no reflection, so -- exactly as with the MCP tool
+// a global dict. C++ has no standard reflection, so -- exactly as with the MCP tool
 // registry -- an agent instead registers a factory under its name, and the
 // concrete agents live in res/agents/*.cpp, each self-registering via
 // MIROBODY_REGISTER_AGENT. Discovery is compile-time (glob + OBJECT library);
 // see CMakeLists.txt.
 //
 // An agent's streamed output (Python's `AsyncGenerator[dict]`) maps onto the
-// existing llm::EventHandler callback -- there are no coroutines in C++11, so
+// existing llm::EventHandler callback -- the stream callback is portable across the supported phone toolchains, so
 // the handler IS the stream, the same model the llm clients already use.
 
-#include "compat/cxx11.hpp"      // Blob
+#include "blob.hpp"
 #include "config/config.hpp"
 #include "llm/client.hpp"
 #include "llm/event.hpp"

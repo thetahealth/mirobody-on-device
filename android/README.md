@@ -12,9 +12,9 @@ Android client for [mirobody](https://github.com/thetahealth/mirobody). The prim
 
 ## Deployment
 
-Dual-mode and **no built-in cloud URL** — the user configures the BASE_URL inside the app (Settings → Server URL). The same build can point at a self-hosted mirobody instance or at a team-provided cloud endpoint.
+Dual-mode: the app can use its embedded loopback core when native dependencies are built, or a remote server. The build defaults to `https://test.mirobody.ai`; the user can change the Backend URL in Settings, or the builder can use `-Pmirobody.baseUrl=...`. Check that destination before syncing health data.
 
-The Firebase project, however, **is** baked into the build via `app/src/main/assets/google-services.json` (loaded at process start by `FirebaseInitializer`). A self-hosted deployment that wants its own Google OAuth client must replace that file and rebuild.
+The Firebase project **is** baked into the build via `app/src/main/assets/google-services.json` (loaded at process start by `FirebaseInitializer`). A self-hosted deployment that wants its own Google OAuth client must replace that file and rebuild.
 
 ## Authentication
 
@@ -25,7 +25,7 @@ Two paths, both producing the same backend JWT (Bearer, HS256, 30-day TTL — no
 1. `POST /email/login` triggers the verification email.
 2. `POST /email/verify` exchanges the 6-digit code for an `access_token`.
 
-The form is the staircase `htdoc/src/login.js` uses, each step unlocking the next (`ui/auth/AuthViewModels.kt` — `EmailUiState`): a valid-looking address (`*@*.*`, stricter than the server's `normalize_email`) unlocks **Send code**; a successful send unlocks the code field and starts a 60s resend cooldown (editing the address re-locks the field until a code goes to that one); six digits unlock **Sign in** and submit on their own. A rejected code stays in the field, tinted, so a mistyped digit is one backspace away. One status line under the form reports every step — the server's message when it sent one, else a localized fallback.
+The form follows the staged email flow inherited from the archived v2 web client; each step unlocks the next (`ui/auth/AuthViewModels.kt` — `EmailUiState`): a valid-looking address (`*@*.*`, stricter than the server's `normalize_email`) unlocks **Send code**; a successful send unlocks the code field and starts a 60s resend cooldown (editing the address re-locks the field until a code goes to that one); six digits unlock **Sign in** and submit on their own. A rejected code stays in the field, tinted, so a mistyped digit is one backspace away. One status line under the form reports every step — the server's message when it sent one, else a localized fallback.
 
 **Google sign-in (Firebase):**
 
@@ -377,8 +377,9 @@ For the full API surface see the backend source: `mirobody/chat/service.py`, `mi
 This app can run the mirobody C++ server **in-process** instead of talking to a remote backend.
 On launch `MainActivity` starts `MirobodyService` (a foreground service) which loads `libmirobody.so`
 through `NativeBridge` and serves on `127.0.0.1:8080`. The client's default `BASE_URL` is
-`http://localhost:8080` (`SettingsStore.DEFAULT_BASE_URL`), so out of the box the UI talks to the
-embedded server; point it elsewhere any time via Settings → Server URL.
+`https://test.mirobody.ai` (`SettingsStore.DEFAULT_BASE_URL`), so first launch uses
+the test server; point it at `http://127.0.0.1:8080` via Settings → Backend to use the
+embedded server.
 
 `libmirobody.so` is built from the repo-root [`CMakeLists.txt`](../CMakeLists.txt) (`if(ANDROID)` ->
 [`src/platform/android_jni.cpp`](../src/platform/android_jni.cpp)) and needs the server's native

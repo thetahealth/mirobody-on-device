@@ -51,6 +51,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""            # set to your Apple Developer Team ID for device builds
     SWIFT_VERSION: "5.9"
+    CLANG_CXX_LANGUAGE_STANDARD: "c++17"
     # The bridging header pulls in the C API (src/mirobody.h). HEADER_SEARCH_PATHS
     # lets it resolve even in pure-client builds (the symbols only link when the
     # xcframework is added and MIROBODY_EMBEDDED is defined).

@@ -12,7 +12,6 @@
 // than through a Request. The rest of the parsing is a private implementation
 // detail of the accessors.
 
-#include "compat/cxx11.hpp"
 
 #include <cstddef>
 #include <cstdint>

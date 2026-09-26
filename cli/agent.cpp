@@ -19,11 +19,11 @@
 #include "platform/log.hpp"
 #include "event_printer.hpp"
 
-#include "compat/cxx11.hpp"
 
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
     //--------------------------------------------------------------------------
     // run <name> [options] ["message"]
 
-    mirobody::optional<std::string> config_path;
+    std::optional<std::string> config_path;
     std::string agent_name, provider, user_id, message;
     bool raw_mode = false, color = true;
 

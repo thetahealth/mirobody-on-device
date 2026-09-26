@@ -1,11 +1,11 @@
 #pragma once
 
-#include "compat/cxx11.hpp"
 
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
+#include "blob.hpp"
 
 namespace mirobody { namespace database {
 

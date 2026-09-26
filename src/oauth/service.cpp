@@ -1,4 +1,5 @@
 #include "oauth/service.hpp"
+#include <optional>
 
 #include "oauth/pkce.hpp"
 #include "platform/log.hpp"
@@ -426,7 +427,7 @@ void OAuthService::authorize(const server::Request& req, server::Response& res) 
         send_oauth_error(res, 400, "invalid_request", "client_id is required");
         return;
     }
-    mirobody::optional<std::string> client_json = cache_.get(kClientPrefix + client_id);
+    std::optional<std::string> client_json = cache_.get(kClientPrefix + client_id);
     if (!client_json.has_value()) {
         send_oauth_error(res, 400, "invalid_client", "Unknown client_id");
         return;
@@ -503,8 +504,8 @@ void OAuthService::authorize_info(const server::Request& req, server::Response& 
     const std::map<std::string, std::string> q = server::Request::parse_form(req.query);
     const std::string handle = form_get(q, "req");
 
-    mirobody::optional<std::string> authz = handle.empty()
-        ? mirobody::nullopt : cache_.get(kAuthzPrefix + handle);
+    std::optional<std::string> authz = handle.empty()
+        ? std::nullopt : cache_.get(kAuthzPrefix + handle);
     if (!authz.has_value()) {
         res.error(-1, "This authorization request has expired. Please start over.");
         return;
@@ -555,8 +556,8 @@ void OAuthService::authorize_decision(const server::Request& req, server::Respon
     { rapidjson::Value::ConstMemberIterator it = doc.FindMember("approve");
       if (it != doc.MemberEnd() && it->value.IsBool()) approve = it->value.GetBool(); }
 
-    mirobody::optional<std::string> authz = handle.empty()
-        ? mirobody::nullopt : cache_.get(kAuthzPrefix + handle);
+    std::optional<std::string> authz = handle.empty()
+        ? std::nullopt : cache_.get(kAuthzPrefix + handle);
     if (!authz.has_value()) {
         res.error(-3, "This authorization request has expired. Please start over.");
         return;
@@ -667,7 +668,7 @@ void OAuthService::token(const server::Request& req, server::Response& res) {
             send_oauth_error(res, 400, "invalid_request", "code and code_verifier are required");
             return;
         }
-        mirobody::optional<std::string> rec = cache_.get(kCodePrefix + code);
+        std::optional<std::string> rec = cache_.get(kCodePrefix + code);
         // Single-use: consume the code immediately, before any validation, so a
         // replay (even a concurrent one) cannot find it again.
         cache_.del(kCodePrefix + code);

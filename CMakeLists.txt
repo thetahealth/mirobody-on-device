@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.19)
 project(mirobody CXX)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -125,8 +125,8 @@ else()
 endif()
 
 # Document transcoder (src/transcode/document). xlnt reads .xlsx; the
-# xlnt-community fork (the one vcpkg ships) consumes cleanly at C++11, so
-# document.cpp builds as part of the C++11 core like the rest of the tree. CSV
+# xlnt-community fork (the one vcpkg ships) consumes cleanly at C++17, so
+# document.cpp builds as part of the C++17 core like the rest of the tree. CSV
 # is hand-written (no dependency). xlnt is auto-detected: present on Windows (the
 # vcpkg manifest provides it) but optional elsewhere -- where it is absent (e.g.
 # the mobile prebuilt sysroots) .xlsx degrades to a clear runtime error and the
@@ -423,10 +423,10 @@ file(GLOB MCP_TOOL_SOURCES CONFIGURE_DEPENDS
 
 add_library(mcp_tools OBJECT ${MCP_TOOL_SOURCES})
 # OBJECT libraries do not link, but this propagates mirobody_core's include
-# dirs (src/) and compile features (cxx_std_11) to the tool sources.
+# dirs (src/) and compile features (cxx_std_17) to the tool sources.
 target_link_libraries(mcp_tools PRIVATE mirobody_core)
 
-# Tool definitions are C++11 aggregates whose trailing `raw_input_schema` is
+# Tool definitions are aggregate records whose trailing `raw_input_schema` is
 # intentionally omitted (see the documented pattern in src/mcp/tool.hpp). That
 # omission is well-defined value-initialization, but -Wextra's
 # -Wmissing-field-initializers flags it as if it were accidental. Silence it for
@@ -447,7 +447,7 @@ file(GLOB MCP_RESOURCE_SOURCES CONFIGURE_DEPENDS
 add_library(mcp_resources OBJECT ${MCP_RESOURCE_SOURCES})
 target_link_libraries(mcp_resources PRIVATE mirobody_core)
 
-# Resource definitions are C++11 aggregates with optional trailing fields, the
+# Resource definitions are aggregate records with optional trailing fields, the
 # same -Wmissing-field-initializers situation as the tools.
 if(NOT MSVC)
     target_compile_options(mcp_resources PRIVATE -Wno-missing-field-initializers)
@@ -468,7 +468,7 @@ target_link_libraries(agent_impls PRIVATE mirobody_core)
 # object, tests, and every CLI under cli/) inherits the same requirement.
 # Downstream consumers that try to build at a lower standard get a CMake-time
 # error instead of a confusing compile failure deep inside a header.
-target_compile_features(mirobody_core PUBLIC cxx_std_11)
+target_compile_features(mirobody_core PUBLIC cxx_std_17)
 
 # On Android, compile the core with per-symbol sections and hidden visibility so
 # the JNI .so's link-time --gc-sections / --exclude-libs can actually drop and
@@ -515,8 +515,8 @@ else()
 endif()
 
 # --- Document transcoder dependencies (src/transcode/document.cpp) ------------
-# document.cpp is part of mirobody_core (above) and stays C++11. Its format
-# handlers are wired here: xlnt (.xlsx) is linked when found; PDF (PDFium), OCR
+# document.cpp is part of mirobody_core and uses the same C++17 floor. Its
+# format handlers are wired here: xlnt (.xlsx) is linked when found; PDF (PDFium), OCR
 # (Tesseract) and legacy .xls (libxls) are opt-in via the options near the image
 # codecs. Each gate adds a PRIVATE compile definition so only document.cpp sees
 # it; absent a gate the corresponding format throws a clear runtime error.

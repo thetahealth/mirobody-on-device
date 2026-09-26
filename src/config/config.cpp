@@ -1,4 +1,5 @@
 #include "config/config.hpp"
+#include <optional>
 
 #include "config/store.hpp"
 #include "database/database.hpp"
@@ -99,7 +100,7 @@ std::string sibling_config_path(const std::string& base, const std::string& infi
 
 //------------------------------------------------------------------------------
 
-utils::LocalYamlStore load_config_store(const mirobody::optional<std::string>& yaml_path) {
+utils::LocalYamlStore load_config_store(const std::optional<std::string>& yaml_path) {
     // Enable Fernet decryption for "gAAAA..." values when
     // CONFIG_ENCRYPTION_KEY is present in the environment. The key is run
     // through ConfigStore::derive_fernet_key to match the Python loader.
@@ -114,7 +115,7 @@ utils::LocalYamlStore load_config_store(const mirobody::optional<std::string>& y
     // env var > ./config.yml in the current working directory. This is the file
     // the operator creates and edits; unlike before it need not exist — when
     // absent, only the committed template (and any remote config) apply.
-    mirobody::optional<std::string> path = yaml_path;
+    std::optional<std::string> path = yaml_path;
     if (!path) {
         const char* p = std::getenv("MIROBODY_CONFIG");
         if (p && *p) path = std::string(p);
@@ -135,7 +136,7 @@ utils::LocalYamlStore load_config_store(const mirobody::optional<std::string>& y
 
     // Tier 4 (base): the committed template config.example.yml, found beside
     // the resolved config path. Existence is probed before opening (via fopen,
-    // since this is C++11 without std::filesystem) so a missing template is
+    // because the supported phone toolchains use the portable directory API here) so a missing template is
     // silent rather than a load() warning.
     std::string example_path = sibling_config_path(*path, "example");
     if (FILE* fh = std::fopen(example_path.c_str(), "rb")) {
@@ -241,7 +242,7 @@ void reconcile_firebase_projects(std::string& primary, std::vector<std::string>&
     }
 }
 
-Config load_config(const mirobody::optional<std::string>& yaml_path) {
+Config load_config(const std::optional<std::string>& yaml_path) {
     utils::LocalYamlStore store = load_config_store(yaml_path);
 
     Config cfg;
@@ -504,7 +505,7 @@ Config& config() {
     return *g_config;
 }
 
-Config& init_config(const mirobody::optional<std::string>& yaml_path) {
+Config& init_config(const std::optional<std::string>& yaml_path) {
     std::lock_guard<std::mutex> lock(g_config_mutex);
     g_config.reset(new Config(load_config(yaml_path)));
     return *g_config;

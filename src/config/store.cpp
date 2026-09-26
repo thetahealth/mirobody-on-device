@@ -1,4 +1,5 @@
 #include "config/store.hpp"
+#include <optional>
 
 #include "client/http_client.hpp"
 #include "platform/log.hpp"
@@ -53,9 +54,9 @@ bool looks_encrypted(const std::string& s) {
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::string> getenv_opt(const std::string& key) {
+std::optional<std::string> getenv_opt(const std::string& key) {
     const char* v = std::getenv(key.c_str());
-    if (!v || *v == '\0') return mirobody::nullopt;
+    if (!v || *v == '\0') return std::nullopt;
     return std::string{v};
 }
 
@@ -97,9 +98,9 @@ std::string scalar_to_string(const rapidjson::Value& v) {
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::unordered_map<std::string, std::string>> try_parse_dict_json(const std::string& s) {
+std::optional<std::unordered_map<std::string, std::string>> try_parse_dict_json(const std::string& s) {
     rapidjson::Document doc;
-    if (doc.Parse(s.c_str()).HasParseError() || !doc.IsObject()) return mirobody::nullopt;
+    if (doc.Parse(s.c_str()).HasParseError() || !doc.IsObject()) return std::nullopt;
     std::unordered_map<std::string, std::string> out;
     for (auto it = doc.MemberBegin(); it != doc.MemberEnd(); ++it) {
         auto v = scalar_to_string(it->value);
@@ -111,9 +112,9 @@ mirobody::optional<std::unordered_map<std::string, std::string>> try_parse_dict_
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::vector<std::string>> try_parse_list_json(const std::string& s) {
+std::optional<std::vector<std::string>> try_parse_list_json(const std::string& s) {
     rapidjson::Document doc;
-    if (doc.Parse(s.c_str()).HasParseError() || !doc.IsArray()) return mirobody::nullopt;
+    if (doc.Parse(s.c_str()).HasParseError() || !doc.IsArray()) return std::nullopt;
     std::vector<std::string> out;
     out.reserve(doc.Size());
     for (const auto& v : doc.GetArray()) {

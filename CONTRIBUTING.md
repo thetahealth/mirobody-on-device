@@ -94,11 +94,10 @@ assume, so they are worth reading once.
 
 ### C++
 
-- **C++11**, set in [CMakeLists.txt](CMakeLists.txt). The core compiles under
-  the Android NDK, Xcode and the OpenHarmony toolchain from one source tree, and
-  C++11 is what all three accept without per-platform flags. Where a later
-  standard would have a library type, use the backport in
-  [`src/compat/cxx11.hpp`](src/compat/cxx11.hpp) (`mirobody::optional`, …).
+- **C++17**, set in [CMakeLists.txt](CMakeLists.txt) and enforced by the target
+  feature plus the static assertion in `src/platform/log.hpp`. Use the standard
+  library directly. Do not raise the floor to C++20 without checking the
+  Android NDK, Apple Clang and HarmonyOS toolchains together.
 - **A new third-party dependency costs four builds**: vcpkg on Windows, and the
   Android, iOS and HarmonyOS prebuilt sysroots. Propose it in an issue before
   adding it.

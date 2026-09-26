@@ -21,6 +21,7 @@
 //
 // Configuration honored: LOCAL_STORAGE_* plus FILE_ENCRYPTION_KEY and
 // FILE_KEY_SEED.
+#include <optional>
 
 #include "client/http_client.hpp"
 #include "config/config.hpp"
@@ -88,7 +89,7 @@ int main(int argc, char** argv) {
     int rc = 0;
 
     try {
-        mirobody::optional<std::string> path;
+        std::optional<std::string> path;
         if (!config_path.empty()) path = config_path;
         mirobody::Config cfg = mirobody::load_config(path);
 

@@ -64,7 +64,7 @@ struct ResourceResult {
 // Resource definition
 //------------------------------------------------------------------------------
 
-// A registered resource. Like Tool, this is a C++11 aggregate (no constructors)
+// A registered resource. Like Tool, this is an aggregate record (no constructors)
 // so it can be brace-initialized positionally:
 //
 //     const Resource kServerInfo = {
