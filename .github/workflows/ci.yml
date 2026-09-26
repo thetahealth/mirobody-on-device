@@ -2,10 +2,9 @@
 # (core + loopback front door + CLIs), the unit tests, and the HarmonyOS profile
 # (no front door), which is the closest a desktop runner gets to a phone build.
 #
-# The app builds (Android / iOS / HarmonyOS) are not here yet: they need the
-# cross-compiled dependency sysroots (android/build-prebuilt.*, ios/prebuilt,
-# harmony/build-prebuilt.*), which take a toolchain download and a long build of
-# their own. They are the next thing to add.
+# Pure-client Android/iOS tests live in host-tests.yml. Embedded native app
+# builds still need cross-compiled dependency sysroots (android/build-prebuilt.*,
+# ios/prebuilt, harmony/build-prebuilt.*) and are tracked separately.
 name: ci
 
 on:

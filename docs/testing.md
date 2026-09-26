@@ -2,8 +2,9 @@
 
 The desktop build is the test harness for the shared C++17 core. It is not a
 phone app build. Run the checks that match your change and describe the result
-in the pull request; CI runs every command in the first table on both Ubuntu
-24.04 and macOS 15.
+in the pull request. The `ci` workflow runs every command in the first table
+on both Ubuntu 24.04 and macOS 15; `host-tests` runs the pure-client app tests
+below.
 
 | Check | Command | What it establishes |
 |---|---|---|
@@ -20,6 +21,15 @@ checker locally; CI still exercises the complete matrix before merge.
 
 ## Phone host verification
 
+| CI job | Command | What it establishes |
+|---|---|---|
+| `android JVM (pure client)` on Ubuntu 24.04 | `gradle -p android :app:testPhoneDebugUnitTest -Pmirobody.native=false --no-daemon --console=plain` (Gradle 9.4.1, JDK 21) | Kotlin phone-flavor logic compiles and its JVM tests pass. No APK, JNI or Android device runs. |
+| `iOS simulator (pure client)` on macOS 15 | `xcodebuild test -project ios/Mirobody.xcodeproj -scheme Mirobody -destination "platform=iOS Simulator,id=<available-iPhone-UDID>" CODE_SIGNING_ALLOWED=NO` | The checked-in project builds a simulator app and runs `MirobodyTests`. No XCFramework, physical device or signed app is tested. |
+
+The checked-in Xcode project must contain the `MirobodyTests` target and the
+scheme's Test action must include it. After editing `ios/project.yml`, run
+`cd ios && xcodegen generate` and commit the generated project too.
+
 | Changed area | Additional evidence to seek | Starting point |
 |---|---|---|
 | `android/`, Android JNI or the C ABI | Build the selected Android ABI, launch the app and exercise the changed path. | [Android guide](../android/README.md) |
@@ -29,17 +39,18 @@ checker locally; CI still exercises the complete matrix before merge.
 
 For Android host logic, run
 `cd android && ./build-app.sh :app:testPhoneDebugUnitTest` on macOS/Linux,
-or the same task with
-`build-app.cmd` on Windows. The existing JVM tests cover Bluetooth coding,
-local model selection and chat rendering. For iOS, use the Mirobody scheme's
-**Test** action in Xcode; `MirobodyTests` currently covers GATT decoding.
-Report these separately from a device or simulator run.
+or the same task with `build-app.cmd` on Windows. The existing JVM tests cover
+Bluetooth coding, local model selection and chat rendering. For iOS, use the
+Mirobody scheme's **Test** action in Xcode; `MirobodyTests` currently covers
+GATT decoding. Report Android JVM tests separately from a device or emulator
+run.
 
 The native dependency sysroots are not built in CI. If you cannot build an
-affected app, write **“App build not verified”** in the PR, with the missing
-sysroot or toolchain and the host path affected. A desktop pass must never be
-reported as Android, iOS or HarmonyOS verification. A source inspection of a
-bridge is useful evidence, but it is not an app run.
+affected native app path, write **“Native app build not verified”** in the PR,
+with the missing sysroot or toolchain and the host path affected. A desktop
+core pass or pure-client test must not be reported as verification of an
+embedded Android, iOS or HarmonyOS build. A source inspection of a bridge is
+useful evidence, but it is not an app run.
 
 Use synthetic health readings and files in tests and issues. Do not commit a
 real reading, export, screenshot or log value. For a wrong code or unit, name

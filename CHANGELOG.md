@@ -8,6 +8,9 @@ dated by the day they reached `main`.
 
 ### Changed
 
+- Added Android phone-flavor JVM tests and pure-client iOS simulator tests to
+  CI. Regenerated the checked-in Xcode project so its Test action actually runs
+  the existing `MirobodyTests` target; the prior project silently omitted it.
 - Clarified the contributor and agent guides after the C++17 migration: the
   native registration macros, unconditional embedded loopback binding, and
   current Android/iOS integration paths now match the code. Added a

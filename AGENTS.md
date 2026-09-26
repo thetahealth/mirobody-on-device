@@ -31,9 +31,11 @@ python3 tools/check_doc_links.py           # relative links in every tracked .md
 python3 tools/check_exports.py             # mirobody.def matches mirobody.h
 ```
 
-CI runs these on Ubuntu 24.04 and macOS 15. It builds **no app**. If you touched
-an app, `src/platform/` or the C ABI and could not build the app, say so; do not
-report it as verified.
+CI runs these on Ubuntu 24.04 and macOS 15. A separate workflow runs Android
+JVM tests and builds/runs the pure-client iOS app on a simulator. Neither
+workflow verifies native embedded app builds. If you touched an app,
+`src/platform/` or the C ABI and could not build the affected native path, say
+so; do not report it as verified.
 
 ## Rules that are not the defaults you would assume
 
