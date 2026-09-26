@@ -14,7 +14,7 @@ dated by the day they reached `main`.
   Regeneration also activates LiteRT-LM linking and the Apple sign-in/HealthKit
   entitlements already declared in `project.yml`; signed device builds need
   matching capability provisioning.
-- Pinned the Android LiteRT-LM artifact to 0.13.1. The moving
+- Pinned the Android LiteRT-LM artifact to 0.16.1. The moving
   `latest.release` selected 0.17.1, whose Kotlin 2.4 metadata cannot be read by
   this app's Kotlin 2.2 compiler. iOS CI skips checkout of missing upstream
   Android Git LFS objects while resolving the Swift package.
