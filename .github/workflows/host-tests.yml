@@ -41,6 +41,11 @@ jobs:
           simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for runtime in devices.values() for device in runtime if device["name"].startswith("iPhone")))')
           echo "id=$simulator_id" >> "$GITHUB_OUTPUT"
       - name: Run MirobodyTests
+        # SwiftPM checks out the LiteRT-LM repository even though its iOS
+        # binary comes from a release archive. Upstream's Android LFS object
+        # is missing (google-ai-edge/LiteRT-LM#2407); skip those checkout files.
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
         run: |
           xcodebuild test \
             -project ios/Mirobody.xcodeproj \
