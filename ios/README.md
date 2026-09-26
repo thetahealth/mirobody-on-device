@@ -9,7 +9,10 @@ Android app loads `libmirobody.so` over JNI.
 
 The checked-in Xcode project is generated from `project.yml`. Its shared
 Mirobody scheme includes the `MirobodyTests` target; the pure-client simulator
-build and tests run in CI. Embedded XCFramework builds need separate validation.
+build and tests run in CI. The generated project includes the LiteRT-LM Swift
+package and its Apple sign-in and HealthKit entitlements. Signed device builds
+need the matching capabilities provisioned; the embedded Mirobody XCFramework
+needs separate validation.
 
 ## Prerequisites
 

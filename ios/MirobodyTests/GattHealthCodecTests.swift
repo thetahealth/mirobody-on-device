@@ -72,7 +72,10 @@ final class GattHealthCodecTests: XCTestCase {
         XCTAssertEqual(r[0].unit, "°C")
         XCTAssertEqual(loinc(r[0].observation), "8310-5")
         XCTAssertEqual(quantity(r[0].observation)["code"] as? String, "Cel")
-        XCTAssertEqual(quantity(r[0].observation)["value"] as? Double, 36.5, accuracy: 1e-9)  // non-integral
+        guard let value = quantity(r[0].observation)["value"] as? Double else {
+            return XCTFail("Temperature value must be a non-integral number")
+        }
+        XCTAssertEqual(value, 36.5, accuracy: 1e-9)
     }
 
     func testTemperatureFahrenheitFlag() {

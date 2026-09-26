@@ -24,7 +24,7 @@ checker locally; CI still exercises the complete matrix before merge.
 | CI job | Command | What it establishes |
 |---|---|---|
 | `android JVM (pure client)` on Ubuntu 24.04 | `gradle -p android :app:testPhoneDebugUnitTest -Pmirobody.native=false --no-daemon --console=plain` (Gradle 9.4.1, JDK 21) | Kotlin phone-flavor logic compiles and its JVM tests pass. No APK, JNI or Android device runs. |
-| `iOS simulator (pure client)` on macOS 15 | `xcodebuild test -project ios/Mirobody.xcodeproj -scheme Mirobody -destination "platform=iOS Simulator,id=<available-iPhone-UDID>" CODE_SIGNING_ALLOWED=NO` | The checked-in project builds a simulator app and runs `MirobodyTests`. No XCFramework, physical device or signed app is tested. |
+| `iOS simulator (pure client)` on macOS 15 | `xcodebuild test -project ios/Mirobody.xcodeproj -scheme Mirobody -destination "platform=iOS Simulator,id=<available-iPhone-UDID>" CODE_SIGNING_ALLOWED=NO` | The checked-in project builds a simulator app with the LiteRT-LM Swift package and runs `MirobodyTests`. It does not link this repo's embedded `mirobody.xcframework`, sign the app or run on a physical device. |
 
 The checked-in Xcode project must contain the `MirobodyTests` target and the
 scheme's Test action must include it. After editing `ios/project.yml`, run

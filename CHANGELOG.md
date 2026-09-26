@@ -11,6 +11,13 @@ dated by the day they reached `main`.
 - Added Android phone-flavor JVM tests and pure-client iOS simulator tests to
   CI. Regenerated the checked-in Xcode project so its Test action actually runs
   the existing `MirobodyTests` target; the prior project silently omitted it.
+  Regeneration also activates LiteRT-LM linking and the Apple sign-in/HealthKit
+  entitlements already declared in `project.yml`; signed device builds need
+  matching capability provisioning.
+- Pinned the Android LiteRT-LM artifact to 0.13.1. The moving
+  `latest.release` selected 0.17.1, whose Kotlin 2.4 metadata cannot be read by
+  this app's Kotlin 2.2 compiler. iOS CI skips checkout of missing upstream
+  Android Git LFS objects while resolving the Swift package.
 - Clarified the contributor and agent guides after the C++17 migration: the
   native registration macros, unconditional embedded loopback binding, and
   current Android/iOS integration paths now match the code. Added a
