@@ -1,0 +1,45 @@
+name: Something else is broken
+description: A crash, a build failure, a wrong answer, a screen that does not work.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A security problem does not go here: see SECURITY.md. Redact any health data
+        from logs and screenshots before you attach them.
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it happens
+      options: [Android app, iOS app, HarmonyOS app, The core on a desktop (build.sh / CLIs / tests), Building an app]
+    validations:
+      required: true
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Which model lane, if it is about chat
+      options: [Not about chat, On-device model, My own key (BYOK), A mirobody server]
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Device or host, OS version, and the commit or app version
+      placeholder: "Pixel 8, Android 15, main @ abc1234"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt (redacted)
+      render: text

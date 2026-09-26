@@ -1,0 +1,52 @@
+name: A reading was coded wrong
+description: A HealthKit, Health Connect, Huawei Health or Bluetooth reading landed under the wrong code or unit, or under none.
+title: "coding: <store> <field> -> <what you got>"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use a synthetic value if you can, and **never paste real readings or an export**.
+        The device crosswalk the phone is moving to is shared with the server, so a wrong
+        row may be fixed in [mirobody](https://github.com/thetahealth/mirobody) and loaded here.
+  - type: dropdown
+    id: store
+    attributes:
+      label: Where the reading came from
+      options: [Apple HealthKit, Android Health Connect, Huawei Health, Bluetooth sensor (GATT), Other]
+    validations:
+      required: true
+  - type: input
+    id: field
+    attributes:
+      label: The field, exactly as the store names it
+      description: The type identifier plus the field, if it has one.
+      placeholder: "HKQuantityTypeIdentifierRestingHeartRate"
+    validations:
+      required: true
+  - type: input
+    id: value
+    attributes:
+      label: Value and unit as the store reported them
+      placeholder: "58 count/min"
+    validations:
+      required: true
+  - type: input
+    id: got
+    attributes:
+      label: What it was coded as
+      description: The LOINC code and UCUM unit the record shows, or "not coded".
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: The code you expected, if you know it
+      placeholder: "40443-4"
+  - type: input
+    id: version
+    attributes:
+      label: App, OS version, and the commit or app version
+      placeholder: "Android app, Android 15, main @ abc1234"
+    validations:
+      required: true

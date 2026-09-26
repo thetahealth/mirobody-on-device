@@ -154,7 +154,7 @@ key; third-party validators use the `kid`.)
 ## Configuration
 
 All keys are optional with working defaults — OAuth works out of the box once
-`JWT_KEY` is set (see [config.yml](../../config.yml), `OAuthConfig` in
+`JWT_KEY` is set (see `OAuthConfig` in
 [src/config/config.hpp](../config/config.hpp)).
 
 | Key | Default | Meaning |

@@ -103,9 +103,11 @@ desktop.ini
 *.yaml
 # ...except the committed template, which is the source of defaults.
 !config.example.yml
-# ...and the CI workflows. Negated rather than force-added: a tracked-but-ignored
-# file never shows up in `git status` again, so edits to it silently go nowhere.
+# ...and the CI workflows and issue forms. Negated rather than force-added: a
+# tracked-but-ignored file never shows up in `git status` again, so edits to it
+# silently go nowhere.
 !.github/workflows/*.yml
+!.github/ISSUE_TEMPLATE/*.yml
 
 # Internal planning docs (same convention as the main mirobody repo): strategy,
 # compliance and business notes that are not project documentation. Kept out

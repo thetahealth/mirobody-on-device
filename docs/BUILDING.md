@@ -1,7 +1,7 @@
 # Building mirobody
 
-Full build instructions for every target. For the condensed one-liner per
-platform, see the [Quick start](../README.md#quick-start) in the main README.
+Full build instructions for every target. For the two-minute desktop version,
+see [Try it in two minutes](../README.md#try-it-in-two-minutes) in the README.
 
 ## Dependencies
 

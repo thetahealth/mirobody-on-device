@@ -95,9 +95,9 @@ sweet spot of the whole design.
 **A third axis, deliberately out of scope here: sharing with other people.** Care circles
 let a user share a conversation or their health data with someone they trust — opt-in, off
 by default, and the assistant is read-only over another member's data. That is an
-access-control question rather than a placement question, so it lives in
-[README → Care circles](../README.md#care-circles). Nothing in this document grants another
-person access to anything.
+access-control question rather than a placement question, and sharing belongs to the
+[mirobody server](https://github.com/thetahealth/mirobody), which owns the care circle.
+Nothing in this document grants another person access to anything.
 
 ## Guarantees we hold ourselves to
 
@@ -476,7 +476,9 @@ endpoints above are BAA-covered. Either keep the turn on the local / home-server
 (nothing leaves), or point the lane at a BAA-eligible enterprise surface — Google Gemini
 via **Vertex AI** (`GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION`, credentials via ADC)
 or OpenAI via **Azure OpenAI** (`AZURE_OPENAI_*`), both
-already supported server-side. See [README → Compliance](../README.md#compliance--hipaa--gdpr).
+already supported by the core. See the compliance notes in the
+[v2 README](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/README.md#compliance--hipaa--gdpr)
+(archived; the regulatory analysis still holds, the deployment shapes it describes do not).
 
 ### Request contract
 

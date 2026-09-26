@@ -35,9 +35,10 @@ The LLM CLIs share the same UX:
 ## YAML keys
 
 Drop these into your `config.yml` (or push them through your remote config
-service) instead of exporting env vars one by one. See
-[`config.yml`](../config.yml) for the full, commented list of keys — it documents
-every provider's credentials, model, and pricing options inline.
+service) instead of exporting env vars one by one. Start from
+[`config.example.yml`](../config.example.yml), copied to `config.yml`; the provider
+keys each CLI honors (model, timeouts, pricing) are listed in that CLI's source
+header.
 
 Each CLI's source header lists every key it honors (timeouts,
 min-chunk-size, etc.). Secrets like `*_API_KEY` / `*_TOKEN` can be stored as

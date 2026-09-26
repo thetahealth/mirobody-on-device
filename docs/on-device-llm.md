@@ -5,7 +5,7 @@ paginate: true
 title: On-Device LLM — Mirobody
 style: |
   /* Palette: the navy/warm-cream sheet in docs/colors-and-fonts.md §2 — the same
-     values htdoc renders (see htdoc/src/index.css, which defers to that sheet).
+     values the web client renders (mirobody-web; the removed htdoc/ deferred to that sheet too).
      Set through the theme's OWN GitHub-markdown variables so tables, hairlines,
      code fills and body text all follow at once instead of being patched rule by
      rule. !important is required, not decoration: the theme declares these on

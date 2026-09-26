@@ -52,10 +52,8 @@ The value is normalized on load to a leading slash with no trailing slash
 (`mirobody`, `/mirobody`, and `/mirobody/` all become `/mirobody`). With it set
 to `/mirobody`:
 
-- Every registered route is served under the prefix: `POST /mirobody/v1/chat`,
-  `GET /mirobody/api/health`, `wss://host/mirobody/api/chat`, etc. The
-  route tables under [HTTP API](../../README.md#http-api) / [WebSocket routes](../../README.md#websocket-routes)
-  are all relative to the prefix.
+- Every registered route is served under the prefix: `POST /mirobody/api/chat`,
+  `GET /mirobody/api/health`, `GET /mirobody/fhir/metadata`, etc.
 - Static files are served with the prefix stripped (`/mirobody/assets/x.js` →
   `assets/x.js` under `HTTP_ROOT`). A request **outside** the prefix 404s — the
   app exists only under the mount, never at the bare root.
