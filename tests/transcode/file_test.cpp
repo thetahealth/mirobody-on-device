@@ -342,7 +342,6 @@ TEST_CASE("sidecar fallback rejects malformed keys", "[file]") {
 
 //------------------------------------------------------------------------------
 
-#if defined(MIROBODY_DATABASE_SQLITE)
 // Exercises the real files-table DAO SQL (the cross-dialect upsert with a
 // partial-index ON CONFLICT target, list sort/paginate, soft delete) against a
 // live SQLite database. SQLite-guarded: SQLiteConfig::open() links only in the
@@ -407,4 +406,3 @@ TEST_CASE("files-table DAO upserts, lists, sorts, paginates", "[file][db]") {
     file::db_upsert_file(conn, 7, "k_b", "b.pdf", "application/pdf", 20);
     REQUIRE(file::db_count_files(conn, 7) == 2);
 }
-#endif

@@ -193,17 +193,10 @@ std::int64_t CircleService::resolve_or_create_user(const std::string& email) {
 
         const std::string name = lower.substr(0, lower.find('@'));
         const std::int64_t now = platform::now_unix_ms();
-#if defined(MIROBODY_DATABASE_PG)
-        db::Result ins = db_.execute(
-            "INSERT INTO users (email, name, created_at) VALUES (?, ?, ?) RETURNING id;",
-            {lower, name, now});
-        return (ins.rows.empty() || ins.rows[0].empty()) ? 0 : ins.rows[0][0].as_int();
-#else
         db::Result ins = db_.execute(
             "INSERT INTO users (email, name, created_at) VALUES (?, ?, ?);",
             {lower, name, now});
         return ins.last_insert_id;
-#endif
     } catch (const std::exception& e) {
         platform::log_warn("circle: resolve_or_create_user failed: %s", e.what());
         return 0;
@@ -239,17 +232,10 @@ std::int64_t CircleService::create_circle(std::int64_t owner_id, const std::stri
     const std::string  oid = std::to_string(owner_id);
     const std::int64_t now = platform::now_unix_ms();
     db::Transaction tx = db_.begin();
-#if defined(MIROBODY_DATABASE_PG)
-    db::Result r = tx.execute(
-        "INSERT INTO care_circles (owner_user_id, name, created_at) VALUES (?, ?, ?) RETURNING id;",
-        {oid, name, now});
-    const std::int64_t cid = (r.rows.empty() || r.rows[0].empty()) ? 0 : r.rows[0][0].as_int();
-#else
     db::Result r = tx.execute(
         "INSERT INTO care_circles (owner_user_id, name, created_at) VALUES (?, ?, ?);",
         {oid, name, now});
     const std::int64_t cid = r.last_insert_id;
-#endif
     if (cid <= 0) return 0;
     // The owner is a member of their own circle: role Owner, already Accepted.
     tx.execute(

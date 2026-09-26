@@ -61,9 +61,8 @@ to `/mirobody`:
   app exists only under the mount, never at the bare root.
 - `GET /mirobody` (no trailing slash) `302`-redirects to `/mirobody/`, so the
   browser resolves the SPA's relative asset URLs against the mount.
-- The web client derives its API base from `window.location` at runtime (see
-  `net.appBase()` in [htdoc/src/net.js](../../htdoc/src/net.js)), so one build works at
-  any mount with no rebuild and no inline-script CSP exception.
+- A web client should derive its API base from `window.location` at runtime, so
+  one build works at any mount with no rebuild and no inline-script CSP exception.
 
 **Deployment:** the ingress/reverse proxy must route `/mirobody/*` to the server
 **without stripping** the prefix — the server expects to receive the full path.
@@ -312,17 +311,10 @@ that never wanted Vertex. Every key is documented in
 
 ## Object storage
 
-Three object-store backends compile into every build; the active one is selected
-at runtime by which keys are set. Read them via `cfg.s3()`, `cfg.oss("name")`,
-and `cfg.local_storage()` — each returns a config struct with `configured()` and
-`open()`. The interface and per-backend behavior are documented in
-[src/storage/README.md](../storage/README.md); every key is in the "Object
-Storage Configuration" block of [config.yml](../../config.yml).
-
-A cloud backend (S3 / OSS) takes precedence; the local filesystem is the
-**fallback**. When S3 or OSS is configured, the server's LocalStorage HTTP mount
-stands down (those objects live in the cloud), so the `LOCAL_STORAGE_*` keys
-apply only when no cloud backend is set.
+One backend: the local filesystem. Read it via `cfg.local_storage()`, which
+returns a config struct with `configured()` and `open()`. The interface is
+documented in [src/storage/README.md](../storage/README.md); the keys are in
+[config.example.yml](../../config.example.yml).
 
 The local-filesystem backend (`LOCAL_STORAGE_*`) serves uploads over HTTP from
 `LOCAL_STORAGE_DIR` at the URL path `LOCAL_STORAGE_URL_PREFIX`, optionally signed

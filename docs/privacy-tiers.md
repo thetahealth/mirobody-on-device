@@ -1,5 +1,12 @@
 # Privacy Tiers — Where the Model Runs, Where the Data Lives
 
+> **Clients in this repo (2026-09).** The web client (`htdoc/`), Qt, Electron and
+> the WeChat Mini Program left this repo when it narrowed to the phone; they are
+> preserved at the `v2-full-2026-08` tag. The phone apps are moving to a native
+> shell around the [mirobody-web](https://github.com/thetahealth/mirobody-web)
+> build in a WebView, so the web renderer becomes theirs too. Rows below for the
+> removed clients are history.
+
 Health data is the most sensitive thing this app touches, so the question every user
 actually asks is not "which model do you use?" — it is **"does my data leave my
 phone?"** Answering that needs both halves of the system at once, which is why
@@ -561,7 +568,7 @@ with a notice rather than dying.
 
 The app already has the control this needs: **Backend** in the nav drawer (Android's
 `BaseUrlDialog` in [AppSettingsSection.kt](../android/app/src/main/java/ai/thetahealth/mirobody/ui/settings/AppSettingsSection.kt),
-the base-URL override in [net.js](../htdoc/src/net.js)). It sets the base URL every
+the base-URL override in [net.js](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/htdoc/src/net.js)). It sets the base URL every
 request is prefixed with — and since chat history, uploads, health records, and the
 account all live behind that server, **Backend already decides where the user's data
 lives.** No new concept is required; it just needs to be named as the privacy control it

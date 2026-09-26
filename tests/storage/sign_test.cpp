@@ -89,25 +89,6 @@ TEST_CASE("aws_sigv4_signature matches the AWS SigV4 'get-vanilla' test vector",
 
 //------------------------------------------------------------------------------
 
-TEST_CASE("oss_signature matches the Aliyun OSS docs example", "[storage][sign]") {
-    // The PUT example from the OSS "Add signatures to the Authorization header"
-    // doc: includes a Content-MD5 and text/html Content-Type plus two
-    // x-oss-* headers folded in before the canonicalized resource.
-    const std::string secret = "OtxrzxIsfpFjA7SwPzILwy8Bw21TLhquhboDYROV";
-    const std::string string_to_sign =
-        "PUT\n"
-        "ODBGOERFMDMzQTczRUY3NUE3NzA5QzdFNUYzMDQxNEM=\n"
-        "text/html\n"
-        "Thu, 17 Nov 2005 18:49:58 GMT\n"
-        "x-oss-magic:abracadabra\n"
-        "x-oss-meta-author:foo@bar.com\n"
-        "/oss-example/nelson";
-
-    REQUIRE(oss_signature(secret, string_to_sign) == "26NBxoKdsyly4EDv6inkoDft/yA=");
-}
-
-//------------------------------------------------------------------------------
-
 TEST_CASE("xml_tag_values extracts list-response keys", "[storage][sign]") {
     const std::string xml =
         "<?xml version=\"1.0\"?><ListBucketResult>"

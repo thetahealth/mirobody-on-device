@@ -3,12 +3,11 @@
 // Chat -- the chat-domain class (Tier 2).
 //
 // This is the transport-agnostic core of the chat service: it owns the domain
-// operations the HTTP/WebSocket interface (chat::ChatService) exposes, but knows
+// operations the HTTP interface (chat::ChatService) and the C ABI expose, but knows
 // nothing about routes, SSE framing, or JSON envelopes. It deals in llm::Event
 // (streamed through an llm::EventHandler) and plain result structs.
 //
 //   - response()       run a registered agent for a turn (Tier 3 / Tier 4 below)
-//   - live_response()  run a realtime (OpenAI Realtime / Gemini Live) turn
 //   - history() / delete_history() / persist_history()   per-user session log
 //   - providers()      the "agent/provider" pairs that have a client loaded
 //
@@ -31,27 +30,14 @@
 // with a string `session_id` key. The chat persistence SQL is otherwise
 // identical across backends, so the queries splice the right table and
 // key-column names in from these tokens rather than branching the whole statement.
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-#define MIROBODY_CONVERSATIONS_TABLE "th_sessions"
-#define MIROBODY_CONVERSATION_ID_COL "session_id"
-#else
 #define MIROBODY_CONVERSATIONS_TABLE "conversations"
 #define MIROBODY_CONVERSATION_ID_COL "id"
-#endif
 
 namespace mirobody { namespace chat {
 
 //------------------------------------------------------------------------------
 // Request structs
 //------------------------------------------------------------------------------
-
-// A realtime (live) turn: which provider to bridge, an optional system prompt,
-// and the conversation so far.
-struct LiveRequest {
-    std::string                   provider;
-    std::string                   system;
-    std::vector<llm::ChatMessage> messages;
-};
 
 //------------------------------------------------------------------------------
 // Chat
@@ -77,12 +63,6 @@ public:
     // `messages` bypass it.
     void response(const std::string& agent_name, AgentRequest& req,
                   const llm::EventHandler& on_event);
-
-    // Run one realtime turn: build the provider's client (OpenAI Realtime /
-    // Gemini Live) from `cfg_`, ainvoke it, and forward each event through
-    // `on_event`. A missing key / unknown provider is reported as an Error
-    // event. Does NOT emit a terminal frame -- the caller marks turn end.
-    void live_response(const LiveRequest& req, const llm::EventHandler& on_event);
 
     // Best-effort: record this turn's question so the thread shows in history,
     // and return the conversation (thread) id it landed in -- 0 when nothing was

@@ -38,7 +38,6 @@ class Responder;
 enum Op {
     kOpUnknown = -1,
     kOpChat    = 1,   // streaming agent turn   (SSE; Chat::response)
-    kOpLive    = 2,   // realtime turn          (WS;  Chat::live_response)
 };
 
 class Dispatcher {
@@ -49,12 +48,12 @@ public:
     // may be null (uploads then aren't indexed for MCP resources/list).
     // `parser` extracts text from non-text uploads at store time (see
     // transcode/parser.hpp); borrowed and may be null (uploads then carry no text).
-    // `db` is borrowed and may be null; only PG_LEGACY builds touch it (the
-    // th_files uploads ledger the legacy Python stack reads).
+    // `db` is borrowed and may be null (circle subject resolution and the
+    // uploads index then degrade).
     // `memory` (the long-term memory store, see memory/) is borrowed and may be
     // null (the `remember` / `recall_memory` tools then report memory is off);
     // it is threaded onto each turn's AgentRequest so the tool executor reaches it.
-    // `rate_max` / `rate_window_seconds` cap agent/live turns per user per window
+    // `rate_max` / `rate_window_seconds` cap agent turns per user per window
     // (rate_max <= 0 disables the limit); enforced via `cache` (no cache => no
     // limit). See CHAT_RATE_MAX / CHAT_RATE_WINDOW_SEC.
     Dispatcher(Chat& chat, storage::Storage* storage, cache::Cache* cache,

@@ -15,66 +15,13 @@ class Database;
 // Backend configuration structs
 //------------------------------------------------------------------------------
 //
-// Per-backend connection parameters. Held by the top-level `mirobody::Config`
-// and populated by `load_config()`. The `open()` helpers build a backend-
-// appropriate URI and hand it to the `Database` constructor: caller is
-// responsible for matching the chosen struct to the backend that was actually
-// linked at build time (see MIROBODY_DATABASE_BACKEND in CMakeLists.txt).
-
-struct PostgreSQLConfig {
-    std::string host;
-    int         port = 5432;
-    std::string user;
-    std::string password;
-    std::string database;
-    std::string schema;
-    std::string encryption_key;
-    int         min_connection = 0;
-    int         max_connection = 0;
-
-    Database open() const;
-};
-
-//------------------------------------------------------------------------------
+// Connection parameters for the SQLite backend. Held by the top-level
+// `mirobody::Config` and populated by `load_config()`.
 
 struct SQLiteConfig {
     std::string path;          // filesystem path or ":memory:"
 
     Database open() const;
-};
-
-//------------------------------------------------------------------------------
-
-struct DuckDBConfig {
-    std::string path;          // filesystem path or ":memory:"
-};
-
-//------------------------------------------------------------------------------
-
-struct MySQLConfig {
-    std::string host;
-    int         port = 3306;
-    std::string user;
-    std::string password;
-    std::string database;
-    std::string encryption_key;
-    int         min_connection = 0;
-    int         max_connection = 0;
-
-    Database open() const;
-};
-
-//------------------------------------------------------------------------------
-
-struct ClickHouseConfig {
-    std::string host;
-    int         port = 9000;   // 9000 native, 9440 TLS native, 8123 HTTP
-    std::string user;
-    std::string password;
-    std::string database;
-    std::string encryption_key;
-    int         min_connection = 0;
-    int         max_connection = 0;
 };
 
 //------------------------------------------------------------------------------
@@ -142,7 +89,7 @@ struct Result {
 
 // A multi-statement transaction pinned to a single backend connection, obtained
 // from Database::begin(). All execute() calls on it run on that one connection,
-// so `BEGIN` / `COMMIT` behave correctly even on pooled backends (PostgreSQL).
+// so `BEGIN` / `COMMIT` behave correctly.
 //
 // commit() commits and ends the transaction. If a Transaction is destroyed
 // without a successful commit() -- including when an exception unwinds past it
@@ -178,20 +125,16 @@ private:
 // Database
 //------------------------------------------------------------------------------
 
-// Thin wrapper over whichever SQL backend is linked into this build. Exactly
-// one backend is built per binary (see "Database backends" in the README), so
-// this class is not virtual; the .cpp that gets compiled selects the backend.
+// Thin wrapper over SQLite (src/database/sqlite.cpp), the one backend this repo
+// links. Kept as a class rather than raw sqlite3 calls so the rest of the core
+// sees rows, columns and typed values, not a C API.
 //
 // Not thread-safe. Use one Database per thread, or serialize access in the
 // caller.
 class Database {
 public:
-    // Open or create a database at `uri`. The URI is backend-specific:
-    //   - SQLite:     filesystem path, or ":memory:" for an in-memory DB.
-    //   - DuckDB:     filesystem path, or ":memory:".
-    //   - PostgreSQL: libpq connection string ("host=... dbname=...").
-    //   - MySQL:      "mysql://user:pass@host:port/dbname".
-    //   - ClickHouse: "clickhouse://user:pass@host:port/dbname" (stub today).
+    // Open or create the SQLite database at `uri`: a filesystem path, or
+    // ":memory:" for an in-memory DB.
     // Throws std::runtime_error on failure.
     explicit Database(const std::string& uri);
     ~Database();
@@ -206,18 +149,10 @@ public:
     // bound in order from `params`. Returns rows + column names for SELECTs,
     // and `rows_affected` / `last_insert_id` for DML. Throws
     // std::runtime_error on prepare, bind, or execution failure.
-    //
-    // With pooled backends (PostgreSQL, MySQL), each call may run on a
-    // different physical connection, so multi-statement transactions via
-    // bare `BEGIN` / `COMMIT` across separate execute() calls will not stay
-    // on the same connection. Transactions of that kind need a dedicated
-    // wrapper (not implemented yet).
     Result execute(const std::string& sql,
                    const std::vector<Value>& params = {});
 
-    // Begin a multi-statement transaction (see Transaction). On pooled backends
-    // a connection is held for the transaction's lifetime. Throws on backends
-    // that do not implement transactions yet.
+    // Begin a multi-statement transaction (see Transaction).
     Transaction begin();
 
 private:

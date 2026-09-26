@@ -155,25 +155,4 @@ ChatParams ChatParams::parse(const Packet& pkt, std::int64_t user_id) {
     return cp;
 }
 
-LiveParams LiveParams::parse(const Packet& pkt) {
-    LiveParams lp;
-    lp.request.provider = pkt.str("provider");
-    lp.request.system   = pkt.str("system");
-    if (lp.request.system.empty()) lp.request.system = pkt.str("system_prompt");
-
-    const rapidjson::Value& params = pkt.params();
-    rapidjson::Value::ConstMemberIterator mit = params.FindMember("messages");
-    if (mit != params.MemberEnd() && mit->value.IsArray()) {
-        append_messages(mit->value, lp.request.messages);
-    }
-    if (lp.request.messages.empty()) {
-        const std::string q = pkt.str("question");
-        if (!q.empty()) {
-            llm::ChatMessage m; m.role = "user"; m.content = q;
-            lp.request.messages.push_back(m);
-        }
-    }
-    return lp;
-}
-
 }}

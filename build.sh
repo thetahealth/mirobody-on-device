@@ -1,45 +1,35 @@
 #!/bin/sh
-# POSIX sh wrapper: pick arch + backend, then configure (if needed) and build.
-# Linux / macOS build against system-installed libraries (see the README
-# "Building - Linux / WSL / macOS" for the package list); vcpkg is Windows-only.
+# POSIX sh wrapper: configure (if needed) and build the core on Linux / macOS
+# against system-installed libraries (see docs/BUILDING.md for the package
+# list); vcpkg is Windows-only.
 set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 usage() {
     cat <<EOF
-Usage: build.sh [arch] [backend] [mobile] [clean]      (tokens in any order)
+Usage: build.sh [arch] [mobile] [clean]      (tokens in any order)
 
-  With no arguments: build the host arch with the POSTGRESQL default
-  (into "build"). Pass help / -h / --help to show this help.
+  With no arguments: the development build for the host arch (into "build"):
+  the core, the optional loopback HTTP front door, the debug CLIs and the tests.
+  Pass help / -h / --help to show this help.
 
   Arch      amd64 (or x86_64), arm64, x86       default: host arch
             build.sh builds natively, so the arch must match the host.
-  Backend   pg / postgresql, legacy / pg_legacy, mysql, sqlite, ck / clickhouse, duckdb
-            (omit for the POSTGRESQL default)
-  mobile    build the profile HarmonyOS/Android/iOS ship: no HTTP front door (no
-            libwebsockets) and the BYOK provider menu (a provider with no key is
-            not listed). Libraries only -- no server executable, CLIs or tests.
+  mobile    build the profile HarmonyOS ships: no HTTP front door (no
+            libwebsockets). Libraries only -- no server executable, CLIs or tests.
+            Into "build-mobile".
   clean     remove the build dir and reconfigure from scratch
   help / -h / --help   show this help
 
-The build dir is build[-<arch>][-<backend>][-mobile]: the arch suffix is omitted
-for the host arch, the backend suffix for the POSTGRESQL default. So the plain
-host+postgresql build is just "build"; "build.sh legacy" -> build-legacy, and each
-combo gets its own dir so they can coexist.
-
-Arch and backend come only from the command line (no environment variables).
-
+SQLite is the only database backend, so there is nothing to choose there.
 Install system packages first (cmake, ninja, the libwebsockets / curl / ssl /
-rapidjson / yaml-cpp / hiredis -dev set, plus the chosen backend's -dev package).
-With mobile, libwebsockets is not needed. See the README
-"Building - Linux / WSL / macOS" section.
+rapidjson / yaml-cpp / sqlite3 / image-codec -dev set, and catch2 for the
+tests). With mobile, libwebsockets is not needed.
 EOF
 }
 
-# --- Parse args: arch and/or backend selectors in any order, plus `clean`. ---
 ARCH=""
-DB_BACKEND=""
 CLEAN=""
 MOBILE=""
 for arg in "$@"; do
@@ -50,18 +40,12 @@ for arg in "$@"; do
         amd64|x86_64|x64)   ARCH=amd64 ;;
         arm64|aarch64)      ARCH=arm64 ;;
         x86|i386|i686)      ARCH=x86 ;;
-        pg|postgresql)      DB_BACKEND=POSTGRESQL ;;
-        legacy|pg_legacy)   DB_BACKEND=POSTGRESQL_LEGACY ;;
-        mysql)              DB_BACKEND=MYSQL ;;
-        sqlite)             DB_BACKEND=SQLITE ;;
-        duckdb)             DB_BACKEND=DUCKDB ;;
-        ck|clickhouse)      DB_BACKEND=CLICKHOUSE ;;
         *) echo "Unknown argument: $arg" >&2; echo 'Run "build.sh -h" for usage.' >&2; exit 1 ;;
     esac
 done
 
-# Host arch (normalized to amd64|arm64|x86), the default target and the yardstick
-# for whether the build dir needs an arch suffix.
+# Host arch (normalized to amd64|arm64|x86): the default target and the only
+# one build.sh can produce.
 case "$(uname -m)" in
     x86_64|amd64)  HOST_ARCH=amd64 ;;
     aarch64|arm64) HOST_ARCH=arm64 ;;
@@ -69,36 +53,26 @@ case "$(uname -m)" in
     *)             HOST_ARCH="$(uname -m)" ;;
 esac
 
-# Resolve target arch (CLI token, else host). build.sh builds natively only.
 ARCH="${ARCH:-$HOST_ARCH}"
 if [ "$ARCH" != "$HOST_ARCH" ]; then
     echo "build.sh builds natively (host is $HOST_ARCH); cross-building $ARCH is not supported." >&2
     exit 1
 fi
 
-# Resolve backend (CLI token, else the POSTGRESQL default) and derive the short
-# dir tag (the default POSTGRESQL has none, so its dir is plain "build").
-DB_BACKEND="${DB_BACKEND:-POSTGRESQL}"
-case "$DB_BACKEND" in
-    POSTGRESQL_LEGACY) DB_TAG=legacy ;;
-    MYSQL)      DB_TAG=mysql ;;
-    SQLITE)     DB_TAG=sqlite ;;
-    DUCKDB)     DB_TAG=duckdb ;;
-    CLICKHOUSE) DB_TAG=ck ;;
-    *)          DB_TAG="" ;;
-esac
-
-# Build dir: build[-<tag>]. The arch suffix is dropped for the host arch (the
-# only arch build.sh targets), the backend suffix for the POSTGRESQL default.
-DIR="build"
-[ -n "$DB_TAG" ] && DIR="${DIR}-${DB_TAG}"
-
 # mobile gets its own build dir so it never clobbers the normal one, and its own
 # CMake arg (see MIROBODY_MOBILE in CMakeLists.txt).
+DIR="build"
 PROFILE_ARG=""
 if [ -n "$MOBILE" ]; then
     PROFILE_ARG="-DMIROBODY_MOBILE=ON"
-    DIR="${DIR}-mobile"
+    DIR="build-mobile"
+fi
+
+# Homebrew keeps libjpeg-turbo keg-only, so point CMake at it explicitly.
+PREFIX_ARG=""
+if command -v brew >/dev/null 2>&1; then
+    BREW_PREFIX="$(brew --prefix)"
+    PREFIX_ARG="-DCMAKE_PREFIX_PATH=$BREW_PREFIX/opt/jpeg-turbo;$BREW_PREFIX"
 fi
 
 BUILD_DIR="$PROJECT_DIR/$DIR"
@@ -111,7 +85,7 @@ fi
 if [ ! -f "$BUILD_DIR/build.ninja" ]; then
     cmake -S "$PROJECT_DIR" -B "$BUILD_DIR" -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
-        -DMIROBODY_DATABASE_BACKEND="$DB_BACKEND" \
+        $PREFIX_ARG \
         $PROFILE_ARG
 fi
 

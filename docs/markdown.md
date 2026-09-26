@@ -6,6 +6,13 @@ to close, and a client that renders more has found something worth adding here f
 
 Deliberately not under any client directory: every client answers to it.
 
+> **Clients in this repo (2026-09).** The web client (`htdoc/`), Qt, Electron and
+> the WeChat Mini Program left this repo when it narrowed to the phone; they are
+> preserved at the `v2-full-2026-08` tag. The phone apps are moving to a native
+> shell around the [mirobody-web](https://github.com/thetahealth/mirobody-web)
+> build in a WebView, so the web renderer becomes theirs too. Rows below for the
+> removed clients are history.
+
 Scope is set by what the models actually write. A construct earns a row here because chat
 replies contain it, not because CommonMark lists it; §5 records what is left out and why, so
 "unsupported" never has to be re-derived from a silence.
@@ -23,11 +30,11 @@ file.
 | Client | Engine | File |
 |---|---|---|
 | HarmonyOS | **hand-rolled** — the only one where coverage is a decision rather than a dependency | [`core/Markdown.ets`](../harmony/entry/src/main/ets/core/Markdown.ets) → [`components/RichMessage.ets`](../harmony/entry/src/main/ets/components/RichMessage.ets) |
-| Web | marked (GFM) + KaTeX, DOMPurify-sanitized before `innerHTML` — **plus** `$…$` / `$$…$$` math, ` ```svg ` and ` ```echarts ` fences and a link-scheme allowlist, all as marked extensions | [`htdoc/src/markdown.js`](../htdoc/src/markdown.js), [`htdoc/src/charts.js`](../htdoc/src/charts.js) |
+| Web | marked (GFM) + KaTeX, DOMPurify-sanitized before `innerHTML` — **plus** `$…$` / `$$…$$` math, ` ```svg ` and ` ```echarts ` fences and a link-scheme allowlist, all as marked extensions | [`htdoc/src/markdown.js`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/htdoc/src/markdown.js), [`htdoc/src/charts.js`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/htdoc/src/charts.js) |
 | iOS | MarkdownUI (GFM); a message containing math is re-routed to an offline KaTeX WebView | [`MarkdownText.swift`](../ios/Mirobody/UI/Chat/MarkdownText.swift) |
 | Android | Markwon (commonmark-java) + tables, strikethrough, HTML, linkify, JLatexMath — **plus hand-written** `$…$` math, SVG figures, fence splitting and a link-scheme allowlist | [`MarkdownText.kt`](../android/app/src/main/java/ai/thetahealth/mirobody/ui/chat/MarkdownText.kt), [`InlineMath.kt`](../android/app/src/main/java/ai/thetahealth/mirobody/ui/chat/InlineMath.kt), [`SvgFigure.kt`](../android/app/src/main/java/ai/thetahealth/mirobody/ui/chat/SvgFigure.kt), [`MarkdownSegments.kt`](../android/app/src/main/java/ai/thetahealth/mirobody/ui/chat/MarkdownSegments.kt) |
-| Qt | `Text.MarkdownText` — Qt's built-in importer. No math. | [`MessageDelegate.qml`](../qt/qml/MessageDelegate.qml) |
-| Mini program | **none** — `{{item.content}}` in a plain `<view>`, so markdown shows as source | [`chat.wxml:60`](../miniapp/pages/chat/chat.wxml) |
+| Qt | `Text.MarkdownText` — Qt's built-in importer. No math. | [`MessageDelegate.qml`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/qt/qml/MessageDelegate.qml) |
+| Mini program | **none** — `{{item.content}}` in a plain `<view>`, so markdown shows as source | [`chat.wxml:60`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/miniapp/pages/chat/chat.wxml) |
 
 Legend for every table below: ✅ renders · ⚠️ renders differently, see the note · ❌ shows as
 literal source · — not applicable to that client.
@@ -183,7 +190,7 @@ reads it. Android understands the same fence
 though its `chart` events still render appended after the text rather than in place; the fence
 is what lets a *written* figure sit where it was introduced. Web understands it as of the
 slash-command round: the marked extension emits an empty `div.mb-chart` carrying the option in
-a data attribute, and [`charts.js`](../htdoc/src/charts.js) fills it once the sanitized HTML is
+a data attribute, and [`charts.js`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/htdoc/src/charts.js) fills it once the sanitized HTML is
 in the DOM — an ECharts option is a live object, so no renderer can produce it as markup.
 Hydration is deliberately skipped on the throttled streaming re-render (a canvas cannot outlive
 its container being replaced ten times a second) and the previous instances are disposed before
@@ -208,7 +215,7 @@ A ` ```svg ` fenced block whose body is drawn as an actual figure instead of esc
 | ` ```svg ` | ✅ | ✅ | ✅ | ✅ | ❌ |
 
 Web and iOS register it as a marked block extension (`svgFence`, same tokenizer in
-[`htdoc/src/markdown.js`](../htdoc/src/markdown.js) and
+[`htdoc/src/markdown.js`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/htdoc/src/markdown.js) and
 [`ios/…/math/render.html`](../ios/Mirobody/Resources/math/render.html)) and sanitize with
 DOMPurify before it reaches the DOM. On Qt the fence is an ordinary code block, so the reader
 gets the XML.

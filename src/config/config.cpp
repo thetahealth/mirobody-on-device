@@ -288,24 +288,6 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
 
     cfg.memory.provider = store.get_str("MEMORY_PROVIDER", cfg.memory.provider);
     cfg.memory.top_k    = static_cast<int>(store.get_int("MEMORY_TOP_K", cfg.memory.top_k));
-    // Remote-provider credentials. A generic MEMORY_BASE_URL / MEMORY_API_KEY
-    // wins; otherwise the conventional per-vendor key is accepted so each remote
-    // backend can be configured by its usual env var. The selected adapter
-    // supplies its own default base_url (the vendor's hosted endpoint) when none
-    // is set, so only the API key is strictly required for a hosted provider.
-    cfg.memory.base_url = store.get_str("MEMORY_BASE_URL");
-    if (cfg.memory.base_url.empty()) cfg.memory.base_url = store.get_str("EVEROS_BASE_URL");
-    if (cfg.memory.base_url.empty()) cfg.memory.base_url = store.get_str("MEM0_BASE_URL");
-    if (cfg.memory.base_url.empty()) cfg.memory.base_url = store.get_str("ZEP_BASE_URL");
-    cfg.memory.api_key = store.get_str("MEMORY_API_KEY");
-    if (cfg.memory.api_key.empty()) cfg.memory.api_key = store.get_str("EVEROS_API_KEY");
-    if (cfg.memory.api_key.empty()) cfg.memory.api_key = store.get_str("MEM0_API_KEY");
-    if (cfg.memory.api_key.empty()) cfg.memory.api_key = store.get_str("ZEP_API_KEY");
-
-    cfg.vitalera.api_key     = store.get_str("VITALERA_API_KEY",     cfg.vitalera.api_key);
-    cfg.vitalera.environment = store.get_str("VITALERA_ENVIRONMENT", cfg.vitalera.environment);
-
-    cfg.dexcom.environment = store.get_str("DEXCOM_ENVIRONMENT", cfg.dexcom.environment);
 
     // VENDOR_TOKEN_ENCRYPTION_KEY: Fernet key list (last encrypts, all decrypt) for
     // per-user vendor OAuth tokens at rest. Same YAML-sequence-or-comma-scalar
@@ -327,55 +309,11 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
         }
     }
 
-    // Health-vendor credentials, unified through the config object via clean
-    // <ID>_CLIENT_ID / _CLIENT_SECRET / _API_KEY / _BASE_URL keys (the store consults
-    // the environment too, so either YAML or an env var works). Covers the B2B
-    // aggregators and the direct device brands; only ids with at least one value set
-    // are recorded. `ehr` is intentionally absent — its per-tenant token is driven by
-    // ehr_connect, not static config. Add an id here to wire a new vendor.
-    {
-        static const char* const kCredVendors[] = {
-            // B2B aggregators (src/health/vendor/platform/)
-            "rook", "spike", "terra", "junction", "wefitter", "lexisnexis", "thryve",
-            "validic", "human_api", "vitalera", "open_wearables", "redox",
-            "particle_health", "healthconnect", "metriport",
-            // Smartphone-store + direct device brands (phone/ , device/)
-            "huawei", "fitbit", "withings", "garmin", "dexcom", "oura", "whoop", "polar",
-        };
-        for (std::size_t i = 0; i < sizeof(kCredVendors) / sizeof(kCredVendors[0]); ++i) {
-            const std::string id = kCredVendors[i];
-            std::string up = id;
-            for (std::size_t j = 0; j < up.size(); ++j) {
-                up[j] = static_cast<char>(std::toupper(static_cast<unsigned char>(up[j])));
-            }
-            VendorCredentials vc;
-            vc.client_id     = store.get_str(up + "_CLIENT_ID");
-            vc.client_secret = store.get_str(up + "_CLIENT_SECRET");
-            vc.api_key       = store.get_str(up + "_API_KEY");
-            vc.base_url      = store.get_str(up + "_BASE_URL");
-            if (!vc.client_id.empty() || !vc.client_secret.empty() ||
-                !vc.api_key.empty() || !vc.base_url.empty()) {
-                cfg.vendor_credentials[id] = vc;
-            }
-        }
-    }
-
     cfg.connect_timeout_ms = static_cast<int>(store.get_int("MIROBODY_CONNECT_TIMEOUT_MS", cfg.connect_timeout_ms));
     cfg.request_timeout_ms = static_cast<int>(store.get_int("MIROBODY_REQUEST_TIMEOUT_MS", cfg.request_timeout_ms));
 
     cfg.log_level = store.get_str("LOG_LEVEL", cfg.log_level);
 
-    // PG fields are not loaded eagerly. They are queried per call to
-    // `cfg.postgresql(suffix)`, which reads PG_HOST{_SUFFIX} etc. from the
-    // store below. See Config::postgresql.
-
-    cfg.redis.host               = store.get_str ("REDIS_HOST",                cfg.redis.host);
-    cfg.redis.port               = static_cast<int>(store.get_int("REDIS_PORT", cfg.redis.port));
-    cfg.redis.password           = store.get_str ("REDIS_PASSWORD",            cfg.redis.password);
-    cfg.redis.database           = static_cast<int>(store.get_int("REDIS_DB",  cfg.redis.database));
-    cfg.redis.ssl                = store.get_bool("REDIS_SSL",                 cfg.redis.ssl);
-    cfg.redis.ssl_check_hostname = store.get_bool("REDIS_SSL_CHECK_HOSTNAME",  cfg.redis.ssl_check_hostname);
-    cfg.redis.ssl_cert_reqs      = store.get_str ("REDIS_SSL_CERT_REQS",       cfg.redis.ssl_cert_reqs);
 
     cfg.jwt.key             = store.get_str("JWT_KEY",          cfg.jwt.key);
     cfg.jwt.iss             = store.get_str("JWT_ISS",          cfg.jwt.iss);
@@ -475,19 +413,6 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.github_oauth_base    = store.get_str("GITHUB_OAUTH_BASE",    cfg.github_oauth_base);
     cfg.github_api_base      = store.get_str("GITHUB_API_BASE",      cfg.github_api_base);
 
-    cfg.tanka_login_enabled      = store.get_bool("TANKA_LOGIN_ENABLED", cfg.tanka_login_enabled);
-    cfg.tanka_api_base           = store.get_str("TANKA_API_BASE",            cfg.tanka_api_base);
-    cfg.tanka_qrcode_create_path = store.get_str("TANKA_QRCODE_CREATE_PATH",  cfg.tanka_qrcode_create_path);
-    cfg.tanka_qrcode_check_path  = store.get_str("TANKA_QRCODE_CHECK_PATH",   cfg.tanka_qrcode_check_path);
-    cfg.tanka_web_origin         = store.get_str("TANKA_WEB_ORIGIN",          cfg.tanka_web_origin);
-    while (!cfg.tanka_web_origin.empty() && cfg.tanka_web_origin.back() == '/') cfg.tanka_web_origin.pop_back();
-    cfg.tanka_success_code       = static_cast<int>(store.get_int("TANKA_SUCCESS_CODE",  cfg.tanka_success_code));
-    cfg.tanka_http_timeout       = static_cast<int>(store.get_int("TANKA_HTTP_TIMEOUT",  cfg.tanka_http_timeout));
-    cfg.tanka_autodiscover       = store.get_bool("TANKA_WASM_AUTODISCOVER",  cfg.tanka_autodiscover);
-    cfg.tanka_refresh_interval   = static_cast<int>(store.get_int("TANKA_WASM_REFRESH_INTERVAL", cfg.tanka_refresh_interval));
-    cfg.tanka_node_bin           = store.get_str("TANKA_NODE_BIN",            cfg.tanka_node_bin);
-    cfg.tanka_discover_script    = store.get_str("TANKA_DISCOVER_SCRIPT",     cfg.tanka_discover_script);
-    cfg.tanka_signer_js_path     = store.get_str("TANKA_SIGNER_JS_PATH",      cfg.tanka_signer_js_path);
 
     cfg.email_predefine_codes = store.get_dict("EMAIL_PREDEFINE_CODES");
     cfg.email_predefine_domain_codes = store.get_dict("EMAIL_PREDEFINE_DOMAIN_CODES");
@@ -527,35 +452,10 @@ Config load_config(const mirobody::optional<std::string>& yaml_path) {
     cfg.sql_dir             = store.get_str("SQL_DIR", cfg.sql_dir);
     cfg.db_init_schema      = store.get_bool("DB_INIT_SCHEMA", cfg.db_init_schema);
 
-    // SQLite backend (MIROBODY_DATABASE_BACKEND=SQLITE). Empty path opens an
-    // in-memory database, but the migration step and the server open separate
+    // SQLite, the one backend. Empty path opens an in-memory database, but the migration step and the server open separate
     // Database objects, so an in-memory DB would not be shared between them —
     // a file path is required for the two to see the same schema/data.
     cfg.sqlite.path         = store.get_str("SQLITE_PATH", cfg.sqlite.path);
-
-    // DuckDB backend (MIROBODY_DATABASE_BACKEND=DUCKDB). Same in-memory caveat
-    // as SQLite: set a file path so migration and the server share one DB.
-    cfg.duckdb.path         = store.get_str("DUCKDB_PATH", cfg.duckdb.path);
-
-    // MySQL backend (MIROBODY_DATABASE_BACKEND=MYSQL).
-    cfg.mysql.host           = store.get_str ("MYSQL_HOST",           cfg.mysql.host);
-    cfg.mysql.port           = static_cast<int>(store.get_int("MYSQL_PORT", cfg.mysql.port));
-    cfg.mysql.user           = store.get_str ("MYSQL_USER",           cfg.mysql.user);
-    cfg.mysql.password       = store.get_str ("MYSQL_PASSWORD",       cfg.mysql.password);
-    cfg.mysql.database       = store.get_str ("MYSQL_DBNAME",         cfg.mysql.database);
-    cfg.mysql.encryption_key = store.get_str ("MYSQL_ENCRYPTION_KEY", cfg.mysql.encryption_key);
-    cfg.mysql.min_connection = static_cast<int>(store.get_int("MYSQL_MIN_CONNECTION", cfg.mysql.min_connection));
-    cfg.mysql.max_connection = static_cast<int>(store.get_int("MYSQL_MAX_CONNECTION", cfg.mysql.max_connection));
-
-    // ClickHouse backend (MIROBODY_DATABASE_BACKEND=CLICKHOUSE; stub today).
-    cfg.clickhouse.host           = store.get_str ("CLICKHOUSE_HOST",           cfg.clickhouse.host);
-    cfg.clickhouse.port           = static_cast<int>(store.get_int("CLICKHOUSE_PORT", cfg.clickhouse.port));
-    cfg.clickhouse.user           = store.get_str ("CLICKHOUSE_USER",           cfg.clickhouse.user);
-    cfg.clickhouse.password       = store.get_str ("CLICKHOUSE_PASSWORD",       cfg.clickhouse.password);
-    cfg.clickhouse.database       = store.get_str ("CLICKHOUSE_DBNAME",         cfg.clickhouse.database);
-    cfg.clickhouse.encryption_key = store.get_str ("CLICKHOUSE_ENCRYPTION_KEY", cfg.clickhouse.encryption_key);
-    cfg.clickhouse.min_connection = static_cast<int>(store.get_int("CLICKHOUSE_MIN_CONNECTION", cfg.clickhouse.min_connection));
-    cfg.clickhouse.max_connection = static_cast<int>(store.get_int("CLICKHOUSE_MAX_CONNECTION", cfg.clickhouse.max_connection));
 
     // Keys this server used to read and no longer does. Saying so once at startup
     // is the difference between a five-minute fix and an afternoon: a Vertex
@@ -612,96 +512,6 @@ Config& init_config(const mirobody::optional<std::string>& yaml_path) {
 
 //------------------------------------------------------------------------------
 
-database::PostgreSQLConfig Config::postgresql(const std::string& suffix) const {
-    std::string suf;
-    if (!suffix.empty()) {
-        suf.reserve(suffix.size() + 1);
-        suf += '_';
-        for (std::size_t i = 0; i < suffix.size(); ++i) {
-            suf += static_cast<char>(
-                std::toupper(static_cast<unsigned char>(suffix[i])));
-        }
-    }
-
-    database::PostgreSQLConfig pg;
-    pg.host           = store.get_str("PG_HOST"     + suf, "127.0.0.1");
-    pg.port           = static_cast<int>(store.get_int("PG_PORT" + suf, 5432));
-    pg.user           = store.get_str("PG_USER"     + suf);
-    pg.password       = store.get_str("PG_PASSWORD" + suf);
-    pg.database       = store.get_str("PG_DBNAME"   + suf);
-    pg.schema         = store.get_str("PG_SCHEMA"   + suf);
-    // Encryption key is intentionally shared across all PG instances; the
-    // Python version uses the bare `PG_ENCRYPTION_KEY` regardless of suffix.
-    pg.encryption_key = store.get_str("PG_ENCRYPTION_KEY");
-    pg.min_connection = static_cast<int>(store.get_int("PG_MIN_CONNECTION" + suf));
-    pg.max_connection = static_cast<int>(store.get_int("PG_MAX_CONNECTION" + suf));
-    return pg;
-}
-
-//------------------------------------------------------------------------------
-
-namespace {
-
-// "_" + upper(name) for a non-empty instance name, else "". Shared by the OSS
-// getter below; the PG getter inlines the same logic.
-std::string upper_suffix(const std::string& name) {
-    if (name.empty()) return std::string();
-    std::string suf;
-    suf.reserve(name.size() + 1);
-    suf += '_';
-    for (std::size_t i = 0; i < name.size(); ++i) {
-        suf += static_cast<char>(std::toupper(static_cast<unsigned char>(name[i])));
-    }
-    return suf;
-}
-
-}
-
-//------------------------------------------------------------------------------
-
-storage::S3Config Config::s3() const {
-    storage::S3Config s;
-    s.access_key = store.get_str("S3_KEY");
-    s.secret_key = store.get_str("S3_TOKEN");
-    s.region     = store.get_str("S3_REGION");
-    s.bucket     = store.get_str("S3_BUCKET");
-    s.prefix     = store.get_str("S3_PREFIX", storage::default_prefix);
-    s.cdn        = store.get_str("S3_CDN");
-    // Not in the documented key set; read anyway so an S3-compatible endpoint
-    // can be pointed at without a code change.
-    s.endpoint   = store.get_str("S3_ENDPOINT");
-    return s;
-}
-
-//------------------------------------------------------------------------------
-
-storage::OssConfig Config::oss(const std::string& name) const {
-    const std::string suf = upper_suffix(name);
-    storage::OssConfig o;
-    o.access_key_id     = store.get_str("ALI_OSS_ACCESS_KEY"  + suf);
-    o.secret_access_key = store.get_str("ALI_OSS_SECRET_KEY"  + suf);
-    o.endpoint          = store.get_str("ALI_OSS_ENDPOINT"    + suf);
-    o.bucket            = store.get_str("ALI_OSS_BUCKET_NAME" + suf);
-    o.prefix            = store.get_str("ALI_OSS_PREFIX" + suf, storage::default_prefix);
-    o.cdn               = store.get_str("ALI_OSS_DOMAIN"      + suf);
-    return o;
-}
-
-//------------------------------------------------------------------------------
-
-storage::AzureBlobConfig Config::azure_blob() const {
-    storage::AzureBlobConfig a;
-    a.account         = store.get_str("AZURE_BLOB_ACCOUNT");
-    a.key             = store.get_str("AZURE_BLOB_KEY");
-    a.container       = store.get_str("AZURE_BLOB_CONTAINER");
-    a.prefix          = store.get_str("AZURE_BLOB_PREFIX", storage::default_prefix);
-    a.endpoint_suffix = store.get_str("AZURE_BLOB_ENDPOINT_SUFFIX", "core.windows.net");
-    a.cdn             = store.get_str("AZURE_BLOB_CDN");
-    return a;
-}
-
-//------------------------------------------------------------------------------
-
 storage::LocalConfig Config::local_storage() const {
     storage::LocalConfig l;
     l.root       = store.get_str("LOCAL_STORAGE_DIR");
@@ -748,7 +558,7 @@ void Config::print() const {
     std::fprintf(out, "  db_init_schema  : %s\n",    db_init_schema ? "true" : "false");
 
     // LLM providers are only shown when their API key is set, mirroring the
-    // postgres / redis / jwt sections below: an unconfigured provider is noise.
+    // jwt section below: an unconfigured provider is noise.
     if (!openai.api_key.empty()) {
         std::fprintf(out, "\n");
         std::fprintf(out, "  openai\n");
@@ -800,120 +610,11 @@ void Config::print() const {
         std::fprintf(out, "    api_key       : %s\n", mask(zhipu.api_key).c_str());
     }
 
-    if (!vitalera.api_key.empty()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  vitalera\n");
-        std::fprintf(out, "    environment   : %s\n", vitalera.environment.empty() ? "<default>" : vitalera.environment.c_str());
-        std::fprintf(out, "    api_key       : %s\n", mask(vitalera.api_key).c_str());
-    }
-
-    if (!dexcom.environment.empty()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  dexcom\n");
-        std::fprintf(out, "    environment   : %s\n", dexcom.environment.c_str());
-    }
-
-    for (std::unordered_map<std::string, VendorCredentials>::const_iterator it =
-             vendor_credentials.begin(); it != vendor_credentials.end(); ++it) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  vendor:%s\n", it->first.c_str());
-        if (!it->second.client_id.empty())
-            std::fprintf(out, "    client_id     : %s\n", mask(it->second.client_id).c_str());
-        if (!it->second.client_secret.empty())
-            std::fprintf(out, "    client_secret : %s\n", mask(it->second.client_secret).c_str());
-        if (!it->second.api_key.empty())
-            std::fprintf(out, "    api_key       : %s\n", mask(it->second.api_key).c_str());
-        if (!it->second.base_url.empty())
-            std::fprintf(out, "    base_url      : %s\n", it->second.base_url.c_str());
-    }
-
-
-    const database::PostgreSQLConfig pg = postgresql();
-    if (!pg.user.empty() || !pg.database.empty()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  postgres\n");
-        std::fprintf(out, "    host          : %s:%d\n", pg.host.c_str(), pg.port);
-        std::fprintf(out, "    user          : %s\n",    pg.user.c_str());
-        std::fprintf(out, "    password      : %s\n",    mask(pg.password).c_str());
-        std::fprintf(out, "    database      : %s\n",    pg.database.c_str());
-        std::fprintf(out, "    schema        : %s\n",    pg.schema.c_str());
-        std::fprintf(out, "    encryption    : %s\n",    mask(pg.encryption_key).c_str());
-        std::fprintf(out, "    pool          : %d..%d\n", pg.min_connection, pg.max_connection);
-    }
-
-    // Other SQL backends: shown only when configured, since exactly one is
-    // linked per build (MIROBODY_DATABASE_BACKEND) and the rest stay blank.
     if (!sqlite.path.empty()) {
         std::fprintf(out, "\n");
         std::fprintf(out, "  sqlite\n");
         std::fprintf(out, "    path          : %s\n", sqlite.path.c_str());
     }
-    if (!duckdb.path.empty()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  duckdb\n");
-        std::fprintf(out, "    path          : %s\n", duckdb.path.c_str());
-    }
-    if (!mysql.user.empty() || !mysql.database.empty()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  mysql\n");
-        std::fprintf(out, "    host          : %s:%d\n", mysql.host.c_str(), mysql.port);
-        std::fprintf(out, "    user          : %s\n",    mysql.user.c_str());
-        std::fprintf(out, "    password      : %s\n",    mask(mysql.password).c_str());
-        std::fprintf(out, "    database      : %s\n",    mysql.database.c_str());
-        std::fprintf(out, "    encryption    : %s\n",    mask(mysql.encryption_key).c_str());
-        std::fprintf(out, "    pool          : %d..%d\n", mysql.min_connection, mysql.max_connection);
-    }
-    if (!clickhouse.user.empty() || !clickhouse.database.empty()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  clickhouse\n");
-        std::fprintf(out, "    host          : %s:%d\n", clickhouse.host.c_str(), clickhouse.port);
-        std::fprintf(out, "    user          : %s\n",    clickhouse.user.c_str());
-        std::fprintf(out, "    password      : %s\n",    mask(clickhouse.password).c_str());
-        std::fprintf(out, "    database      : %s\n",    clickhouse.database.c_str());
-        std::fprintf(out, "    encryption    : %s\n",    mask(clickhouse.encryption_key).c_str());
-        std::fprintf(out, "    pool          : %d..%d\n", clickhouse.min_connection, clickhouse.max_connection);
-    }
-
-    if (!redis.host.empty()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  redis\n");
-        std::fprintf(out, "    host          : %s:%d\n", redis.host.c_str(), redis.port);
-        std::fprintf(out, "    db            : %d\n",    redis.database);
-        std::fprintf(out, "    password      : %s\n",    mask(redis.password).c_str());
-        std::fprintf(out, "    ssl           : %s\n",    redis.ssl ? "on" : "off");
-        if (redis.ssl) {
-            std::fprintf(out, "    check_hostname: %s\n", redis.ssl_check_hostname ? "yes" : "no");
-            std::fprintf(out, "    cert_reqs     : %s\n", redis.ssl_cert_reqs.empty() ? "<not set>" : redis.ssl_cert_reqs.c_str());
-        }
-    }
-
-    // Object storage: shown only when a backend is fully configured. The
-    // secret (S3_TOKEN / ALI_OSS_SECRET_KEY) is masked.
-    const storage::S3Config s3c = s3();
-    if (s3c.configured()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  s3\n");
-        std::fprintf(out, "    region        : %s\n", s3c.region.empty() ? "<not set>" : s3c.region.c_str());
-        std::fprintf(out, "    bucket        : %s\n", s3c.bucket.c_str());
-        if (!s3c.endpoint.empty()) std::fprintf(out, "    endpoint      : %s\n", s3c.endpoint.c_str());
-        if (!s3c.prefix.empty())   std::fprintf(out, "    prefix        : %s\n", s3c.prefix.c_str());
-        if (!s3c.cdn.empty())      std::fprintf(out, "    cdn           : %s\n", s3c.cdn.c_str());
-        std::fprintf(out, "    access_key    : %s\n", mask(s3c.access_key).c_str());
-        std::fprintf(out, "    secret_key    : %s\n", mask(s3c.secret_key).c_str());
-    }
-
-    const storage::OssConfig ossc = oss();
-    if (ossc.configured()) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  aliyun_oss\n");
-        std::fprintf(out, "    endpoint      : %s\n", ossc.endpoint.c_str());
-        std::fprintf(out, "    bucket        : %s\n", ossc.bucket.c_str());
-        if (!ossc.prefix.empty()) std::fprintf(out, "    prefix        : %s\n", ossc.prefix.c_str());
-        if (!ossc.cdn.empty())    std::fprintf(out, "    domain        : %s\n", ossc.cdn.c_str());
-        std::fprintf(out, "    access_key_id : %s\n", mask(ossc.access_key_id).c_str());
-        std::fprintf(out, "    secret_key    : %s\n", mask(ossc.secret_access_key).c_str());
-    }
-
     const storage::LocalConfig localc = local_storage();
     if (localc.configured()) {
         std::fprintf(out, "\n");
@@ -986,14 +687,6 @@ void Config::print() const {
         std::fprintf(out, "  github\n");
         std::fprintf(out, "    client_id     : %s\n", github_client_id.c_str());
         std::fprintf(out, "    client_secret : %s\n", mask(github_client_secret).c_str());
-    }
-
-    if (tanka_login_enabled) {
-        std::fprintf(out, "\n");
-        std::fprintf(out, "  tanka\n");
-        std::fprintf(out, "    api_base      : %s\n", tanka_api_base.c_str());
-        std::fprintf(out, "    web_origin    : %s\n", tanka_web_origin.c_str());
-        std::fprintf(out, "    autodiscover  : %s\n", tanka_autodiscover ? "on" : "off");
     }
 
     // Email transport: only shown when an SMTP host is set. smtp_pass doubles

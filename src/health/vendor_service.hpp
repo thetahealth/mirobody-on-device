@@ -41,7 +41,6 @@ class VendorService {
 public:
     VendorService(server::Router& router, const Config& cfg,
                   database::Database& db, cache::Cache& cache, const jwt::Jwt& jwt);
-    ~VendorService();   // stops + joins the icon-fetch thread
 
     VendorService(const VendorService&) = delete;
     VendorService& operator=(const VendorService&) = delete;
@@ -51,9 +50,6 @@ private:
 
     void on_list(const server::Request& req, server::Response& res);
     void on_icons(const server::Request& req, server::Response& res);
-    // Runs on a background thread from the constructor: fetches each vendor's site
-    // favicon and builds a { id: "data:<mime>;base64,<...>" } JSON map in memory.
-    void build_icons();
     void on_authorize(const server::Request& req, server::Response& res);
     void on_callback(const server::Request& req, server::Response& res);
     void on_bind(const server::Request& req, server::Response& res);
@@ -67,13 +63,6 @@ private:
     cache::Cache&       cache_; // OAuth connect state (state -> {user,vendor}, TTL)
     VendorLinkStore     store_;
     const jwt::Jwt&     jwt_;
-
-    // Vendor icon bundle, fetched once on a background thread, held in memory.
-    // `icons_json_` is the { id: dataURI } object served by GET /vendors/icons.
-    std::mutex          icons_mu_;
-    std::string         icons_json_;
-    std::atomic<bool>   icons_stop_;
-    std::thread         icons_thread_;   // declared last; joined in ~VendorService
 };
 
 }}  // namespace mirobody::health

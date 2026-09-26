@@ -1,0 +1,58 @@
+# The core, on both desktop hosts it is developed on: the development build
+# (core + loopback front door + CLIs), the unit tests, and the HarmonyOS profile
+# (no front door), which is the closest a desktop runner gets to a phone build.
+#
+# The app builds (Android / iOS / HarmonyOS) are not here yet: they need the
+# cross-compiled dependency sysroots (android/build-prebuilt.*, ios/prebuilt,
+# harmony/build-prebuilt.*), which take a toolchain download and a long build of
+# their own. They are the next thing to add.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libwebsockets-dev libcurl4-openssl-dev libssl-dev zlib1g-dev \
+            rapidjson-dev libyaml-cpp-dev libsqlite3-dev \
+            libjpeg-dev libpng-dev libtiff-dev libwebp-dev \
+            catch2
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ninja pkg-config libwebsockets openssl@3 \
+            rapidjson yaml-cpp sqlite jpeg-turbo libpng libtiff webp catch2
+
+      - name: Build (development profile)
+        run: ./build.sh
+
+      - name: Unit tests
+        run: build/tests/mirobody_tests
+
+      - name: Build (mobile profile, no HTTP front door)
+        run: ./build.sh mobile

@@ -2,8 +2,7 @@
 // (Epic, Oracle Health/Cerner, athenahealth, MEDITECH, Veradigm, …). Because the
 // US ONC Cures Act forces these systems onto the SMART App Launch + FHIR R4
 // standard, a single client parameterized by the tenant's base_url covers them
-// all — the same way s3() with an endpoint override covers every S3-compatible
-// store, rather than a near-identical file per vendor.
+// all, rather than a near-identical file per vendor.
 //
 //   * base_url is REQUIRED and per-tenant: each hospital/clinic has its own FHIR
 //     service base URL (discoverable from the public Service Base URL directories

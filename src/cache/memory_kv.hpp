@@ -21,8 +21,8 @@ namespace mirobody { namespace cache {
 //
 // Method names follow Redis vocabulary (set / get / rpush / lpush /
 // lpop / rpop / lrange / ltrim / exists / del / expire / expiretime /
-// dbsize / flushdb) so the surface area carries over to the
-// hiredis-backed cache::Cache implementation. An entry is either a
+// dbsize / flushdb), the same surface the main repo's Redis-backed cache
+// speaks. An entry is either a
 // string or a list, as in Redis: string operations on a list key (and
 // vice versa) fail the way Redis WRONGTYPE does -- get/incr/lpop return
 // nullopt, rpush returns 0, lrange returns empty -- while the
@@ -119,8 +119,7 @@ public:
     // string -- prefix + join(rows, sep) + suffix -- and store it at `dest`
     // with `ttl`, returning the stored string. nullopt, with dest
     // untouched, when `list` is absent / expired / empty / a string. No
-    // Redis command equivalent; the hiredis backend runs it as a Lua
-    // script.
+    // Redis command equivalent.
     mirobody::optional<std::string> set_join(const std::string& dest,
                                              const std::string& list,
                                              const std::string& prefix,

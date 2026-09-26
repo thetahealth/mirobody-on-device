@@ -14,8 +14,6 @@ add_executable(mirobody_tests
     llm/openai_chat_client_test.cpp
     llm/openai_responses_client_test.cpp
     llm/gemini_client_test.cpp
-    llm/gemini_live_client_test.cpp
-    llm/openai_realtime_client_test.cpp
     mcp/tool_test.cpp
     mcp/resource_test.cpp
     mcp/ask_test.cpp

@@ -1,5 +1,12 @@
 # Market Intelligence Report
 
+> **Status in this repo (2026-09).** Kept as research. Of the clients this report
+> compares, only the SMART-on-FHIR [`ehr`](ehr/ehr.cpp) client remains here (on
+> hold); the aggregator, device-brand and Huawei-cloud connectors need server-held
+> OAuth secrets and left with the server. They are preserved at the
+> `v2-full-2026-08` tag; cloud pulls are the
+> [main mirobody server](https://github.com/thetahealth/mirobody)'s job.
+
 **Date:** 2026-05-25
 
 ## Global Health Data API & Aggregation Platform Competitive Analysis
@@ -206,7 +213,7 @@ API get a client:
 > only data is daily steps, obtained client-side (`wx.getWeRunData()`) and pushed to
 > the server as an encrypted blob — there is no server-side pull to fit the `Vendor`
 > `fetch()` contract, so it has no client here. It lives as its own service at
-> [`../werun.cpp`](../werun.cpp) (route `POST /wechat/werun`), decrypting the blob and
+> [`../werun.cpp`](https://github.com/thetahealth/mirobody-on-device/blob/v2-full-2026-08/src/health/werun.cpp) (route `POST /wechat/werun`), decrypting the blob and
 > persisting steps through the FHIR write path like the on-device stores above.
 
 | ID | Dir | base_url | Auth | Implemented | Stubbed / notes |
@@ -267,7 +274,7 @@ parameterized by the tenant's `base_url`.
 | **ehr** | `ehr/` | **required** (per-tenant FHIR base) | SMART-on-FHIR OAuth2 bearer | `fetch` (FHIR R4 `Observation` search by category + date) | `authorize_url` (per-tenant SMART discovery), others |
 
 Tenant base URLs come from the public **Service Base URL** directories every
-developer must publish (FHIR `Bundle`s of `Endpoint`s). [`ehr/directory.hpp`](directory.hpp)
+developer must publish (FHIR `Bundle`s of `Endpoint`s). [`ehr/directory.hpp`](ehr/directory.hpp)
 loads them behind one `EhrDirectory` interface, with two sources today — **ONC
 Lantern** (the national aggregator) and **Oracle Health/Cerner** (its published
 bundle) — and `fetch_all()` to merge them. Both verified live 2026-06; the exact

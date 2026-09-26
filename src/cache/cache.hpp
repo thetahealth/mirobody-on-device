@@ -18,35 +18,10 @@ class Cache;
 //------------------------------------------------------------------------------
 
 // Configuration for the in-process memory backend. Carries no fields:
-// the in-memory cache has nothing to tune. Defined so callers can pick a
-// backend uniformly via `<config>.open()`, parallel to RedisConfig.
+// the in-memory cache has nothing to tune.
 struct MemoryKvConfig {
     // Construct a Cache backed by a fresh MemoryKv. Equivalent to the
-    // default Cache() constructor; provided for symmetry with
-    // RedisConfig::open().
-    Cache open() const;
-};
-
-//------------------------------------------------------------------------------
-
-// Connection parameters for the Redis backend. Populated by load_config()
-// from REDIS_HOST / REDIS_PORT / REDIS_PASSWORD / REDIS_DB / REDIS_SSL /
-// REDIS_SSL_CHECK_HOSTNAME / REDIS_SSL_CERT_REQS.
-struct RedisConfig {
-    std::string host;
-    int         port = 6379;
-    std::string password;
-    int         database = 0;
-    bool        ssl = false;
-    bool        ssl_check_hostname = false;
-    std::string ssl_cert_reqs;
-
-    // Connect to Redis with these parameters and return an owning Cache
-    // backed by the connection. Throws std::runtime_error on connect /
-    // TLS handshake / AUTH / SELECT failure. When `ssl=true`, TLS is used iff
-    // the build linked hiredis_ssl (MIROBODY_HAS_HIREDIS_SSL); otherwise
-    // `ssl=true` throws. CA trust uses OpenSSL's default verify paths and
-    // `ssl_cert_reqs` selects the verify mode (none/optional/required).
+    // default Cache() constructor.
     Cache open() const;
 };
 
@@ -54,20 +29,13 @@ struct RedisConfig {
 // Cache
 //------------------------------------------------------------------------------
 
-// Thin wrapper over whichever cache backend is built into this binary.
-// Mirrors database::Database: one public class, backends (in-process
-// memory and hiredis-backed Redis) live behind a pimpl Impl and are
-// picked at construction time.
+// The key/value cache the core keeps sessions, codes and short-lived state in:
+// an in-process MemoryKv behind a pimpl Impl. The method names follow Redis
+// vocabulary (the server-side cache in the main repo is Redis), which keeps the
+// call sites readable to anyone who knows either. Time points use
+// std::chrono::steady_clock.
 //
-// API surface is taken from cache::MemoryKv so the two are interchangeable:
-// callers that need a private cache instantiate Cache directly, callers
-// that need raw in-memory access can still use MemoryKv. Time points use
-// std::chrono::steady_clock; the Redis backend converts to PX (millisecond
-// TTL) under the hood, which is monotonic-safe.
-//
-// Not thread-safe. The in-memory backend serializes via std::unordered_map
-// semantics; the Redis backend serializes I/O on a single hiredis
-// connection. Open one Cache per worker or wrap with a mutex.
+// Not thread-safe. Open one Cache per worker or wrap with a mutex.
 class Cache {
 public:
     using clock = std::chrono::steady_clock;
@@ -81,9 +49,6 @@ public:
     // Default constructor: an isolated in-process MemoryKv backend.
     Cache();
 
-    // Open a hiredis-backed Cache using `cfg`. Equivalent to cfg.open().
-    explicit Cache(const RedisConfig& cfg);
-
     ~Cache();
 
     Cache(const Cache&) = delete;
@@ -93,7 +58,6 @@ public:
 
     // Insert or replace `key` with `value`, expiring at the given time
     // point. Pass clock::time_point::max() for a never-expiring entry.
-    // On the Redis backend, an `expires_at <= now()` collapses to DEL.
     void set(std::string key, std::string value, clock::time_point expires_at);
 
     // Convenience: expires_at = clock::now() + ttl.
@@ -144,7 +108,7 @@ public:
     // `dest` with `ttl`: dest = prefix + join(rows, sep) + suffix. Returns
     // the stored string, or nullopt -- with dest untouched -- when `list`
     // is absent, empty, or not a list. The read and the write are one
-    // step (a Lua EVAL on the Redis backend, the store mutex in-memory),
+    // step under the store mutex,
     // so a rendering computed from an older list state can never overwrite
     // one computed from a newer state. No Redis command equivalent.
     mirobody::optional<std::string> set_join(const std::string& dest,
@@ -170,18 +134,16 @@ public:
 
     // Absolute expiration for `key`, or mirobody::nullopt when the key
     // is absent / expired. clock::time_point::max() signals "no TTL".
-    // The Redis backend translates from PTTL.
     mirobody::optional<clock::time_point> expiretime(const std::string& key);
 
-    // Evict expired entries up-front. In-memory: scans and erases; returns
-    // the number removed. Redis: always returns 0 because the server
-    // handles eviction internally.
+    // Evict expired entries up-front: scans and erases; returns the number
+    // removed.
     std::size_t prune();
 
     // FLUSHDB.
     void flushdb();
 
-    // DBSIZE. For the Redis backend this is an RTT.
+    // DBSIZE: the number of live entries.
     std::size_t dbsize();
 
     // True iff dbsize() == 0.

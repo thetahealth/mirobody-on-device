@@ -188,7 +188,7 @@ INDICATOR_LEXICON=res/indicator/fhir_lexicon.bin INDICATOR_GOLDEN=tests/indicato
 
 The set is grouped by `#@ group=` lines and scored per group, because the three
 blocks are limited by different stages and one average hides all of it. Built by
-[`fine-tuning/tool_golden.py`](../../fine-tuning/tool_golden.py) except for the
+`fine-tuning/tool_golden.py` (not in this repo) except for the
 hand-written block.
 
 | group | n | recall | top-1 | what it measures |

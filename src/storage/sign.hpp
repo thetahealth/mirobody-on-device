@@ -1,13 +1,10 @@
 #pragma once
 
-// Encoding and request-signing primitives shared by the object-storage
-// backends (src/storage/aws_s3.* and src/storage/aliyun_oss.*). Kept in their
-// own translation unit so both backends reuse one tested implementation of the
-// HMAC / SHA-256 / base64 chain rather than each rolling its own.
-//
-// The two top-level signers (aws_sigv4_signature / oss_signature) are pure
-// functions of their inputs — no clock, no network — which is what makes them
-// unit-testable against the providers' published signature test vectors.
+// Encoding and request-signing primitives: hex / base64 / base64url, SHA-256,
+// HMAC, URI encoding, AWS Signature V4 (client/gcp_auth.cpp signs its AWS
+// identity federation request with it) and a flat XML scan. Pure functions of
+// their inputs -- no clock, no network -- so they are unit-tested against the
+// published test vectors.
 
 #include "compat/cxx11.hpp"
 
@@ -66,24 +63,10 @@ std::string aws_sigv4_signature(const std::string& secret_key,
                                 const std::string& service,
                                 const std::string& string_to_sign);
 
-// Aliyun OSS classic (header/URL) signature: base64(HMAC-SHA1(secret_key,
-// string_to_sign)). The caller assembles `string_to_sign` per the OSS spec
-// (VERB\nContent-MD5\nContent-Type\nDate\nCanonicalizedResource, with any
-// CanonicalizedOSSHeaders folded in before the resource).
-std::string oss_signature(const std::string& secret_key,
-                          const std::string& string_to_sign);
-
-// Azure Blob signature: base64(HMAC-SHA256(base64-decode(account_key),
-// string_to_sign)). The same primitive backs both the Shared Key
-// authorization header and a service SAS — the caller assembles the
-// version-specific string_to_sign per the Azure spec and hands it here.
-// `account_key_base64` is the storage account key as configured (base64 text).
-std::string azure_signature(const std::string& account_key_base64,
-                            const std::string& string_to_sign);
-
 // Values of every non-nested <tag>...</tag> in `xml`, in document order, with
 // the five predefined XML entities decoded. A flat, attribute-less scan --
-// sufficient for the S3 / OSS object-listing responses it exists for.
+// sufficient for the S3-style XML responses it exists for (gcp_auth's STS
+// exchange).
 std::vector<std::string> xml_tag_values(const std::string& xml, const std::string& tag);
 
 // First occurrence, or "" when absent / empty.

@@ -1,5 +1,12 @@
 # src/oauth — OAuth 2.0 authorization server
 
+> **Scheduled for removal.** Its consent page lived in the web client that left
+> this repo (`htdoc/`, preserved at the `v2-full-2026-08` tag), so the browser
+> flow below has no consent step to land on. A phone is not an authorization
+> server for third-party MCP clients; that role belongs to the main mirobody
+> server. The module goes with the rest of the account layer once the apps
+> authenticate to the in-process core with a per-launch token.
+
 An OAuth 2.0 **authorization server** embedded in the mirobody core. It lets
 third-party OAuth clients — primarily **MCP clients** (Claude, IDEs, …) — obtain
 access tokens for this server through the browser **authorization-code + PKCE**
@@ -12,10 +19,9 @@ already validates those bearer tokens — what was missing was a standards-
 compliant way for a client to *get* one without a human pasting a token. That is
 what this provides.
 
-End-user login and consent **reuse the existing web client** ([htdoc/](../../htdoc/)):
-the authorize endpoint redirects the browser to the SPA, which signs the user in
-with the providers it already supports (email / Google / Apple / GitHub / WeChat)
-and then posts the consent decision back.
+End-user login and consent reused the web client: the authorize endpoint
+redirected the browser to the SPA, which signed the user in and posted the
+consent decision back.
 
 ## Module layout
 
@@ -169,11 +175,10 @@ origin differs from the `Host` it forwards.
 
 ## Web consent
 
-[htdoc/src/consent.js](../../htdoc/src/consent.js) handles the `?oauth_consent=`
-load: when no token is held the normal login view runs and consent resumes after
-`app.completeLogin` re-renders; with a token it fetches `/oauth/authorize/info`,
-renders the consent card, and POSTs the decision. The hook lives in
-[htdoc/src/app.js](../../htdoc/src/app.js) `render()`.
+The web client handled the `?oauth_consent=` load: it fetched
+`/oauth/authorize/info`, rendered the consent card, and POSTed the decision to
+`/oauth/authorize/decision`. Those two endpoints are still served; nothing in
+this repo renders the card any more.
 
 ## Testing
 

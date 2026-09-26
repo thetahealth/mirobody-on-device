@@ -100,15 +100,7 @@ std::string c_to_std(const char* s) {
 // pool — mirrors main.cpp. The branch is fixed at build time by the selected
 // database backend (see CMakeLists.txt); the #error guards new backends.
 void apply_migrations(const mirobody::Config& cfg) {
-#if defined(MIROBODY_DATABASE_SQLITE)
     mirobody::database::Database db(cfg.sqlite.open());
-#elif defined(MIROBODY_DATABASE_PG) || defined(MIROBODY_DATABASE_PG_LEGACY)
-    mirobody::database::Database db(cfg.postgresql().open());
-#elif defined(MIROBODY_DATABASE_MYSQL)
-    mirobody::database::Database db(cfg.mysql.open());
-#else
-#  error "c_api: no migration connection for the selected database backend"
-#endif
     mirobody::database::apply_schema(db, cfg.sql_dir + "/" MIROBODY_DATABASE_BACKEND_DIR);
 }
 
@@ -143,16 +135,8 @@ struct FileContext {
 // then degrades to the cache/sidecar index (no `files`-table queries).
 std::unique_ptr<mirobody::database::Database> open_file_db(const mirobody::Config& cfg) {
     try {
-#if defined(MIROBODY_DATABASE_SQLITE)
         return std::unique_ptr<mirobody::database::Database>(
             new mirobody::database::Database(cfg.sqlite.open()));
-#elif defined(MIROBODY_DATABASE_PG) || defined(MIROBODY_DATABASE_PG_LEGACY)
-        return std::unique_ptr<mirobody::database::Database>(
-            new mirobody::database::Database(cfg.postgresql().open()));
-#else
-        (void)cfg;
-        return nullptr;
-#endif
     } catch (const std::exception& e) {
         mirobody::platform::log_warn("mirobody file api: database unavailable (%s); "
                                      "list/store fall back to the cache index", e.what());
@@ -164,19 +148,15 @@ FileContext& file_context() {
     static FileContext ctx;
     static std::once_flag flag;
     std::call_once(flag, [] {
-        ensure_curl_init();   // S3/OSS backends use libcurl
+        ensure_curl_init();
         try {
             const mirobody::Config& cfg = mirobody::config();
-            if      (cfg.s3().configured())            ctx.storage = cfg.s3().open();
-            else if (cfg.oss().configured())           ctx.storage = cfg.oss().open();
-            else if (cfg.local_storage().configured()) ctx.storage = cfg.local_storage().open();
+            if (cfg.local_storage().configured()) ctx.storage = cfg.local_storage().open();
             if (!ctx.storage) {
                 mirobody::platform::log_error("mirobody file api: no object storage configured");
                 return;
             }
-            const bool use_redis = !cfg.redis.host.empty();
-            ctx.cache.reset(new mirobody::cache::Cache(
-                use_redis ? cfg.redis.open() : cfg.memory_kv.open()));
+            ctx.cache.reset(new mirobody::cache::Cache(cfg.memory_kv.open()));
             ctx.db = open_file_db(cfg);   // best-effort; assumed already migrated
 
             if (!cfg.file_encryption_keys.empty()) {
@@ -248,7 +228,11 @@ extern "C" mirobody_server_t* mirobody_start(
 
     // LLM keys and the listen port come from the config (and its env-var
     // fallbacks: OPENAI_API_KEY / GOOGLE_API_KEY / HTTP_PORT).
-    if (cfg.listen_addr.empty()) cfg.listen_addr = "127.0.0.1";
+    // An embedding host reaches the core over loopback; the compiled 0.0.0.0
+    // default would expose it on every interface (see android_jni.cpp).
+    if (cfg.listen_addr.empty() || cfg.listen_addr == "0.0.0.0") {
+        cfg.listen_addr = "127.0.0.1";
+    }
     // data_dir, when given, is where the on-device SQLite file lives.
     if (!data.empty())       cfg.sqlite.path = data + "/mirobody.db";
 
@@ -391,9 +375,7 @@ ChatServices& chat_services() {
                 "mirobody chat: database unavailable (%s); db-backed tools degrade", e.what());
         }
         try {
-            const bool use_redis = !cfg.redis.host.empty();
-            ctx.cache.reset(new mirobody::cache::Cache(
-                use_redis ? cfg.redis.open() : cfg.memory_kv.open()));
+            ctx.cache.reset(new mirobody::cache::Cache(cfg.memory_kv.open()));
         } catch (const std::exception& e) {
             mirobody::platform::log_warn("mirobody chat: cache unavailable (%s)", e.what());
         }
@@ -464,8 +446,7 @@ int run_chat_turn(const char* provider,
         req.memory = svc.memory.get();
 
         const mirobody::Config& cfg = mirobody::config();
-        if (cfg.s3().configured() || cfg.oss().configured() ||
-            cfg.local_storage().configured()) {
+        if (cfg.local_storage().configured()) {
             FileContext& fc = file_context();
             if (fc.ok) req.storage = fc.storage.get();
         }
@@ -625,7 +606,6 @@ extern "C" const char* mirobody_store_file(
         ref.mime_type = ctype;
         ref.file_key  = key;
         mirobody::file::record(*ctx.cache, static_cast<std::int64_t>(user_id), ref);
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
         if (ctx.db) {
             try {
                 mirobody::file::db_upsert_file(*ctx.db, static_cast<std::int64_t>(user_id),
@@ -634,7 +614,6 @@ extern "C" const char* mirobody_store_file(
                 mirobody::platform::log_warn("mirobody_store_file: files index insert failed: %s", e.what());
             }
         }
-#endif
 
         result = key;
         return result.c_str();
@@ -682,7 +661,6 @@ extern "C" const char* mirobody_list_files(long long user_id, int page, int size
         };
 
         int total = 0;
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
         // Preferred: the `files` table -- full pagination + total, newest first.
         if (ctx.db && user_id > 0) {
             const std::vector<mirobody::file::FileRow> rows = mirobody::file::db_list_files(
@@ -693,7 +671,6 @@ extern "C" const char* mirobody_list_files(long long user_id, int page, int size
             }
             total = static_cast<int>(mirobody::file::db_count_files(*ctx.db, static_cast<std::int64_t>(user_id)));
         } else
-#endif
         {
             // Fallback (no DB / legacy schema): the cache + sidecar index,
             // newest-first within its cap; total is the listed count.

@@ -251,12 +251,12 @@ std::string build_auth_providers(const Config& cfg,
     // its own appid and only needs to know the server can complete the exchange.
     provider("wechat", wechat_web_config, &wechat_app_configured);
 
-    // Tanka QR sign-in needs no credentials of ours, so it is a plain flag. Web
-    // only: there is no native Tanka flow.
+    // Tanka QR sign-in was web-only and left with the web client; the key stays
+    // (always disabled) so clients that read it keep parsing the same shape.
     w.Key("tanka");
     w.StartObject();
     w.Key("enabled");
-    w.Bool(cfg.tanka_login_enabled);
+    w.Bool(false);
     w.EndObject();
 
     w.EndObject();
@@ -284,7 +284,6 @@ std::string url_encode(const std::string& s) {
 }
 
 // Only the audit write below needs these; the legacy schema has no log table.
-#if !defined(MIROBODY_DATABASE_PG_LEGACY)
 
 // Whether `s` is a bare dotted-quad IPv4 literal. Rejects leading zeros (which
 // some parsers read as octal) so only one spelling of an address is stored.
@@ -349,7 +348,6 @@ bool is_ipv6_literal(const std::string& s) {
     return elisions == 1 ? groups < 8 : groups == 8;
 }
 
-#endif  // !MIROBODY_DATABASE_PG_LEGACY
 
 }  // namespace
 
@@ -397,28 +395,6 @@ UserService::UserService(server::Router& router,
                                            !cfg.firebase_project_ids.empty(),
                                            !wechat_app_appid_.empty() && !wechat_app_secret_.empty())) {
     register_routes(router);
-    // Tanka QR-code sign-in lives in its own service (src/user/tanka.*); hand it a
-    // callback that mints a login (create-or-get user + auth envelope) on a
-    // confirmed scan. Owned here so its routes + discovery thread share our lifetime.
-    tanka_.reset(new TankaService(router, cfg,
-        [this](const server::Request& q, server::Response& s, const std::string& email) {
-            tanka_login(q, s, email);
-        }));
-}
-
-// Confirmed-scan callback handed to TankaService (src/user/tanka.*): create-or-get
-// the user for `email` and write the standard auth envelope, the same final step
-// as the other providers.
-void UserService::tanka_login(const server::Request& req, server::Response& res,
-                              const std::string& email) {
-    std::string uerr;
-    std::int64_t user_id = add_or_get_user(email, &uerr);
-    if (user_id <= 0) {
-        res.error(-5, uerr.empty() ? std::string("Not found.") : uerr);
-        return;
-    }
-    log_login(req, user_id, database::LoginMethod::Tanka);
-    generate_auth_response(res, user_id, email);
 }
 
 //------------------------------------------------------------------------------
@@ -440,26 +416,15 @@ std::int64_t UserService::add_or_get_user(const std::string& email, std::string*
     // (new-schema) SQL; a `last_insert_id` branch is only needed once a backend
     // without RETURNING (e.g. MySQL) is introduced. Bound params are identical
     // for both arms ({lower} and {lower, name}) -- the legacy FALSE is a literal.
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    static const char* const kSelectByEmail =
-        "SELECT id FROM health_app_user WHERE email=? AND is_del=FALSE;";
-    static const char* const kInsertUser =
-        "INSERT INTO health_app_user (is_del,email,name) VALUES (FALSE,?,?) RETURNING id;";
-#else
     static const char* const kSelectByEmail =
         "SELECT id FROM users WHERE email=? AND deleted_at IS NULL;";
     static const char* const kInsertUser =
         "INSERT INTO users (email,name,created_at) VALUES (?,?,?) RETURNING id;";
-#endif
 
     // created_at is unix ms the app stamps (the modern schema has no DB default);
     // updated_at is left NULL until the row is later changed. The legacy
     // health_app_user keeps its own DB-side timestamps.
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    const std::vector<database::Value> insert_params = {lower, name};
-#else
     const std::vector<database::Value> insert_params = {lower, name, platform::now_unix_ms()};
-#endif
 
     try {
         database::Result sel = db_.execute(kSelectByEmail, {lower});
@@ -487,34 +452,6 @@ std::int64_t UserService::add_or_get_wechat_user(const std::string& openid,
         *err = "Missing openid.";
         return 0;
     }
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    // Legacy schema: the WeChat identity lives in a column on health_app_user.
-    // Synthetic address for the NOT NULL + unique-among-active email column.
-    // Prefer the unionid when present so the same person across a WeChat open-
-    // platform's apps maps to one account; fall back to the per-app openid.
-    const std::string email = (unionid.empty() ? openid : unionid) + "@wechat";
-    try {
-        // wechat_openid is the stable per-app identifier -- look up by it, not by
-        // the synthetic email (which derives from the unionid when available).
-        database::Result sel = db_.execute(
-            "SELECT id FROM health_app_user WHERE wechat_openid=? AND is_del=FALSE;",
-            {openid});
-        if (!sel.rows.empty() && !sel.rows[0].empty()) {
-            return sel.rows[0][0].as_int();
-        }
-
-        database::Result ins = db_.execute(
-            "INSERT INTO health_app_user (is_del,email,wechat_openid,name) "
-            "VALUES (FALSE,?,?,?) RETURNING id;",
-            {email, openid, std::string("WeChat User")});
-        if (!ins.rows.empty() && !ins.rows[0].empty()) {
-            return ins.rows[0][0].as_int();
-        }
-    } catch (const std::exception& e) {
-        *err = e.what();
-        return 0;
-    }
-#else
     // Current schema: the WeChat identity lives in user_identities, keyed by
     // (login_method, provider_uid). Prefer the unionid as the provider id so the
     // same person across a WeChat open-platform's apps maps to one account.
@@ -550,7 +487,6 @@ std::int64_t UserService::add_or_get_wechat_user(const std::string& openid,
         *err = e.what();
         return 0;
     }
-#endif
 
     *err = "Not found.";
     return 0;
@@ -608,15 +544,6 @@ bool UserService::bind_email(std::int64_t user_id, const std::string& email, std
         return false;
     }
     try {
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-        database::Result sel = db_.execute(
-            "SELECT id FROM health_app_user WHERE email=? AND is_del=FALSE;", {lower});
-        if (!sel.rows.empty() && !sel.rows[0].empty() && sel.rows[0][0].as_int() != user_id) {
-            *err = "Email already in use.";
-            return false;
-        }
-        db_.execute("UPDATE health_app_user SET email=? WHERE id=?;", {lower, user_id});
-#else
         database::Result sel = db_.execute(
             "SELECT id FROM users WHERE email=? AND deleted_at IS NULL;", {lower});
         if (!sel.rows.empty() && !sel.rows[0].empty() && sel.rows[0][0].as_int() != user_id) {
@@ -625,7 +552,6 @@ bool UserService::bind_email(std::int64_t user_id, const std::string& email, std
         }
         db_.execute("UPDATE users SET email=?, updated_at=? WHERE id=?;",
                     {lower, platform::now_unix_ms(), user_id});
-#endif
         return true;
     } catch (const std::exception& e) {
         // The active-email unique index is the backstop against a race between the
@@ -666,10 +592,6 @@ void UserService::generate_auth_response(server::Response& res,
 }
 
 void UserService::log_login(const server::Request& req, std::int64_t user_id, database::LoginMethod method) {
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    // The legacy schema (health_app_user/th_*) has no user_login_logs table.
-    (void)req; (void)user_id; (void)method;
-#else
     if (user_id <= 0) return;
     // The pg `ip` column is INET, but req.ip is resolved from the proxy headers
     // X-Forwarded-For / X-Real-IP (server::client_ip), which a client connecting
@@ -693,7 +615,6 @@ void UserService::log_login(const server::Request& req, std::int64_t user_id, da
     } catch (const std::exception& e) {
         platform::log_warn("audit: login log failed: %s", e.what());
     }
-#endif
 }
 
 //------------------------------------------------------------------------------
@@ -930,14 +851,8 @@ void UserService::on_firebase_verify(const server::Request& req, server::Respons
     if (!email.empty() && claims_email_verified(claims)) {
         user_id = add_or_get_user(email, &uerr);
     } else {
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-        // Legacy schema has no user_identities; keep rejecting (unchanged).
-        res.error(-7, "Email is not verified.");
-        return;
-#else
         user_id = add_or_get_identity_user(
             firebase_login_method(claims), get_field(claims, "sub"), email, &uerr);
-#endif
     }
     if (user_id <= 0) {
         res.error(-6, uerr.empty() ? std::string("Not found.") : uerr);
@@ -1021,15 +936,9 @@ void UserService::on_apple_verify(const server::Request& req, server::Response& 
     if (!email.empty() && claims_email_verified(claims)) {
         user_id = add_or_get_user(email, &uerr);
     } else {
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-        // Legacy schema has no user_identities; keep rejecting (unchanged).
-        res.error(-7, "Email is not verified.");
-        return;
-#else
         user_id = add_or_get_identity_user(
             static_cast<int>(database::LoginMethod::Apple),
             get_field(claims, "sub"), email, &uerr);
-#endif
     }
     if (user_id <= 0) {
         res.error(-6, uerr.empty() ? std::string("Not found.") : uerr);

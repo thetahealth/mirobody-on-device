@@ -9,7 +9,6 @@
 #include "jwt/jwt.hpp"
 #include "server/router.hpp"
 #include "user/email.hpp"
-#include "user/tanka.hpp"
 
 #include <memory>
 
@@ -66,11 +65,6 @@ private:
     // configured, plus each one's public config, in a single public document.
     void on_auth_providers(const server::Request& req, server::Response& res);
 
-    // Confirmed-scan callback for TankaService: create-or-get the user for `email`
-    // and write the standard auth envelope (the Tanka login flow lives in
-    // src/user/tanka.{hpp,cpp}; this is its only coupling back to the user domain).
-    void tanka_login(const server::Request& req, server::Response& res,
-                     const std::string& email);
 
     // Look up the user with `email`, creating the row if absent. Returns the
     // user id (> 0) on success; on failure returns 0 and writes the reason to
@@ -179,11 +173,6 @@ private:
     // ctor from the config strings above, so it must be declared AFTER them.
     std::string auth_providers_;
 
-    // Tanka QR-code sign-in, owned here so its routes + auto-discovery thread share
-    // this service's lifetime. It calls tanka_login() (above) on a confirmed scan;
-    // all its other state lives in src/user/tanka.{hpp,cpp}. Declared last so it is
-    // destroyed first (its dtor joins the discovery thread before our members go).
-    std::unique_ptr<TankaService> tanka_;
 };
 
 }}

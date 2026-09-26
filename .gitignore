@@ -103,7 +103,11 @@ desktop.ini
 *.yaml
 # ...except the committed template, which is the source of defaults.
 !config.example.yml
-# ...and the training config, which has to travel with the corpus it trains on.
-# Negated rather than force-added: a tracked-but-ignored file never shows up in
-# `git status` again, so edits to it silently go nowhere.
-!fine-tuning/config_qwen3.5_2b_full_sft.yml
+# ...and the CI workflows. Negated rather than force-added: a tracked-but-ignored
+# file never shows up in `git status` again, so edits to it silently go nowhere.
+!.github/workflows/*.yml
+
+# Internal planning docs (same convention as the main mirobody repo): strategy,
+# compliance and business notes that are not project documentation. Kept out
+# of this public repository on purpose; publish an edited copy under docs/ instead.
+internal/

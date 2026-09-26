@@ -13,12 +13,6 @@
     "rapidjson",
     "yaml-cpp",
     "sqlite3",
-    "libpq",
-    "libmysql",
-    {
-      "name": "hiredis",
-      "features": ["ssl"]
-    },
     "openblas",
     "catch2",
     "sentry-native",
@@ -29,7 +23,6 @@
     "xlnt"
   ],
   "$dependencies": [
-    "duckdb",
     "tesseract"
   ]
 }

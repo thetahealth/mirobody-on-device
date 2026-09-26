@@ -1,11 +1,11 @@
 # Debug tools
 
-The desktop build produces a small family of standalone CLIs under `cli/`,
-most wrapping one LLM client in [src/llm/](../src/llm/); the `aws_s3` / `aliyun_oss`
-tools instead drive the storage backends (see [Storage CLIs](#storage-clis)
-below). They bypass the embedded HTTP/WS server — handy for poking at request
-parameters, wire-format quirks, or bucket connectivity without rebuilding the
-server. Toggle with `-DMIROBODY_BUILD_TOOLS=OFF`.
+The development build produces a small family of standalone CLIs under `cli/`,
+most wrapping one LLM client in [src/llm/](../src/llm/); the rest exercise one
+subsystem each (`mcp`, `agent`, `fhir`, `indicator`, `image` / `document` /
+`file_parser`, `file_rekey`, the JWT helpers). They bypass the loopback HTTP
+front door — handy for poking at request parameters or wire-format quirks
+without rebuilding the core. Toggle with `-DMIROBODY_BUILD_TOOLS=OFF`.
 
 The LLM CLIs share the same UX:
 
@@ -76,42 +76,6 @@ uses the standard `streamGenerateContent` endpoint for *both* modes — the wire
 format is identical between AI Studio and Vertex, only host + auth differ.
 This loses Gemini-side native MCP; if you need it, do MCP locally as function
 declarations or add an `Interactions` client later.
-
-## Storage CLIs
-
-`aws_s3`, `aliyun_oss`, and `azure_blob` drive the object-storage backends (see
-[Storage](../src/storage/README.md)) without the embedded server — handy for verifying
-credentials, signing, and bucket connectivity. (S3-compatible stores — R2, GCS,
-MinIO, … — use `aws_s3` with `S3_ENDPOINT`.) All share one command set
-(keys are passed *without* the configured prefix; the backend prepends it):
-
-| Command         | Action                                                                       |
-| --------------- | ---------------------------------------------------------------------------- |
-| `put <key>`     | Upload; body from `--data`, `--file <path>`, or stdin. Prints the object URL. |
-| `get <key>`     | Download to stdout, or `--output <path>`.                                    |
-| `delete <key>`  | Delete (idempotent).                                                         |
-| `url <key>`     | Print the public URL.                                                        |
-| `presign <key>` | Print a presigned GET URL (`--expires <seconds>`, default 3600).             |
-
-Config comes from the same `S3_*` / `ALI_OSS_*` keys as the server (precedence
-`--flag` > env > YAML; `--config <path>` selects the file — see the "Object
-Storage Configuration" block in [config.yml](../config.yml)). `url` and
-`presign` are computed locally and need no network or live bucket.
-
-```sh
-# Upload a file and print its URL (S3_* keys in config.yml or the environment):
-aws_s3 put charts/q3.png --file q3.png --content-type image/png
-
-# Round-trip through stdin / stdout:
-echo "hello" | aws_s3 put notes/hi.txt --content-type text/plain
-aws_s3 get notes/hi.txt
-
-# A 15-minute presigned download link (no network call):
-aws_s3 presign charts/q3.png --expires 900
-
-# OSS, selecting a named instance (reads the ALI_OSS_*_REPORTS keys):
-aliyun_oss --name reports put metrics/q3.csv --file q3.csv
-```
 
 ## file_rekey
 

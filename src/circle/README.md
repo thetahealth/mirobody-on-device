@@ -11,9 +11,12 @@ top of the otherwise strictly single-user core:
   answer "how is my family doing?".
 
 Everything here is **additive and checked at the read/write paths** — no other
-table is rescoped. **Modern backends only**: the schema lives under
-`res/sql/{pg,mysql,sqlite}` and the server does **not** construct this service on
-the legacy backend (`#if !defined(MIROBODY_DATABASE_PG_LEGACY)`).
+table is rescoped. The schema lives in `res/sql/sqlite/2_care_circle.sql`.
+
+On a phone the care circle is read-only context: the circle itself (members,
+invitations, shares) lives on the mirobody server the app is connected to. This
+service is what the loopback front door still answers until the apps talk to that
+server for it.
 
 ## Model
 
@@ -22,8 +25,7 @@ mutually in the circle, so "do X and Y share a circle?" is one symmetric
 self-join on `care_circle_id`, with no owner-centric asymmetry. A user may own
 or belong to **any number** of circles.
 
-Three tables (see [`res/sql/pg/2_care_circle.sql`](../../res/sql/pg/2_care_circle.sql)
-for the canonical schema; mysql/sqlite are dialect ports):
+Three tables (see [`res/sql/sqlite/2_care_circle.sql`](../../res/sql/sqlite/2_care_circle.sql)):
 
 - **`care_circles`** — the group object (owner, name, lifecycle). Survives
   membership churn.
@@ -142,5 +144,5 @@ member reuses its row, so it doesn't count against `CIRCLE_MAX_MEMBERS`.
   FHIR-facing authorization seam (impl lives in `service.cpp`).
 
 Constructed in [`src/server/server.cpp`](../server/server.cpp) alongside the
-other services (non-legacy only); enums in
+other services; enums in
 [`src/database/enums.hpp`](../database/enums.hpp).

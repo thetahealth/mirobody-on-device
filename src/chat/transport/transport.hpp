@@ -15,13 +15,11 @@
 // touches Chat directly. The concrete transports:
 //
 //   - SseTransport   POST /api/chat  -> Server-Sent Events   (transport/sse.*)
-//   - WsTransport    GET  /api/chat  -> WebSocket frames      (transport/ws.*)
-//   - MqttTransport  broker topic    -> published frames      (transport/mqtt.*)
 //
-// These protocols share nothing at the connection level (HTTP/WS register routes
-// on a server::Router, MQTT connects to a broker), so the interface fixes only
-// the lifecycle: construct the transport with what it needs, then start() it.
-// ChatService owns one transport per enabled protocol and starts them all.
+// The interface fixes only the lifecycle: construct the transport with what it
+// needs, then start() it. ChatService owns the transports and starts them all.
+// (The C ABI's mirobody_chat_messages drives the same dispatcher with no
+// transport at all.)
 
 namespace mirobody { namespace chat {
 
@@ -33,12 +31,11 @@ public:
     Transport(const Transport&)            = delete;
     Transport& operator=(const Transport&) = delete;
 
-    // A short transport name for logging ("sse", "ws", "mqtt").
+    // A short transport name for logging ("sse").
     virtual const char* name() const = 0;
 
-    // Begin accepting requests. An HTTP/WS transport registers its route(s) on
-    // the Router it was constructed with; an MQTT transport connects to its
-    // broker and subscribes. Called once by ChatService at startup.
+    // Begin accepting requests: register the route(s) on the Router the
+    // transport was constructed with. Called once by ChatService at startup.
     virtual void start() = 0;
 };
 

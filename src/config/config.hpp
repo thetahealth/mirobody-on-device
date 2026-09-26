@@ -42,66 +42,17 @@ struct AzureConfig {
 // selects the backend, mirroring how EMBEDDING_PROVIDER selects an embedder:
 //   - "local" (default) -> LocalMemory: facts plus their 1024-dim embeddings in
 //                          the app database, ranked by in-process cosine over the
-//                          caller's own rows. No extra services; works on every
-//                          SQL backend (SQLite on-device included).
-//   - "everos"/"remote" -> RemoteMemory: an external EverOS-compatible HTTP
-//                          memory service.
-//   - "mem0"            -> Mem0 (mem0.ai), a SOTA hosted/self-hosted agent-memory
-//                          service with server-side fact extraction.
-//   - "zep"             -> Zep (getzep.com), a SOTA temporal-knowledge-graph
-//                          memory service (Graphiti).
+//                          caller's own rows. No extra services.
 //   - "none"            -> disabled (the tools report memory is unavailable).
-// base_url / api_key configure the chosen remote backend. They are read from a
-// generic MEMORY_BASE_URL / MEMORY_API_KEY, falling back to the vendor's usual
-// env key (EVEROS_*, MEM0_*, ZEP_*); each remote adapter defaults base_url to its
-// hosted endpoint when unset, so a hosted provider needs only the API key.
-// Set via MEMORY_PROVIDER / MEMORY_TOP_K / MEMORY_BASE_URL / MEMORY_API_KEY
-// (or EVEROS_* / MEM0_* / ZEP_*).
+// Hosted memory services (Mem0, Zep, EverOS) are a server concern and live in
+// the main mirobody repo; on a phone the facts stay in the local database.
+// Set via MEMORY_PROVIDER / MEMORY_TOP_K.
 struct MemoryConfig {
     std::string provider = "local";
-    std::string base_url;          // remote provider endpoint (vendor default when empty)
-    std::string api_key;           // remote provider credential
     int         top_k    = 5;      // default recall count when the caller omits one
 };
 
 //------------------------------------------------------------------------------
-
-// Vitalera health-data vendor (see src/health/vendor/vitalera.cpp). When `api_key` is
-// set the Vitalera client uses it directly as the pre-issued JWT bearer (the
-// api_key-only path in Vitalera::bearer); leave it empty to fall back to the
-// client_id/client_secret mint flow read from the MIROBODY_VENDOR_VITALERA_*
-// env vars. `environment` selects which Vitalera deployment to target (e.g.
-// "production" / "sandbox"); empty => the vendor's default host. Set via
-// VITALERA_API_KEY / VITALERA_ENVIRONMENT.
-struct VitaleraConfig {
-    std::string api_key;
-    std::string environment;
-};
-
-// Credentials for a direct device-brand vendor client (src/health/vendor/device/).
-// Loaded from the config object via the clean per-vendor keys
-//   <ID>_CLIENT_ID / <ID>_CLIENT_SECRET / <ID>_API_KEY / <ID>_BASE_URL
-// where <ID> is the upper-cased vendor id (OURA_CLIENT_ID, WHOOP_CLIENT_SECRET, …).
-// Because the config store also consults the environment (getenv wins over YAML),
-// these work set either in the YAML file or as same-named env vars. Overlaid onto
-// the vendor's VendorConfig in health::vendor_config().
-struct VendorCredentials {
-    std::string client_id;      // OAuth client id
-    std::string client_secret;  // OAuth client secret
-    std::string api_key;        // a user's OAuth access token (obtained out of band)
-    std::string base_url;       // API host override (optional; region / self-host)
-};
-
-// Dexcom CGM direct client (see src/health/vendor/device/dexcom.cpp). Its OAuth
-// credentials use the generic VendorCredentials keys (DEXCOM_CLIENT_ID / _SECRET /
-// _API_KEY / _BASE_URL) like the other device brands; this struct only carries the
-// Dexcom-specific deployment selector. `environment` picks the host: "sandbox"
-// (default — immediate, fake data, no real PHI), "us" (production, EGVs delayed
-// ~1h) or "eu"/"ous" (production outside the US, ~3h delay), mapped to base_url in
-// health::vendor_config(). Set via DEXCOM_ENVIRONMENT.
-struct DexcomConfig {
-    std::string environment;   // "sandbox" (default) / "us" / "eu"
-};
 
 //------------------------------------------------------------------------------
 
@@ -349,25 +300,13 @@ struct Config {
     std::string log_level = "info";
 
     database::SQLiteConfig     sqlite;
-    database::DuckDBConfig     duckdb;
-    database::MySQLConfig      mysql;
-    database::ClickHouseConfig clickhouse;
 
     cache::MemoryKvConfig      memory_kv;
-    cache::RedisConfig         redis;
 
     // Long-term memory backend selection. See MemoryConfig.
     MemoryConfig               memory;
 
-    // Vitalera health-data vendor credentials. See VitaleraConfig.
-    VitaleraConfig             vitalera;
 
-    // Dexcom CGM deployment selector. See DexcomConfig.
-    DexcomConfig               dexcom;
-
-    // Direct device-brand vendor credentials, keyed by vendor id (e.g. "oura").
-    // Populated from the <ID>_* keys; overlaid in health::vendor_config().
-    std::unordered_map<std::string, VendorCredentials> vendor_credentials;
 
     // Fernet key(s) that encrypt per-user vendor OAuth tokens at rest in
     // user_vendor_accounts (last key encrypts, all decrypt — rotate by appending).
@@ -531,51 +470,6 @@ struct Config {
     std::string wechat_app_appid;
     std::string wechat_app_secret;
 
-    // Tanka QR-code sign-in (web). Unlike the other providers Tanka needs no app
-    // credentials of ours: the browser runs Tanka's own WASM request-signer and
-    // we merely PROXY the already-signed create-QR / poll calls to Tanka's
-    // gateway server-side (the browser can't reach it directly -- CORS). On a
-    // confirmed scan we read the email straight from Tanka's TLS response and
-    // mint our usual tokens. ON by default; set TANKA_LOGIN_ENABLED: false to
-    // disable. GET /auth/providers advertises the state to the web client so it
-    // shows/hides the button. See src/user/tanka.cpp.
-    bool        tanka_login_enabled = true;
-    // Tanka gateway base + the two whitelisted forward paths (the only paths the
-    // proxy will relay; not an open proxy). Overridable only for tests.
-    std::string tanka_api_base            = "https://gw-q.tanka.ai";
-    std::string tanka_qrcode_create_path  = "/npc/v2/common/qrcode/login";
-    std::string tanka_qrcode_check_path   = "/npc/v1/user/requestQrCodeLogin";
-    // Tanka's web-client origin. Tanka pins this as the Origin on every gateway
-    // call (the gateway/CDN only accept it), and it is also the host the signing
-    // WASM is fetched from. Used as the Origin header on the proxied qrcode/poll
-    // calls and on the WASM fetch, and as the WASM host. Overridable only for
-    // tests (TANKA_WEB_ORIGIN); no trailing slash.
-    std::string tanka_web_origin          = "https://g.tanka.ai";
-    // Tanka's success envelope code, and the proxy HTTP timeout in seconds.
-    int         tanka_success_code = 0;
-    int         tanka_http_timeout = 15;
-    // Signer auto-discovery (self-healing). When on, the server runs the Node
-    // discovery engine res/tanka/discover.cjs at boot and every
-    // tanka_refresh_interval seconds: it finds Tanka's live signer build, VERIFIES
-    // it (signs a real create-QR; Tanka must answer code:0), and the server adopts
-    // it in memory (swaps the served glue + bridged WASM in lockstep). Requires
-    // `node` on PATH; if node/Tanka are unavailable or nothing verifies, it logs
-    // and keeps the pinned fallback build, so login still works. Set
-    // TANKA_WASM_AUTODISCOVER=false to disable and always serve the pinned build.
-    bool        tanka_autodiscover = true;
-    int         tanka_refresh_interval = 7 * 24 * 3600;   // TANKA_WASM_REFRESH_INTERVAL (seconds)
-    std::string tanka_node_bin = "node";                  // TANKA_NODE_BIN
-    std::string tanka_discover_script = "res/tanka/discover.cjs";   // TANKA_DISCOVER_SCRIPT
-    // The vendored fallback glue served at /tanka-signer.js until/unless a build is
-    // adopted (the file webpack copies from htdoc/static). TANKA_SIGNER_JS_PATH.
-    std::string tanka_signer_js_path = "res/htdoc/tanka-signer.js";
-    // NB: the pinned fallback WASM *path* (the content-hashed filename under
-    // tanka_web_origin) is NOT configurable. It is a MATCHED set with the vendored
-    // htdoc/static/tanka-signer.js (the ABI can change across builds), so it can't
-    // be swapped independently -- it lives as a constant in src/user/tanka.cpp that
-    // `node res/tanka/discover.cjs --write` rewrites alongside the signer. The
-    // bridge caches the fetched WASM under <tempdir>.
-
     // Predefined email -> verification code pairs for testing/demo login, from
     // the EMAIL_PREDEFINE_CODES YAML map. Each entry lets an email log in with
     // the mapped code instead of a real emailed one. Empty (the default) means
@@ -629,42 +523,11 @@ struct Config {
     bool db_init_schema = true;
 
     // Underlying key/value store, populated by load_config(). The lazy
-    // getters below (postgresql) read from it on demand, so that multi-
-    // instance configs distinguished by suffix (PG_HOST_A, PG_HOST_B, ...)
-    // do not have to be enumerated up front. Held as the local-YAML
+    // getters below read from it on demand, so that multi-instance configs
+    // distinguished by suffix do not have to be enumerated up front. Held as the local-YAML
     // derivation since that is the highest-priority source; any remote
     // config has already been absorbed into it.
     utils::LocalYamlStore store;
-
-    // Look up a PostgreSQL configuration by suffix, mirroring Python's
-    // Config.get_postgresql(key). An empty `suffix` reads PG_HOST / PG_PORT /
-    // PG_USER / ... A non-empty suffix like "A" reads PG_HOST_A / PG_PORT_A /
-    // PG_USER_A / ... `PG_ENCRYPTION_KEY` is intentionally shared across all
-    // suffixes (no suffix applied), matching the Python version.
-    database::PostgreSQLConfig postgresql(const std::string& suffix = "") const;
-
-    // AWS S3 (or S3-compatible) object storage, read on demand from the store:
-    // S3_KEY / S3_TOKEN / S3_REGION / S3_BUCKET / S3_PREFIX / S3_CDN (plus an
-    // optional S3_ENDPOINT to target an S3-compatible service). An unset or
-    // empty S3_PREFIX defaults to storage::default_prefix ("mirobody", same
-    // for the OSS / local-storage prefixes below), so objects never land at
-    // the top level of a shared bucket. Call `s3().configured()` to test
-    // whether it is set up, then `s3().open()` to build a Storage backend.
-    storage::S3Config s3() const;
-
-    // Alibaba Cloud OSS object storage, read on demand by instance name like
-    // postgresql(): an empty `name` reads ALI_OSS_ACCESS_KEY / ALI_OSS_SECRET_KEY
-    // / ALI_OSS_ENDPOINT / ALI_OSS_BUCKET_NAME / ALI_OSS_PREFIX / ALI_OSS_DOMAIN;
-    // a non-empty name like "REPORTS" reads ALI_OSS_ACCESS_KEY_REPORTS, etc. The
-    // name is upper-cased on lookup, so the YAML keys must already be upper case.
-    storage::OssConfig oss(const std::string& name = "") const;
-
-    // Azure Blob Storage, read on demand from AZURE_BLOB_ACCOUNT / AZURE_BLOB_KEY
-    // / AZURE_BLOB_CONTAINER / AZURE_BLOB_PREFIX / AZURE_BLOB_ENDPOINT_SUFFIX /
-    // AZURE_BLOB_CDN. The one mainstream provider that is not S3-compatible (the
-    // rest -- R2, GCS XML API, MinIO, ... -- use s3() with an S3_ENDPOINT).
-    // `azure_blob().configured()` is true once account / key / container are set.
-    storage::AzureBlobConfig azure_blob() const;
 
     // Local-filesystem object storage, read on demand from LOCAL_STORAGE_DIR /
     // LOCAL_STORAGE_URL_PREFIX / LOCAL_STORAGE_BASE_URL / LOCAL_STORAGE_SECRET.
@@ -674,10 +537,9 @@ struct Config {
 
     // Dumps a human-readable summary to stdout with secrets masked (first 3
     // and last 3 chars shown, middle replaced by `******`). Sections whose
-    // primary identifier (postgresql().user / redis.host / jwt.key) is unset
-    // are skipped. Only the default-suffix PG instance is shown; to inspect
-    // others call `postgresql("A").print()` etc. Intended to be called once
-    // at startup to surface config errors before the server runs.
+    // primary identifier (sqlite.path / jwt.key / ...) is unset are skipped.
+    // Intended to be called once at startup to surface config errors before
+    // the core runs.
     void print() const;
 };
 

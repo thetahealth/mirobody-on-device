@@ -53,32 +53,18 @@ bool circle_health_grants(database::Database& conn, std::int64_t viewer,
 bool can_read_health(database::Database& conn, std::int64_t viewer, std::int64_t target) {
     if (viewer <= 0) return false;
     if (viewer == target) return true;   // you always read your own
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    (void)conn;
-    return false;                        // no care circles on the legacy backend
-#else
     return circle_health_grants(conn, viewer, target, kView);
-#endif
 }
 
 bool can_write_health(database::Database& conn, std::int64_t viewer, std::int64_t target) {
     if (viewer <= 0) return false;
     if (viewer == target) return true;   // you always write your own
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    (void)conn;
-    return false;
-#else
     return circle_health_grants(conn, viewer, target, kEdit);
-#endif
 }
 
 std::int64_t resolve_health_subject(database::Database& conn, std::int64_t viewer,
                                     std::int64_t member_id, bool need_write) {
     if (viewer <= 0 || member_id <= 0) return 0;
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    (void)conn; (void)need_write;
-    return 0;                            // no care circles on the legacy backend
-#else
     try {
         // The handle names one membership row (owner); authorize the viewer
         // through that SAME circle: both Accepted, and the owner's health_access
@@ -96,16 +82,11 @@ std::int64_t resolve_health_subject(database::Database& conn, std::int64_t viewe
     } catch (const std::exception&) {
         return 0;
     }
-#endif
 }
 
 std::vector<HealthShare> health_shared_with(database::Database& conn, std::int64_t viewer) {
     std::vector<HealthShare> out;
     if (viewer <= 0) return out;
-#if defined(MIROBODY_DATABASE_PG_LEGACY)
-    (void)conn;
-    return out;
-#else
     try {
         const std::string v = std::to_string(viewer);
         // MAX(owner.id) yields one stable membership-row handle per sharer (a
@@ -134,7 +115,6 @@ std::vector<HealthShare> health_shared_with(database::Database& conn, std::int64
     } catch (const std::exception&) {
     }
     return out;
-#endif
 }
 
 }}

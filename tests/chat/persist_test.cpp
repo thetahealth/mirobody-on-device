@@ -12,7 +12,6 @@
 // persist_history's thread logic is exercised against a real (in-memory) DB.
 // SQLite-only: it uses the auto-increment / last_insert_id path and is the easy
 // backend to stand up with no server (mirrors tests/memory/memory_test.cpp).
-#if defined(MIROBODY_DATABASE_SQLITE)
 
 namespace {
 
@@ -124,4 +123,3 @@ TEST_CASE("persist_history ignores a thread the caller does not own", "[chat][db
                        + std::to_string(cid) + ";") == 0);
 }
 
-#endif  // MIROBODY_DATABASE_SQLITE
