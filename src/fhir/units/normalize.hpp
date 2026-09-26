@@ -2,7 +2,7 @@
 
 // Free-text unit string -> canonical UCUM.
 //
-// C++11 port of mirobody/indicator/fhir/units/normalize.py. Pipeline:
+// C++ port of mirobody/indicator/fhir/units/normalize.py. Pipeline:
 //
 //   raw input
 //     -> unicode NFKC-lite  (full-width forms, superscripts)

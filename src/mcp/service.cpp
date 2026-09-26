@@ -1,4 +1,5 @@
 #include "mcp/service.hpp"
+#include <optional>
 
 #include "database/database.hpp"   // user_mcp_access_logs insert
 #include "database/enums.hpp"      // McpKind
@@ -373,7 +374,7 @@ void McpService::register_routes(server::Router& router) {
 
 std::string McpService::user_for_secret(const std::string& secret) {
     if (secret.empty()) return std::string();
-    mirobody::optional<std::string> v = cache_.get(kSecretKeyPrefix + secret);
+    std::optional<std::string> v = cache_.get(kSecretKeyPrefix + secret);
     return v.has_value() ? *v : std::string();
 }
 
@@ -424,7 +425,7 @@ void McpService::generate_personal_mcp(const server::Request& req, server::Respo
     // Reuse the user's existing secret when one is on file, otherwise mint a
     // fresh one and store both directions of the mapping.
     std::string secret;
-    mirobody::optional<std::string> existing = cache_.get(kSecretKeyPrefix + user_id);
+    std::optional<std::string> existing = cache_.get(kSecretKeyPrefix + user_id);
     if (existing.has_value() && !existing->empty()) {
         secret = *existing;
     } else {

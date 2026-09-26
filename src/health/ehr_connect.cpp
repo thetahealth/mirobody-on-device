@@ -1,4 +1,5 @@
 #include "health/ehr_connect.hpp"
+#include <optional>
 
 #include "cache/cache.hpp"
 #include "client/http_client.hpp"
@@ -243,7 +244,7 @@ void EhrConnectService::on_callback(const server::Request& req, server::Response
     const std::string state = req.query_get("state");
     if (code.empty() || state.empty()) { redirect("error"); return; }
 
-    mirobody::optional<std::string> rec = cache_.get(kStatePrefix + state);
+    std::optional<std::string> rec = cache_.get(kStatePrefix + state);
     if (!rec.has_value()) { redirect("expired"); return; }
     cache_.del(kStatePrefix + state);   // single-use
 
@@ -307,7 +308,7 @@ void EhrConnectService::on_callback(const server::Request& req, server::Response
 // Observations from the connected EHR via the `ehr` vendor client and persist
 // each one through the FHIR store. Returns posted / failed counts.
 void EhrConnectService::on_sync(const server::Request& req, server::Response& res) {
-    mirobody::optional<std::string> rec = cache_.get(kTokenPrefix + std::to_string(req.user_id));
+    std::optional<std::string> rec = cache_.get(kTokenPrefix + std::to_string(req.user_id));
     if (!rec.has_value()) {
         res.error(-1, "No connected EHR (connect one first).");
         return;

@@ -2,7 +2,7 @@
 
 // (system, code) <-> packed bigint fhir_id, plus the code-system enum.
 //
-// C++11 port of the packing logic in the Python `mirobody.indicator`
+// C++ port of the packing logic in the Python `mirobody.indicator`
 // package (fhir/common.py). The packed id is the postings key in the
 // lexicon artifact, so the layout MUST stay bit-compatible with Python:
 //

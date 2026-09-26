@@ -1,11 +1,11 @@
 #pragma once
 
-#include "compat/cxx11.hpp"
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -63,16 +63,16 @@ public:
     // Convenience: expires_at = clock::now() + ttl.
     void set(std::string key, std::string value, clock::duration ttl);
 
-    // GET. Returns the value, or mirobody::nullopt when the key is absent
+    // GET. Returns the value, or std::nullopt when the key is absent
     // or expired.
-    mirobody::optional<std::string> get(const std::string& key);
+    std::optional<std::string> get(const std::string& key);
 
-    // INCR / DECR. Returns the new integer value, or mirobody::nullopt
+    // INCR / DECR. Returns the new integer value, or std::nullopt
     // when the existing value does not parse as a signed 64-bit integer
     // or when the operation would overflow. A missing key is created at
     // 0 first (resulting value 1 / -1) with no expiration.
-    mirobody::optional<std::int64_t> incr(const std::string& key);
-    mirobody::optional<std::int64_t> decr(const std::string& key);
+    std::optional<std::int64_t> incr(const std::string& key);
+    std::optional<std::int64_t> decr(const std::string& key);
 
     // RPUSH. Appends to the list at `key`, creating it (with no expiration)
     // when absent. Returns the new list length, or 0 when the key holds a
@@ -89,8 +89,8 @@ public:
     // LPOP / RPOP (single-element form). Removes and returns the first /
     // last list element; nullopt when the key is absent or holds a string
     // (WRONGTYPE). Popping the last element removes the key.
-    mirobody::optional<std::string> lpop(const std::string& key);
-    mirobody::optional<std::string> rpop(const std::string& key);
+    std::optional<std::string> lpop(const std::string& key);
+    std::optional<std::string> rpop(const std::string& key);
 
     // LRANGE. The list elements at [start, stop], inclusive; negative
     // indices count from the end (-1 is the last element), out-of-range
@@ -111,7 +111,7 @@ public:
     // step under the store mutex,
     // so a rendering computed from an older list state can never overwrite
     // one computed from a newer state. No Redis command equivalent.
-    mirobody::optional<std::string> set_join(const std::string& dest,
+    std::optional<std::string> set_join(const std::string& dest,
                                              const std::string& list,
                                              const std::string& prefix,
                                              const std::string& sep,
@@ -132,9 +132,9 @@ public:
     // DEL (single-key form). Returns true if the key had a mapping.
     bool del(const std::string& key);
 
-    // Absolute expiration for `key`, or mirobody::nullopt when the key
+    // Absolute expiration for `key`, or std::nullopt when the key
     // is absent / expired. clock::time_point::max() signals "no TTL".
-    mirobody::optional<clock::time_point> expiretime(const std::string& key);
+    std::optional<clock::time_point> expiretime(const std::string& key);
 
     // Evict expired entries up-front: scans and erases; returns the number
     // removed.

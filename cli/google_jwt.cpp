@@ -23,10 +23,10 @@
 #include "platform/log.hpp"
 #include "event_printer.hpp"
 
-#include "compat/cxx11.hpp"
 
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -55,7 +55,7 @@ struct Args {
 };
 
 int parse_args(int argc, char** argv, Args& out) {
-    mirobody::optional<std::string> config_path;
+    std::optional<std::string> config_path;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "-h" || a == "--help") { print_usage(argv[0]); return 1; }

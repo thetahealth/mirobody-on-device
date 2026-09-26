@@ -67,11 +67,9 @@ extern "C" mirobody_server_t* mirobody_start(
 
     // LLM keys and the listen port come from the config (and its env-var
     // fallbacks: OPENAI_API_KEY / GOOGLE_API_KEY / HTTP_PORT).
-    // iOS hosts always reach mirobody over loopback; ignore any 0.0.0.0 default
-    // so we don't trip the local-network privacy prompt.
-    if (cfg.listen_addr.empty() || cfg.listen_addr == "0.0.0.0") {
-        cfg.listen_addr = "127.0.0.1";
-    }
+    // A config file or HTTP_HOST can name a LAN address. The embedded server
+    // serves a phone health record, so the host must never expose that listener.
+    cfg.listen_addr = "127.0.0.1";
 
     auto server = std::unique_ptr<mirobody::Server>(new mirobody::Server(std::move(cfg)));
     if (!server->start_in_background()) {

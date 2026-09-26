@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <stdexcept>
 #include <string>
-#include "compat/cxx11.hpp"
 
 namespace mirobody { namespace encrypt {
 

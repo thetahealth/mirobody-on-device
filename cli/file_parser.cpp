@@ -20,12 +20,12 @@
 #include "platform/log.hpp"
 #include "event_printer.hpp"   // prepare_windows_console (UTF-8 console output)
 
-#include "compat/cxx11.hpp"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
     mirobody::tools::prepare_windows_console();   // UTF-8 stdout (extracted text is UTF-8)
 
     std::string in_path, mime, parser_sel, api_key, model;
-    mirobody::optional<std::string> config_path;
+    std::optional<std::string> config_path;
 
     auto need = [&](int& i, const char* what) -> std::string {
         if (i + 1 >= argc) { std::fprintf(stderr, "file_parser: %s needs a value\n", what); std::exit(2); }

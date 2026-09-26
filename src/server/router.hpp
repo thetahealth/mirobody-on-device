@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
-#include "compat/cxx11.hpp"
 #include <unordered_map>
 #include <utility>
 #include <vector>

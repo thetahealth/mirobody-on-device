@@ -1,4 +1,5 @@
 #include "chat/dispatcher.hpp"
+#include <optional>
 
 #include "chat/event/event.hpp"
 #include "chat/event/filter/filter.hpp"
@@ -61,7 +62,7 @@ bool Dispatcher::allow_turn(std::int64_t user_id) const {
     // Fixed window per user: incr() returns the post-increment count; stamp the
     // window TTL on the first hit. Fail open if the cache backend errors.
     const std::string key = "chat:rate:" + std::to_string(user_id);
-    mirobody::optional<std::int64_t> n = cache_->incr(key);
+    std::optional<std::int64_t> n = cache_->incr(key);
     if (!n) return true;
     if (*n == 1) cache_->set(key, "1", std::chrono::seconds(rate_window_seconds_));
     return *n <= rate_max_;

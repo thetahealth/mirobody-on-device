@@ -1,4 +1,5 @@
 #include "health/vendor_service.hpp"
+#include <optional>
 
 #include "server/auth.hpp"
 #include "health/vendor/registry.hpp"
@@ -200,7 +201,7 @@ void VendorService::on_callback(const server::Request& req, server::Response& re
     const std::string state = req.query_get("state");
     if (code.empty() || state.empty()) { redirect("error"); return; }
 
-    mirobody::optional<std::string> rec = cache_.get(kOAuthStatePrefix + state);
+    std::optional<std::string> rec = cache_.get(kOAuthStatePrefix + state);
     if (!rec.has_value()) { redirect("expired"); return; }
     cache_.del(kOAuthStatePrefix + state);   // single-use
 

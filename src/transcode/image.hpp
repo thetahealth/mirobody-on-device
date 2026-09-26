@@ -33,7 +33,6 @@
 // with this codec stack (HEIC would need libheif); they raise ImageError. EXIF
 // orientation is not auto-applied.
 
-#include "compat/cxx11.hpp"
 
 #include <cstddef>
 #include <stdexcept>

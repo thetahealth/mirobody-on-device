@@ -32,7 +32,6 @@
 // device/) for each vendor's confirmed endpoints, auth flow, response mapping, and
 // the per-operation rationale for anything left a stub.
 
-#include "compat/cxx11.hpp"
 
 #include <cstdint>
 #include <memory>

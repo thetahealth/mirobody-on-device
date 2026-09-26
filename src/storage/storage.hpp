@@ -7,7 +7,6 @@
 // cloud object stores (S3, OSS, Azure Blob) belong to the server in the main
 // mirobody repo.
 
-#include "compat/cxx11.hpp"
 #include "config/fernet.hpp"
 
 #include <cstddef>

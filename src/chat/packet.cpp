@@ -2,8 +2,8 @@
 
 namespace mirobody { namespace chat {
 
-// Out-of-line definition for the in-class constant, required pre-C++17 if it is
-// ever odr-used (e.g. its address taken / bound to a reference).
+// Out-of-line definition remains required because this is a non-constexpr
+// integral static member and callers may odr-use it.
 const int Packet::kNoCode;
 
 Packet::Packet() : code_(kNoCode) {

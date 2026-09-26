@@ -1,4 +1,5 @@
 #include "cache/memory_kv.hpp"
+#include <optional>
 
 #include <limits>
 #include <utility>
@@ -19,15 +20,15 @@ namespace {
 // Parse `s` as a signed 64-bit integer with no leading/trailing characters.
 // Matches Redis INCR's parsing strictness: "1" parses, " 1" / "1 " / "1.0"
 // / empty all fail.
-mirobody::optional<std::int64_t> parse_i64(const std::string& s) {
-    if (s.empty()) return mirobody::nullopt;
+std::optional<std::int64_t> parse_i64(const std::string& s) {
+    if (s.empty()) return std::nullopt;
     try {
         std::size_t pos = 0;
         long long v = std::stoll(s, &pos);
-        if (pos != s.size()) return mirobody::nullopt;
+        if (pos != s.size()) return std::nullopt;
         return static_cast<std::int64_t>(v);
     } catch (...) {
-        return mirobody::nullopt;
+        return std::nullopt;
     }
 }
 
@@ -92,46 +93,46 @@ void MemoryKv::set(std::string key, std::string value, clock::duration ttl) {
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::string> MemoryKv::get(const std::string& key) {
+std::optional<std::string> MemoryKv::get(const std::string& key) {
     std::lock_guard<std::mutex> lock(mu_);
     auto it = find_live_locked(key);
-    if (it == entries_.end() || it->second.is_list) return mirobody::nullopt;
+    if (it == entries_.end() || it->second.is_list) return std::nullopt;
     return it->second.value;
 }
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::int64_t> MemoryKv::incr(const std::string& key) {
+std::optional<std::int64_t> MemoryKv::incr(const std::string& key) {
     std::lock_guard<std::mutex> lock(mu_);
     return apply_delta_locked(key, 1);
 }
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::int64_t> MemoryKv::decr(const std::string& key) {
+std::optional<std::int64_t> MemoryKv::decr(const std::string& key) {
     std::lock_guard<std::mutex> lock(mu_);
     return apply_delta_locked(key, -1);
 }
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::int64_t>
+std::optional<std::int64_t>
 MemoryKv::apply_delta_locked(const std::string& key, std::int64_t delta) {
     auto it = find_live_locked(key);
-    if (it != entries_.end() && it->second.is_list) return mirobody::nullopt;
+    if (it != entries_.end() && it->second.is_list) return std::nullopt;
 
     std::int64_t current = 0;
     if (it != entries_.end()) {
         auto parsed = parse_i64(it->second.value);
-        if (!parsed) return mirobody::nullopt;
+        if (!parsed) return std::nullopt;
         current = *parsed;
     }
 
     // Manual overflow guard (no portable __builtin_add_overflow on MSVC).
     constexpr auto kMax = std::numeric_limits<std::int64_t>::max();
     constexpr auto kMin = std::numeric_limits<std::int64_t>::min();
-    if (delta > 0 && current > kMax - delta) return mirobody::nullopt;
-    if (delta < 0 && current < kMin - delta) return mirobody::nullopt;
+    if (delta > 0 && current > kMax - delta) return std::nullopt;
+    if (delta < 0 && current < kMin - delta) return std::nullopt;
 
     const std::int64_t next = current + delta;
 
@@ -186,24 +187,24 @@ std::size_t MemoryKv::lpush(const std::string& key,
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::string> MemoryKv::lpop(const std::string& key) {
+std::optional<std::string> MemoryKv::lpop(const std::string& key) {
     std::lock_guard<std::mutex> lock(mu_);
     return pop_locked(key, true);
 }
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::string> MemoryKv::rpop(const std::string& key) {
+std::optional<std::string> MemoryKv::rpop(const std::string& key) {
     std::lock_guard<std::mutex> lock(mu_);
     return pop_locked(key, false);
 }
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::string>
+std::optional<std::string>
 MemoryKv::pop_locked(const std::string& key, bool front) {
     auto it = find_live_locked(key);
-    if (it == entries_.end() || !it->second.is_list) return mirobody::nullopt;
+    if (it == entries_.end() || !it->second.is_list) return std::nullopt;
     std::vector<std::string>& list = it->second.list;
     std::string out = std::move(front ? list.front() : list.back());
     if (front) {
@@ -249,7 +250,7 @@ void MemoryKv::ltrim(const std::string& key,
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<std::string> MemoryKv::set_join(const std::string& dest,
+std::optional<std::string> MemoryKv::set_join(const std::string& dest,
                                                    const std::string& list,
                                                    const std::string& prefix,
                                                    const std::string& sep,
@@ -258,7 +259,7 @@ mirobody::optional<std::string> MemoryKv::set_join(const std::string& dest,
     std::lock_guard<std::mutex> lock(mu_);
     auto it = find_live_locked(list);
     if (it == entries_.end() || !it->second.is_list || it->second.list.empty()) {
-        return mirobody::nullopt;
+        return std::nullopt;
     }
 
     // Assemble before touching entries_: inserting dest may rehash the map
@@ -317,14 +318,14 @@ bool MemoryKv::exists(const std::string& key) {
 
 //------------------------------------------------------------------------------
 
-mirobody::optional<MemoryKv::clock::time_point>
+std::optional<MemoryKv::clock::time_point>
 MemoryKv::expiretime(const std::string& key) {
     std::lock_guard<std::mutex> lock(mu_);
     auto it = entries_.find(key);
-    if (it == entries_.end()) return mirobody::nullopt;
+    if (it == entries_.end()) return std::nullopt;
     if (it->second.expires_at <= clock::now()) {
         entries_.erase(it);
-        return mirobody::nullopt;
+        return std::nullopt;
     }
     return it->second.expires_at;
 }

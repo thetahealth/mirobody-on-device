@@ -17,8 +17,8 @@
 > [On-device engine](#2-on-device-engine-optional)).
 
 The HarmonyOS Next client — an **ArkTS / ArkUI (stage model)** app, the Huawei counterpart
-of the Kotlin/Compose app under [`android/`](../android). It ships the same chat surface as
-the web client in [`htdoc/`](https://github.com/thetahealth/mirobody-on-device/tree/v2-full-2026-08/htdoc), and it embeds the C++ core
+of the Kotlin/Compose app under [`android/`](../android). It currently uses an
+ArkUI chat surface and embeds the C++ core
 ([`src/`](../src)) as a native module, exactly as Android loads `libmirobody.so` over JNI.
 
 - **Bundle:** `ai.thetahealth.mirobody` (same identity as the Android package)

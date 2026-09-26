@@ -34,12 +34,13 @@ spec.
 
 On launch the app talks to the base URL configured in-app (default
 `http://localhost:8080`). Set a reachable backend via the nav drawer (☰) → **Backend**,
-e.g. `https://test.mirobody.ai`. Email sign-in works immediately; Google sign-in
-needs the one-time Firebase setup below.
+e.g. `https://test.mirobody.ai`. Email sign-in needs a reachable backend;
+Google sign-in also needs the one-time Firebase setup below.
 
 Email + one-time code is **one screen** (`UI/Auth/EmailView.swift`), as on the web and
-on Android — no pushed verify screen. It follows `htdoc/src/login.js`'s staircase, each
-step unlocking the next (`UI/Auth/AuthViewModels.swift` — `EmailViewModel`): a
+on Android — no pushed verify screen. It follows the staged email flow inherited
+from the archived v2 web client, with each step unlocking the next
+(`UI/Auth/AuthViewModels.swift` — `EmailViewModel`): a
 valid-looking address (`*@*.*`, stricter than the server's `normalize_email`) unlocks
 **Send code**; a successful send unlocks the six code boxes and starts a 60s resend
 cooldown (editing the address re-locks them until a code goes to that one); six digits

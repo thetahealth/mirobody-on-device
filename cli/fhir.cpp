@@ -18,11 +18,11 @@
 //   fhir token 1 --config config.local.yaml
 
 #include "config/config.hpp"
-#include "compat/cxx11.hpp"
 #include "fhir/units/families.hpp"
 #include "fhir/units/normalize.hpp"
 #include "jwt/jwt.hpp"
 
+#include <optional>
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
@@ -101,7 +101,7 @@ int cmd_normalize(const std::vector<std::string>& terms) {
     return 0;
 }
 
-int cmd_token(std::int64_t user_id, const mirobody::optional<std::string>& config_path) {
+int cmd_token(std::int64_t user_id, const std::optional<std::string>& config_path) {
     mirobody::Config cfg;
     try {
         cfg = mirobody::load_config(config_path);
@@ -148,7 +148,7 @@ int main(int argc, char** argv) {
 
     if (cmd == "token") {
         std::int64_t user_id = 0;
-        mirobody::optional<std::string> config_path;
+        std::optional<std::string> config_path;
         bool have_uid = false;
         for (size_t i = 2; i < args.size(); ++i) {
             const std::string& a = args[i];

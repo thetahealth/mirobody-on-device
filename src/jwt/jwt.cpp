@@ -1,4 +1,5 @@
 #include "jwt/jwt.hpp"
+#include <optional>
 
 #include "jwt/encoder.hpp"
 
@@ -60,7 +61,7 @@ std::string b64url_encode(const std::string& s) {
 //------------------------------------------------------------------------------
 
 // Base64url decode. Accepts inputs with or without `=` padding.
-mirobody::optional<std::string> b64url_decode(const std::string& in) {
+std::optional<std::string> b64url_decode(const std::string& in) {
     std::size_t len = in.size();
     while (len > 0 && in[len - 1] == '=') --len;
 
@@ -80,7 +81,7 @@ mirobody::optional<std::string> b64url_decode(const std::string& in) {
     for (std::size_t i = 0; i < len; ++i) {
         char c = in[i];
         int v = decode_char(c);
-        if (v < 0) return mirobody::nullopt;
+        if (v < 0) return std::nullopt;
         buf = (buf << 6) | static_cast<std::uint32_t>(v);
         bits += 6;
         if (bits >= 8) {

@@ -1,4 +1,5 @@
 #include "jwt/firebase.hpp"
+#include <optional>
 
 #include "client/http_client.hpp"
 
@@ -30,7 +31,7 @@ namespace {
 // Base64url decode, padding-optional. Local copy of the helper that lives
 // in jwt.cpp / google.cpp; the comment over there owns the "hoist once we
 // have a fifth caller" reminder.
-mirobody::optional<std::string> b64url_decode(const std::string& in) {
+std::optional<std::string> b64url_decode(const std::string& in) {
     std::size_t len = in.size();
     while (len > 0 && in[len - 1] == '=') --len;
 
@@ -50,7 +51,7 @@ mirobody::optional<std::string> b64url_decode(const std::string& in) {
     for (std::size_t i = 0; i < len; ++i) {
         char c = in[i];
         int v = decode_char(c);
-        if (v < 0) return mirobody::nullopt;
+        if (v < 0) return std::nullopt;
         buf = (buf << 6) | static_cast<std::uint32_t>(v);
         bits += 6;
         if (bits >= 8) {
@@ -224,8 +225,8 @@ struct FirebaseTokenValidator::Impl {
 
 // Out-of-line definition for the static constexpr member. Required because
 // kCacheTtl is odr-used (bound by const reference in `clock::now() + kCacheTtl`
-// above) and this translation unit is compiled as C++11 — under C++17 the
-// member would be implicitly inline and this definition unnecessary.
+// above) and C++17 makes the member implicitly inline; keeping this definition is
+// harmless for toolchains that still emit the reference.
 constexpr std::chrono::seconds FirebaseTokenValidator::Impl::kCacheTtl;
 
 //------------------------------------------------------------------------------

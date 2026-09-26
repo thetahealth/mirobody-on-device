@@ -1,4 +1,5 @@
 #include "transcode/file.hpp"
+#include <optional>
 
 #include "database/database.hpp"   // db-backed `files` index
 #include "platform/clock.hpp"    // now_unix_ms
@@ -149,7 +150,7 @@ bool parse_one(const std::string& raw, FileRef& out) {
 // a rendering computed from an older list state can never overwrite one
 // computed from a newer state: whichever render runs last saw every row
 // pushed before it. nullopt when the list is empty / absent.
-mirobody::optional<std::string> render_json(cache::Cache& cache, std::int64_t user_id) {
+std::optional<std::string> render_json(cache::Cache& cache, std::int64_t user_id) {
     return cache.set_join(json_key_for(user_id), list_key_for(user_id),
                           "[", ",", "]", kJsonTtl);
 }
@@ -331,13 +332,13 @@ std::vector<FileRef> list(cache::Cache& cache, storage::Storage* storage, std::i
     if (user_id <= 0) return std::vector<FileRef>();
 
     // Tier 1: the rendered JSON.
-    const mirobody::optional<std::string> raw = cache.get(json_key_for(user_id));
+    const std::optional<std::string> raw = cache.get(json_key_for(user_id));
     if (raw.has_value()) return parse(*raw);
 
     // Tier 2: the rendering expired (kJsonTtl is short on purpose) but the
     // list is still warm -- atomically re-render from it, no storage
     // round-trips.
-    const mirobody::optional<std::string> rendered = render_json(cache, user_id);
+    const std::optional<std::string> rendered = render_json(cache, user_id);
     if (rendered.has_value()) return parse(*rendered);
 
     if (storage == nullptr) return std::vector<FileRef>();
@@ -347,7 +348,7 @@ std::vector<FileRef> list(cache::Cache& cache, storage::Storage* storage, std::i
     // we read storage below, the rebuilt result is served but NOT cached --
     // it may already be missing that upload, and kTtl is a long time to be
     // stale. The next cold read just rebuilds again.
-    const mirobody::optional<std::string> gen = cache.get(gen_key_for(user_id));
+    const std::optional<std::string> gen = cache.get(gen_key_for(user_id));
 
     // The scan: one bounded list call over the caller's prefix plus a get
     // per sidecar. Each file is up to three objects (bytes, .meta, .trans),
@@ -393,7 +394,7 @@ std::vector<FileRef> list(cache::Cache& cache, storage::Storage* storage, std::i
     std::sort(files.begin(), files.end(), ref_newer);
     if (files.size() > kMaxFiles) files.resize(kMaxFiles);
 
-    const mirobody::optional<std::string> gen_now = cache.get(gen_key_for(user_id));
+    const std::optional<std::string> gen_now = cache.get(gen_key_for(user_id));
     const bool raced = gen.has_value() != gen_now.has_value() ||
                        (gen.has_value() && *gen != *gen_now);
     if (!raced) {

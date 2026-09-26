@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question about using mirobody
+    url: https://github.com/thetahealth/mirobody/discussions
+    about: Deploying a server, connecting a device, which lane keeps what where. Ask in the main repo's Discussions.
+  - name: Documentation
+    url: https://docs.mirobody.ai
+    about: The server, the API contract and the terminology.
+  - name: Security issue
+    url: https://github.com/thetahealth/mirobody-on-device/blob/main/SECURITY.md
+    about: Do not open a public issue for a vulnerability. SECURITY.md says where to send it.

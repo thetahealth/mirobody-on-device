@@ -1,4 +1,5 @@
 #include "user/service.hpp"
+#include <optional>
 
 #include "client/http_client.hpp"
 #include "database/enums.hpp"
@@ -643,7 +644,7 @@ void UserService::on_email_login(const server::Request& req, server::Response& r
 
     // send() validates the address itself (empty / missing '@' -> error),
     // short-circuits predefined addresses, and enforces the resend cooldown.
-    mirobody::optional<std::string> err = email_validator_->send(email);
+    std::optional<std::string> err = email_validator_->send(email);
     if (err) {
         res.error(-3, *err);
         return;
@@ -681,7 +682,7 @@ void UserService::on_email_verify(const server::Request& req, server::Response& 
     const std::string email = get_field(doc, "email");
     const std::string code  = get_field(doc, "code");
 
-    mirobody::optional<std::string> verr = email_validator_->verify(email, code);
+    std::optional<std::string> verr = email_validator_->verify(email, code);
     if (verr) {
         res.error(-3, *verr);
         return;
@@ -722,7 +723,7 @@ void UserService::on_email_bind(const server::Request& req, server::Response& re
 
     const std::string email = get_field(doc, "email");
 
-    mirobody::optional<std::string> err = email_validator_->send(email);
+    std::optional<std::string> err = email_validator_->send(email);
     if (err) {
         res.error(-4, *err);
         return;
@@ -766,7 +767,7 @@ void UserService::on_email_bind_verify(const server::Request& req, server::Respo
     const std::string email = get_field(doc, "email");
     const std::string code  = get_field(doc, "code");
 
-    mirobody::optional<std::string> verr = email_validator_->verify(email, code);
+    std::optional<std::string> verr = email_validator_->verify(email, code);
     if (verr) {
         res.error(-4, *verr);
         return;
