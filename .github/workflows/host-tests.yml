@@ -1,0 +1,56 @@
+# Host-only app tests. Native Android/iOS dependency sysroots and HarmonyOS
+# packaging are separate builds; this workflow uses the pure-client app paths.
+name: host-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-jvm:
+    name: android JVM (pure client)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.4.1'
+      - name: Run phone flavor JVM tests
+        run: gradle -p android :app:testPhoneDebugUnitTest -Pmirobody.native=false --no-daemon --console=plain
+
+  ios-simulator:
+    name: iOS simulator (pure client)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select an available iPhone simulator
+        id: simulator
+        run: |
+          simulator_id=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(device["udid"] for runtime in devices.values() for device in runtime if device["name"].startswith("iPhone")))')
+          echo "id=$simulator_id" >> "$GITHUB_OUTPUT"
+      - name: Run MirobodyTests
+        # SwiftPM checks out the LiteRT-LM repository even though its iOS
+        # binary comes from a release archive. Upstream's Android LFS object
+        # is missing (google-ai-edge/LiteRT-LM#2407); skip those checkout files.
+        env:
+          GIT_LFS_SKIP_SMUDGE: '1'
+        run: |
+          xcodebuild test \
+            -project ios/Mirobody.xcodeproj \
+            -scheme Mirobody \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}" \
+            -derivedDataPath "$RUNNER_TEMP/mirobody-derived" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO

@@ -13,11 +13,12 @@
 
 ## Which app you ran it in
 
-<!-- CI builds no app yet. If this touches android/, ios/, harmony/, src/platform/
-     or the C ABI: which app, which device or emulator, and what you checked.
-     If you could not build it, write "App build not verified" and name the
-     missing sysroot/toolchain. "Core only" is fine for unrelated changes.
-     See docs/testing.md for the host matrix. -->
+<!-- CI runs Android JVM tests and pure-client iOS simulator tests, but no
+     embedded native app build. If this touches android/, ios/, harmony/,
+     src/platform/ or the C ABI: which app, device/emulator and path did you
+     check? If you could not build the native path, write "Native app build not
+     verified" and name the missing sysroot/toolchain. "Core only" is fine
+     for unrelated changes. See docs/testing.md for the host matrix. -->
 
 ## Data boundary, if affected
 

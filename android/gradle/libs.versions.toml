@@ -23,10 +23,10 @@ hmsHealth = "6.11.0.300"
 coil = "2.7.0"
 datastore = "1.1.1"
 markwon = "4.6.2"
-# On-device LLM: LiteRT-LM runs Gemma 4 (.litertlm) fully on-device. The Kotlin guide
-# recommends `latest.release`; pin this to the exact published version when wiring the
-# build for reproducible/enterprise builds (mvnrepository com.google.ai.edge.litertlm).
-litertlm = "latest.release"
+# On-device LLM: LiteRT-LM runs Gemma 4 (.litertlm) fully on-device.
+# 0.16.1 uses Kotlin 2.2 and supports the benchmark prompt; 0.17.1 requires Kotlin 2.4.
+# Review the Kotlin toolchain and runtime API together before upgrading.
+litertlm = "0.16.1"
 # ML Kit GenAI (Gemini Nano via AICore) — on-device summarize/rewrite on supported
 # devices only (Pixel 9/10, Galaxy S25/S26, ...); degrades to unavailable elsewhere.
 mlkitGenai = "1.0.0-beta1"
