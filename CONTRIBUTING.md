@@ -77,10 +77,10 @@ settled before the code is written.
 
 5. **Open a pull request** against `main`. The active
    [main rule](https://github.com/thetahealth/mirobody-on-device/rules/24043212)
-   requires a PR and both desktop CI jobs, and blocks force pushes and branch
-   deletion. The template asks which gates you ran; paste the test count line.
-   The host-test jobs add pure-client coverage; report native app verification
-   separately until those builds have their own CI jobs.
+   requires a PR and all four core and host-test CI jobs, and blocks force
+   pushes and branch deletion. The template asks which gates you ran; paste the
+   test count line. Report native app verification separately until embedded
+   builds have their own CI jobs.
 
 ## 📝 Coding style
 

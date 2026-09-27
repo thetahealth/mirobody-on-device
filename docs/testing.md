@@ -14,10 +14,10 @@ below.
 | Documentation | `python3 tools/check_doc_links.py` | Tracked Markdown links point to existing local files and headings. |
 | C ABI exports | `python3 tools/check_exports.py` | The Windows export list names the functions declared in `src/mirobody.h`. This does **not** link a Windows DLL. |
 
-The CI jobs are named `core (ubuntu-24.04)` and `core (macos-15)`. The active
-[main rule](https://github.com/thetahealth/mirobody-on-device/rules/24043212)
-requires both on pull requests targeting `main`. A docs-only PR can run the link
-checker locally; CI still exercises the complete matrix before merge.
+The active [main rule](https://github.com/thetahealth/mirobody-on-device/rules/24043212)
+requires both core jobs and both host-test jobs on pull requests targeting
+`main`. A docs-only PR can run the link checker locally; CI still exercises
+the complete matrix before merge.
 
 ## Phone host verification
 

@@ -13,7 +13,8 @@ dated by the day they reached `main`.
   the existing `MirobodyTests` target; the prior project silently omitted it.
   Regeneration also activates LiteRT-LM linking and the Apple sign-in/HealthKit
   entitlements already declared in `project.yml`; signed device builds need
-  matching capability provisioning.
+  matching capability provisioning. The two host-test jobs join the two core
+  jobs as required checks for `main`.
 - Pinned the Android LiteRT-LM artifact to 0.16.1. The moving
   `latest.release` selected 0.17.1, whose Kotlin 2.4 metadata cannot be read by
   this app's Kotlin 2.2 compiler. iOS CI skips checkout of missing upstream

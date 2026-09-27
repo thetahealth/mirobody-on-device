@@ -9,6 +9,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white)](CMakeLists.txt)
 [![CI](https://github.com/thetahealth/mirobody-on-device/actions/workflows/ci.yml/badge.svg)](https://github.com/thetahealth/mirobody-on-device/actions/workflows/ci.yml)
+[![手机端宿主测试](https://github.com/thetahealth/mirobody-on-device/actions/workflows/host-tests.yml/badge.svg)](https://github.com/thetahealth/mirobody-on-device/actions/workflows/host-tests.yml)
 [![Platforms](https://img.shields.io/badge/platforms-Android%20·%20iOS%20·%20HarmonyOS-lightgrey.svg)](#宿主应用)
 
 **[mirobody 服务端](https://github.com/thetahealth/mirobody)** · **[文档](https://docs.mirobody.ai/)** · **[mirobody-web](https://github.com/thetahealth/mirobody-web)**
